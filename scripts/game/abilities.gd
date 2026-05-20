@@ -143,7 +143,52 @@ func get_transform_health_threshold(ability: String) -> int:
 		return int(ability.substr(TRANSFORM_AT_MAX_HEALTH.length() + 1))
 	return 0
 
-func trigger_death(minion: Minion, owner: PlayerState, board_index: int, enemy: PlayerState = null) -> Dictionary:
+func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
+	for ability in minion.abilities:
+		match ability:
+			RECON:
+				var drawn = owner.draw_card()
+				if drawn != null and owner.player_id == gs.player.player_id:
+					gs.pending_drawn_cards.append(drawn)
+			TANK:
+				gs._get_player_by_id(gs._opponent_id(owner.player_id)).hero_health -= 1
+				gs._check_win_condition()
+			RUMMAGE:
+				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": minion.data.cost, "type_filter": ""})
+			RUMMAGE_SPELL:
+				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": -1, "type_filter": "stratagem"})
+			NULL:
+				gs.pending_nulls.append({"player_id": owner.player_id, "source": minion.data.card_name})
+			ON_PLAY_BUFF_FRIENDLY_HEALTH:
+				gs.pending_buff_friendly_health.append(owner.player_id)
+			ON_PLAY_RUMMAGE_BUFF:
+				if minion.data.rummage_count > 0:
+					minion.current_attack += minion.data.rummage_count
+					minion.current_health += minion.data.rummage_count
+					minion.max_health += minion.data.rummage_count
+					gs._try_apothecary_bonus(owner.player_id, minion)
+
+func fire_on_attack(attacker: Minion, owner: PlayerState, gs: GameState) -> void:
+	for ability in attacker.abilities:
+		match ability:
+			ATTACK_BUFF_FRIENDLY_HEALTH:
+				if not owner.board.is_empty():
+					var target = owner.board[randi() % owner.board.size()]
+					target.current_health += 1
+					target.max_health += 1
+					gs._try_apothecary_bonus(owner.player_id, target)
+
+func fire_on_defend(defender: Minion, owner: PlayerState, gs: GameState) -> void:
+	for ability in defender.abilities:
+		match ability:
+			WHEN_ATTACKED_BUFF_FRIENDLY:
+				for m in owner.board:
+					m.current_health += 1
+					m.max_health += 1
+				for m in owner.board.duplicate():
+					gs._try_apothecary_bonus(owner.player_id, m)
+
+func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: PlayerState, gs: GameState) -> Dictionary:
 	var drawn: Array[CardData] = []
 	var tank_shots: int = 0
 	for ability in minion.abilities:
@@ -171,7 +216,30 @@ func trigger_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 					var card: CardData = owner.deck.pop_back().duplicate()
 					owner.hand.append(card)
 					drawn.append(card)
+			RUMMAGE_ON_DEATH:
+				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": minion.data.cost, "type_filter": ""})
+			RUMMAGE_MECH_ON_DEATH:
+				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": -1, "type_filter": "mech"})
+			DEATHRATTLE_RETURN_STRATAGEM:
+				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": -1, "type_filter": "stratagem"})
+	if YETI in minion.abilities:
+		for watcher in owner.board:
+			if watcher.has_ability(ON_YETI_DEATH_CHALLENGE):
+				gs.pending_overwatch_challenges.append(owner.player_id)
+				break
 	return {"drawn": drawn, "tank_shots": tank_shots}
+
+func fire_on_rummage(owner: PlayerState, gs: GameState) -> void:
+	for m in owner.board:
+		if m.has_ability(RUMMAGE_BUFF):
+			m.current_health += 1
+			m.max_health += 1
+			gs._try_apothecary_bonus(owner.player_id, m)
+	for m in owner.board:
+		if m.has_ability(RUMMAGE_DRAW):
+			var drawn = owner.draw_card()
+			if drawn != null and owner.player_id == gs.player.player_id:
+				gs.pending_drawn_cards.append(drawn)
 
 func _draw_by_tag(owner: PlayerState, tag: String) -> CardData:
 	var matching: Array[CardData] = []
@@ -184,4 +252,5 @@ func _draw_by_tag(owner: PlayerState, tag: String) -> CardData:
 	owner.deck.erase(chosen)
 	var copy: CardData = chosen.duplicate()
 	owner.hand.append(copy)
+	return copy
 	return copy

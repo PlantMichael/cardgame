@@ -59,26 +59,7 @@ func play_creature(acting_player_id: String, card: CardData) -> Minion:
 		return null
 	var minion = Minion.new(card, acting_player_id)
 	acting.place_minion(minion)
-	if minion.has_ability(Abilities.RECON):
-		var drawn := acting.draw_card()
-		if drawn != null and acting.player_id == player.player_id:
-			pending_drawn_cards.append(drawn)
-	if minion.has_ability(Abilities.TANK):
-		_get_player_by_id(_opponent_id(acting_player_id)).hero_health -= 1
-		_check_win_condition()
-	for i in minion.abilities.count(Abilities.RUMMAGE):
-		pending_rummages.append({"player_id": acting_player_id, "max_cost": card.cost, "type_filter": ""})
-	if minion.has_ability(Abilities.RUMMAGE_SPELL):
-		pending_rummages.append({"player_id": acting_player_id, "max_cost": -1, "type_filter": "stratagem"})
-	if minion.has_ability(Abilities.NULL):
-		pending_nulls.append({"player_id": acting_player_id, "source": minion.data.card_name})
-	if minion.has_ability(Abilities.ON_PLAY_BUFF_FRIENDLY_HEALTH):
-		pending_buff_friendly_health.append(acting_player_id)
-	if minion.has_ability(Abilities.ON_PLAY_RUMMAGE_BUFF) and card.rummage_count > 0:
-		minion.current_attack += card.rummage_count
-		minion.current_health += card.rummage_count
-		minion.max_health += card.rummage_count
-		_try_apothecary_bonus(acting_player_id, minion)
+	Abilities.fire_on_play(minion, acting, self)
 	return minion
 
 func apply_buff_friendly_health(target: Minion) -> void:
@@ -114,22 +95,10 @@ func attack(attacker: Minion, target_minion: Minion = null,
 	attacker.has_attacked = true
 	attacker.transform_counter += 1
 
-	if attacker.has_ability(Abilities.ATTACK_BUFF_FRIENDLY_HEALTH):
-		var acting = _get_player_by_id(attacker.owner_id)
-		if not acting.board.is_empty():
-			var buff_target = acting.board[randi() % acting.board.size()]
-			buff_target.current_health += 1
-			buff_target.max_health += 1
-			_try_apothecary_bonus(attacker.owner_id, buff_target)
+	Abilities.fire_on_attack(attacker, _get_player_by_id(attacker.owner_id), self)
 
 	if target_minion:
-		if target_minion.has_ability(Abilities.WHEN_ATTACKED_BUFF_FRIENDLY):
-			var defender = _get_player_by_id(target_minion.owner_id)
-			for m in defender.board:
-				m.current_health += 1
-				m.max_health += 1
-			for m in defender.board.duplicate():
-				_try_apothecary_bonus(target_minion.owner_id, m)
+		Abilities.fire_on_defend(target_minion, _get_player_by_id(target_minion.owner_id), self)
 		if not target_minion.has_ability(Abilities.COMBAT_IMMUNE):
 			target_minion.take_damage(attacker.current_attack)
 		if not attacker.has_ability(Abilities.COMBAT_IMMUNE):
@@ -296,22 +265,11 @@ func _remove_dead_minions() -> void:
 				p.remove_minion(minion)
 				p.graveyard.append(minion.data)
 				var enemy = _get_player_by_id(_opponent_id(p.player_id))
-				var death_result := Abilities.trigger_death(minion, p, idx, enemy)
+				var death_result := Abilities.fire_on_death(minion, p, idx, enemy, self)
 				if p.player_id == player.player_id:
 					pending_drawn_cards.append_array(death_result["drawn"])
 				for _i in death_result["tank_shots"]:
 					pending_tank_shots.append(p.player_id)
-				if minion.has_ability(Abilities.RUMMAGE_ON_DEATH):
-					pending_rummages.append({"player_id": p.player_id, "max_cost": minion.data.cost, "type_filter": ""})
-				if minion.has_ability(Abilities.RUMMAGE_MECH_ON_DEATH):
-					pending_rummages.append({"player_id": p.player_id, "max_cost": -1, "type_filter": "mech"})
-				if minion.has_ability(Abilities.DEATHRATTLE_RETURN_STRATAGEM):
-					pending_rummages.append({"player_id": p.player_id, "max_cost": -1, "type_filter": "stratagem"})
-				if minion.has_ability(Abilities.YETI):
-					for watcher in p.board:
-						if watcher.has_ability(Abilities.ON_YETI_DEATH_CHALLENGE):
-							pending_overwatch_challenges.append(p.player_id)
-							break
 
 func _check_win_condition() -> void:
 	if opponent.is_dead():
@@ -349,16 +307,7 @@ func complete_rummage(player_id: String, card: CardData) -> void:
 		card.cost_modifier = -1
 		card.rummage_count += 1
 		p.hand.append(card)
-	for m in p.board:
-		if m.has_ability(Abilities.RUMMAGE_BUFF):
-			m.current_health += 1
-			m.max_health += 1
-			_try_apothecary_bonus(p.player_id, m)
-	for m in p.board:
-		if m.has_ability(Abilities.RUMMAGE_DRAW):
-			var drawn = p.draw_card()
-			if drawn != null and p.player_id == player.player_id:
-				pending_drawn_cards.append(drawn)
+	Abilities.fire_on_rummage(p, self)
 
 func is_local_player_turn() -> bool:
 	return active_player_id == player.player_id
