@@ -26,8 +26,11 @@ const SPRITE                 = "sprite"
 const NULL                   = "null"
 const ON_YETI_CHALLENGE_BUFF = "on_yeti_challenge_buff"
 const ON_YETI_DEATH_CHALLENGE = "on_yeti_death_challenge"
-const ON_PLAY_RUMMAGE_BUFF      = "on_play_rummage_buff"
-const ATTACK_BUFF_FRIENDLY_HEALTH = "attack_buff_friendly_health"
+const ON_PLAY_RUMMAGE_BUFF           = "on_play_rummage_buff"
+const ATTACK_BUFF_FRIENDLY_HEALTH    = "attack_buff_friendly_health"
+const ON_PLAY_BUFF_FRIENDLY_YETI_ATK = "on_play_buff_friendly_yeti_attack"
+const ON_FRIENDLY_YETI_DEATH_BUFF    = "on_friendly_yeti_death_buff"
+const ON_PLAY_BUFF_IF_YETI           = "on_play_buff_if_yeti"
 
 const DEFINITIONS: Dictionary = {
 	GUARDIAN:              { "display": "Guardian",    "color": Color(0.55, 0.42, 0.08) },
@@ -63,6 +66,9 @@ const DEFINITIONS: Dictionary = {
 	MIRROR_TRANSFORM:             { "display": "Mimic",           "color": Color(0.80, 0.25, 0.10) },
 	ON_PLAY_RUMMAGE_BUFF:            { "display": "On Play:",        "color": Color(0.30, 0.08, 0.42) },
 	ATTACK_BUFF_FRIENDLY_HEALTH:     { "display": "On Attack:",      "color": Color(0.70, 0.25, 0.45) },
+	ON_PLAY_BUFF_FRIENDLY_YETI_ATK:  { "display": "On Play:",        "color": Color(0.45, 0.70, 0.85) },
+	ON_FRIENDLY_YETI_DEATH_BUFF:     { "display": "Yeti Bond",       "color": Color(0.45, 0.70, 0.85) },
+	ON_PLAY_BUFF_IF_YETI:            { "display": "On Play:",        "color": Color(0.45, 0.70, 0.85) },
 }
 
 const ON_PLAY_DAMAGE             = "on_play_damage"
@@ -167,6 +173,18 @@ func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 					minion.current_health += minion.data.rummage_count
 					minion.max_health += minion.data.rummage_count
 					gs._try_apothecary_bonus(owner.player_id, minion)
+			ON_PLAY_BUFF_FRIENDLY_YETI_ATK:
+				for m in owner.board:
+					if m != minion and m.has_ability(YETI):
+						m.current_attack += 2
+			ON_PLAY_BUFF_IF_YETI:
+				for m in owner.board:
+					if m != minion and m.has_ability(YETI):
+						minion.current_attack += 2
+						minion.current_health += 1
+						minion.max_health += 1
+						gs._try_apothecary_bonus(owner.player_id, minion)
+						break
 
 func fire_on_attack(attacker: Minion, owner: PlayerState, gs: GameState) -> void:
 	for ability in attacker.abilities:
@@ -223,6 +241,11 @@ func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 			DEATHRATTLE_RETURN_STRATAGEM:
 				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": -1, "type_filter": "stratagem"})
 	if YETI in minion.abilities:
+		for watcher in owner.board:
+			if watcher.has_ability(ON_FRIENDLY_YETI_DEATH_BUFF):
+				watcher.current_health += 2
+				watcher.max_health += 2
+				gs._try_apothecary_bonus(owner.player_id, watcher)
 		for watcher in owner.board:
 			if watcher.has_ability(ON_YETI_DEATH_CHALLENGE):
 				gs.pending_overwatch_challenges.append(owner.player_id)

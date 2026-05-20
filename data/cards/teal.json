@@ -41,10 +41,10 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "",
+		"description": "On play: If you control a yeti, gain +2/+1",
 		"attack": 2,
 		"health": 3,
-		"abilities": [],
+		"abilities": ["on_play_buff_if_yeti"],
 		"effect": "",
 		"effect_value": 0
 	},
@@ -56,7 +56,7 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "yeti",
-		"description": "Yeti. Challenge: Pick an enemy to fight.",
+		"description": "Challenge",
 		"attack": 1,
 		"health": 2,
 		"abilities": [
@@ -73,10 +73,10 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "Recon",
+		"description": "Recon. Safeguard",
 		"attack": 2,
 		"health": 2,
-		"abilities": [],
+		"abilities": ["recon", "safeguard"],
 		"effect": "",
 		"effect_value": 0
 	},
@@ -88,8 +88,8 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "",
-		"attack": 2,
+		"description": "Rush.",
+		"attack": 3,
 		"health": 2,
 		"abilities": [
 			"rush"
@@ -100,16 +100,17 @@
 	{
 		"id": "t_001",
 		"card_name": "Yetiling",
-		"cost": 3,
+		"cost": 4,
 		"color": "TEAL",
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "yeti",
-		"description": "Yeti. Challenge: Pick an enemy to fight.",
+		"description": "Challenge. On play: Give other yetis you control 2 attack",
 		"attack": 2,
 		"health": 3,
 		"abilities": [
-			"challenge"
+			"challenge",
+			"on_play_buff_friendly_yeti_attack"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -133,17 +134,18 @@
 	},
 	{
 		"id": "t_002",
-		"card_name": "Snow Stinger",
+		"card_name": "Recovery Sled",
 		"cost": 4,
 		"color": "TEAL",
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "",
-		"description": "Rush.",
+		"description": "Guardian. When a friendly yeti dies, gain +0/+2",
 		"attack": 3,
 		"health": 3,
 		"abilities": [
-			"rush"
+			"guardian",
+			"on_friendly_yeti_death_buff"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -273,7 +275,7 @@
 	{
 		"id": "t_str_001",
 		"card_name": "Arrow",
-		"cost": 4,
+		"cost": 3,
 		"color": "TEAL",
 		"card_type": "STRATAGEM",
 		"rarity": "COMMON",
@@ -303,7 +305,7 @@
 	{
 		"id": "t_str_003",
 		"card_name": "Icewhip",
-		"cost": 4,
+		"cost": 5,
 		"color": "TEAL",
 		"card_type": "STRATAGEM",
 		"rarity": "COMMON",
@@ -318,16 +320,16 @@
 	{
 		"id": "t_str_004",
 		"card_name": "Poke the 'bear'?",
-		"cost": 5,
+		"cost": 2,
 		"color": "TEAL",
 		"card_type": "STRATAGEM",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "Deal 3 damage to a friendly yeti, it can challenge.",
+		"description": "Deal 2 damage to a friendly yeti, it can challenge.",
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
 		"effect": "poke_bear",
-		"effect_value": 3
+		"effect_value": 2
 	}
 ]
