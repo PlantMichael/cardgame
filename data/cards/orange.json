@@ -1,0 +1,268 @@
+[
+	{
+		"id": "o_001",
+		"card_name": "Scrap Rummager",
+		"cost": 1,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Rush.",
+		"attack": 1,
+		"health": 2,
+		"abilities": [
+			"rush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "o_002",
+		"card_name": "Mech Spotlighter",
+		"cost": 2,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Rush.",
+		"attack": 3,
+		"health": 1,
+		"abilities": [
+			"rush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "o_003",
+		"card_name": "Junior Pilot",
+		"cost": 2,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Pilot 1/1",
+		"attack": 1,
+		"health": 3,
+		"abilities": [
+			"pilot_1_1"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "o_007",
+		"card_name": "Nervous Flyer",
+		"cost": 3,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Pilot 0/4",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"pilot_0_4"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+{
+		"id": "o_013",
+		"card_name": "Air control",
+		"cost": 3,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "When a friendly creature pilots, draw a card.",
+		"attack": 2,
+		"health": 2,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "o_005",
+		"card_name": "Gundari Engineer",
+		"cost": 4,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Guardian. On death, return one mech from graveyard to hand.",
+		"attack": 3,
+		"health": 3,
+		"abilities": [
+			"guardian",
+			"rummage_mech_on_death"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "o_006",
+		"card_name": "Odd wired Mech",
+		"cost": 4,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "mech",
+		"description": "Rush. Mech.",
+		"attack": 5,
+		"health": 2,
+		"abilities": [
+			"rush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "o_008",
+		"card_name": "Brash Captain",
+		"cost": 4,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Rush. Pilot 4/1",
+		"attack": 2,
+		"health": 6,
+		"abilities": [
+			"guardian",
+			"pilot_4_1"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "o_009",
+		"card_name": "St4rling",
+		"cost": 4,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "mech",
+		"description": "",
+		"attack": 3,
+		"health": 3,
+		"abilities": [
+			"rush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "o_004",
+		"card_name": "Veteran Pilot",
+		"cost": 5,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Pilot 3/3",
+		"attack": 4,
+		"health": 4,
+		"abilities": [
+			"pilot_3_3"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "o_011",
+		"card_name": "0sprey",
+		"cost": 5,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "mech",
+		"description": "Guardian",
+		"attack": 3,
+		"health": 7,
+		"abilities": [
+			"guardian"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "o_010",
+		"card_name": "Kestrel",
+		"cost": 6,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "mech",
+		"description": "Guardian.",
+		"attack": 4,
+		"health": 5,
+		"abilities": [
+			"guardian"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "o_012",
+		"card_name": "C4ladrius",
+		"cost": 8,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "mech",
+		"description": "Rush",
+		"attack": 6,
+		"health": 8,
+		"abilities": [
+			"rush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "o_str_001",
+		"card_name": "Laser",
+		"cost": 2,
+		"color": "ORANGE",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Deal 3 damage to any target.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage",
+		"effect_value": 3
+	},
+	{
+		"id": "o_str_002",
+		"card_name": "Nanotech",
+		"cost": 3,
+		"color": "ORANGE",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Give a friendly creature +2/+2.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "buff_creature",
+		"effect_value": 2
+	},
+	{
+		"id": "o_str_003",
+		"card_name": "Orbital Strike",
+		"cost": 4,
+		"color": "ORANGE",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Deal 2 damage to all creatures.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage_all_creatures",
+		"effect_value": 2
+	}
+]

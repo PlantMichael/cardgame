@@ -1,0 +1,234 @@
+[
+	{
+		"id": "r_001",
+		"card_name": "Flickerling",
+		"cost": 1,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "Rush. Burn 1. Recon: Draw a card.",
+		"attack": 2,
+		"health": 1,
+		"abilities": [
+			"rush",
+			"burn_1",
+			"recon"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_002",
+		"card_name": "Helian Emberclaw",
+		"cost": 4,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "",
+		"attack": 5,
+		"health": 3,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_003",
+		"card_name": "Flameling",
+		"cost": 2,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "Rush. Burn 1.",
+		"attack": 3,
+		"health": 1,
+		"abilities": [
+			"rush",
+			"burn_1"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_004",
+		"card_name": "Helian Raider",
+		"cost": 3,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "",
+		"attack": 4,
+		"health": 2,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_005",
+		"card_name": "Helian Colossus",
+		"cost": 7,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"description": "Rush.",
+		"attack": 8,
+		"health": 5,
+		"abilities": [
+			"rush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_006",
+		"card_name": "Scorchrunner",
+		"cost": 2,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "Burn 1.",
+		"attack": 3,
+		"health": 2,
+		"abilities": [
+			"burn_1"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_007",
+		"card_name": "Inferno Basilisk",
+		"cost": 5,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"description": "Rush. Burn 1.",
+		"attack": 5,
+		"health": 4,
+		"abilities": [
+			"rush",
+			"burn_1"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_008",
+		"card_name": "Ember Gnat",
+		"cost": 1,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "",
+		"attack": 2,
+		"health": 1,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_009",
+		"card_name": "Blazerunner",
+		"cost": 3,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "Rush.",
+		"attack": 4,
+		"health": 2,
+		"abilities": [
+			"rush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_010",
+		"card_name": "Char Hound",
+		"cost": 3,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "Burn 1.",
+		"attack": 3,
+		"health": 3,
+		"abilities": [
+			"burn_1"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_011",
+		"card_name": "Magma Guard",
+		"cost": 4,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"description": "Guardian.",
+		"attack": 2,
+		"health": 6,
+		"abilities": [
+			"guardian"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_012",
+		"card_name": "Cinder Giant",
+		"cost": 5,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "",
+		"attack": 5,
+		"health": 5,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_013",
+		"card_name": "Pyroclast Worm",
+		"cost": 6,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"description": "Burn 1.",
+		"attack": 6,
+		"health": 5,
+		"abilities": [
+			"burn_1"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_str_001",
+		"card_name": "Ignite",
+		"cost": 2,
+		"color": "RED",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"description": "Deal 3 damage to any target.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage",
+		"effect_value": 3
+	},
+	{
+		"id": "r_str_002",
+		"card_name": "Inferno Warp",
+		"cost": 4,
+		"color": "RED",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"description": "Deal 5 damage to any target.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage",
+		"effect_value": 5
+	}
+]

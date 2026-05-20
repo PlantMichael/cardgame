@@ -1,0 +1,27 @@
+Winrate percentages
+
+Games played: 4
+
+Green - 0
+Orange - 0
+Teal - 0
+Black - 0
+
+
+
+
+Blood transfusion 2 mana
+
+Transfer two max health from enemy creature to ur own
+
+
+2 2/3
+
+When max health == 5. Sanguine
+into
+3 5/4
+rush Lifesteal
+
+Vampire lord 7
+2/1 Bat
+7/8 buffs other cards +2/+1

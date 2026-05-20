@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep '\"id\"' C:/Users/thecr/documents/cardgame/data/cards/__TRACKED_VAR__.json)",
+      "Bash(python3 *)",
+      "Bash(git init *)"
+    ]
+  }
+}

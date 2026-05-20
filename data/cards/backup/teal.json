@@ -1,0 +1,237 @@
+[
+	{
+		"id": "t_001",
+		"card_name": "Yetiling",
+		"cost": 3,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "Yeti. Challenge: Pick an enemy to fight.",
+		"attack": 2,
+		"health": 3,
+		"abilities": [
+			"yeti",
+			"challenge"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_002",
+		"card_name": "Snow Stinger",
+		"cost": 4,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"description": "Rush.",
+		"attack": 3,
+		"health": 3,
+		"abilities": [
+			"rush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_003",
+		"card_name": "Inyuite Infantry",
+		"cost": 2,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "",
+		"attack": 2,
+		"health": 3,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_004",
+		"card_name": "Inyuite Vanguard",
+		"cost": 5,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"description": "Guardian.",
+		"attack": 4,
+		"health": 6,
+		"abilities": [
+			"guardian"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_005",
+		"card_name": "Tundra Speeder",
+		"cost": 3,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"rush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_006",
+		"card_name": "Serene Yeti",
+		"cost": 8,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"description": "Guardian.",
+		"attack": 6,
+		"health": 8,
+		"abilities": [
+			"guardian"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_007",
+		"card_name": "Yeti Rancher",
+		"cost": 3,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "On Death: Draw a random Yeti from your deck.",
+		"attack": 1,
+		"health": 2,
+		"abilities": [
+			"deathrattle_draw_yeti"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_008",
+		"card_name": "Frost Yeti",
+		"cost": 7,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "Yeti. Guardian. Challenge: Pick an enemy to fight.",
+		"attack": 4,
+		"health": 6,
+		"abilities": [
+			"yeti",
+			"guardian",
+			"challenge"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_009",
+		"card_name": "Inyuite Scout",
+		"cost": 2,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "Recon: Draw a card.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"recon"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_010",
+		"card_name": "Yeti Grunt",
+		"cost": 6,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "Yeti. Guardian. Challenge: Pick an enemy to fight.",
+		"attack": 4,
+		"health": 4,
+		"abilities": [
+			"guardian",
+			"yeti",
+			"challenge"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_011",
+		"card_name": "Sledbearer",
+		"cost": 2,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "Yeti. Challenge: Pick an enemy to fight.",
+		"attack": 1,
+		"health": 2,
+		"abilities": ["yeti"],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_012",
+		"card_name": "Yeti Poker",
+		"cost": 4,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "On play select a yeti you control to challenge.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"on_play_yeti_challenge"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_str_001",
+		"card_name": "Arrow",
+		"cost": 3,
+		"color": "TEAL",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"description": "Deal 3 damage to any target.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage",
+		"effect_value": 3
+	},
+	{
+		"id": "t_str_002",
+		"card_name": "Snow Bank",
+		"cost": 2,
+		"color": "TEAL",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"description": "Give a friendly creature +2/+2.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "buff_creature",
+		"effect_value": 2
+	},
+	{
+		"id": "t_str_003",
+		"card_name": "Icewhip",
+		"cost": 4,
+		"color": "TEAL",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"description": "Make a yeti you control challenge.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "force_challenge",
+		"effect_value": 0
+	}
+]

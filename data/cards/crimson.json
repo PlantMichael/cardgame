@@ -1,0 +1,405 @@
+[
+	{
+		"id": "cr_001",
+		"card_name": "Fledgling",
+		"cost": 1,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "sprite",
+		"description": "Recon.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"recon"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_002",
+		"card_name": "Moonchild",
+		"cost": 1,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Give a friendly minion +1 max health",
+		"attack": 1,
+		"health": 2,
+		"abilities": [
+			"on_play_buff_friendly_health"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_003",
+		"card_name": "Haven Guard",
+		"cost": 2,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "sprite",
+		"description": "Transform when health reaches 5.",
+		"attack": 2,
+		"health": 3,
+		"abilities": [
+			"transform_at_max_health_5"
+		],
+		"transform_into": "cr_001t",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_016",
+		"card_name": "Glycerin Fueler",
+		"cost": 2,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "",
+		"attack": 3,
+		"health": 1,
+		"abilities": [
+			"rush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_006",
+		"card_name": "Covenhound",
+		"cost": 3,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "When this attacks, give a random creature you control +1 health.",
+		"attack": 2,
+		"health": 3,
+		"abilities": [
+			"attack_buff_friendly_health"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_009",
+		"card_name": "Ghoul Hunter",
+		"cost": 3,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "When a friendly creature transforms, transform into Fleshripper.",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"mirror_transform"
+		],
+		"transform_into": "cr_004t",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_010",
+		"card_name": "Flickerling Herder",
+		"cost": 3,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "On play gain +1/+1 if you control a sprite",
+		"attack": 2,
+		"health": 3,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_008",
+		"card_name": "Apothecary",
+		"cost": 4,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "When a friendly creature gains health, it gains +1 health",
+		"attack": 2,
+		"health": 5,
+		"abilities": [
+			"apothecary"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_011",
+		"card_name": "Crypt Savage",
+		"cost": 4,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Guardian.",
+		"attack": 2,
+		"health": 6,
+		"abilities": [
+			"guardian"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_015",
+		"card_name": "Sprite Hoard",
+		"cost": 4,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "sprite",
+		"description": "On death: Return a sprite from your graveyard to your hand.",
+		"attack": 2,
+		"health": 2,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_004",
+		"card_name": "Crypt King",
+		"cost": 5,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "On play: Transform into Bat or Wolf.",
+		"attack": 5,
+		"health": 5,
+		"abilities": [
+			"on_play_transform_choice"
+		],
+		"transform_choices": [
+			"cr_002t",
+			"cr_003t"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_007",
+		"card_name": "Inferno Basilisk",
+		"cost": 5,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "",
+		"attack": 3,
+		"health": 3,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_012",
+		"card_name": "Coven Acolyte",
+		"cost": 5,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "",
+		"attack": 5,
+		"health": 5,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_014",
+		"card_name": "Incendiary Commander",
+		"cost": 6,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "When this creature dies, deal 1 damage to ALL creatures.",
+		"attack": 4,
+		"health": 4,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_005",
+		"card_name": "Elder Sire",
+		"cost": 7,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "",
+		"description": "When attacked, give all friendly minions +1 max health.",
+		"attack": 6,
+		"health": 7,
+		"abilities": [
+			"guardian",
+			"when_attacked_buff_friendly"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_013",
+		"card_name": "Char Giant",
+		"cost": 8,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "",
+		"attack": 6,
+		"health": 6,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_str_001",
+		"card_name": "Blood transfusion",
+		"cost": 2,
+		"color": "CRIMSON",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Deal 3 damage to any target.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage",
+		"effect_value": 3
+	},
+	{
+		"id": "cr_str_002",
+		"card_name": "Inferno Warp",
+		"cost": 3,
+		"color": "CRIMSON",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Deal 3 damage to any target.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage",
+		"effect_value": 3
+	},
+	{
+		"id": "cr_str_003",
+		"card_name": "Ignite",
+		"cost": 4,
+		"color": "CRIMSON",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Deal 5 damage to any target.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage",
+		"effect_value": 5
+	},
+	{
+		"id": "cr_str_004",
+		"card_name": "Supernova",
+		"cost": 6,
+		"color": "CRIMSON",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Deal 5 damage to ALL creatures",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage_all_creatures",
+		"effect_value": 5
+	},
+	{
+		"id": "cr_001t",
+		"card_name": "Hungering Wolf",
+		"cost": 2,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "sprite",
+		"description": "Rush.",
+		"attack": 5,
+		"health": 4,
+		"abilities": [
+			"rush"
+		],
+		"transform_into": "",
+		"is_token": true,
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_002t",
+		"card_name": "Restless Bat",
+		"cost": 5,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Ethereal. (Immune to combat damage, can be targeted by stratagems.)",
+		"attack": 2,
+		"health": 1,
+		"abilities": [
+			"combat_immune"
+		],
+		"transform_into": "",
+		"is_token": true,
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_003t",
+		"card_name": "Festering Wolf",
+		"cost": 5,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "sprite",
+		"description": "Rush.",
+		"attack": 4,
+		"health": 4,
+		"abilities": [
+			"rush"
+		],
+		"transform_into": "",
+		"is_token": true,
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_004t",
+		"card_name": "Fleshripper",
+		"cost": 5,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "sprite",
+		"description": "Safeguard.",
+		"attack": 5,
+		"health": 4,
+		"abilities": [
+			"safeguard"
+		],
+		"transform_into": "",
+		"is_token": true,
+		"effect": "",
+		"effect_value": 0
+	}
+]

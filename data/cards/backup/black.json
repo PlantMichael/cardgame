@@ -1,0 +1,238 @@
+[
+	{
+		"id": "b_001",
+		"card_name": "Garbage Addict",
+		"cost": 3,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "Rummage on play. Rummage on death.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"rummage",
+			"rummage_on_death"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_002",
+		"card_name": "Lazy Junker",
+		"cost": 2,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"description": "Guardian.",
+		"attack": 1,
+		"health": 6,
+		"abilities": [
+			"guardian"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_003",
+		"card_name": "Psionic Rummager",
+		"cost": 4,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "On play: Rummage a spell of any cost.",
+		"attack": 3,
+		"health": 3,
+		"abilities": [
+			"rummage_spell"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_004",
+		"card_name": "Dump Scummer",
+		"cost": 4,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "Rummage on play. Guardian.",
+		"attack": 3,
+		"health": 5,
+		"abilities": [
+			"guardian",
+			"rummage"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_005",
+		"card_name": "Heap Meddler",
+		"cost": 2,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "Recon: Draw a card.",
+		"attack": 2,
+		"health": 1,
+		"abilities": [
+			"recon"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_006",
+		"card_name": "Dump Guardian",
+		"cost": 7,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"description": "Guardian",
+		"attack": 5,
+		"health": 6,
+		"abilities": [
+			"guardian"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_007",
+		"card_name": "Junkwheel",
+		"cost": 3,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"description": "Rush.",
+		"attack": 4,
+		"health": 2,
+		"abilities": [
+			"rush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_008",
+		"card_name": "Slime Launcher",
+		"cost": 2,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "On play: Deal 2 damage to target creature.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"on_play_damage_2"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_009",
+		"card_name": "Trash Runt",
+		"cost": 1,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"description": "Rush.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"rush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_010",
+		"card_name": "Junk Blockade",
+		"cost": 4,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"description": "Guardian",
+		"attack": 0,
+		"health": 7,
+		"abilities": [
+			"guardian"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_str_001",
+		"card_name": "Garbage Grenade",
+		"cost": 3,
+		"color": "BLACK",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"description": "Deal 3 damage to any target.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage",
+		"effect_value": 3
+	},
+	{
+		"id": "b_str_002",
+		"card_name": "Death Knell",
+		"cost": 5,
+		"color": "BLACK",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"description": "Deal 6 damage to any target.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage",
+		"effect_value": 6
+	},
+	{
+		"id": "b_str_003",
+		"card_name": "Trash Pact",
+		"cost": 4,
+		"color": "BLACK",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"description": "Give a creature you control \"Rummage on death\".",
+		"attack": 0,
+		"health": 0,
+		"abilities": [
+			"rummage_on_death"
+		],
+		"effect": "give_ability",
+		"effect_value": 0
+	},
+	{
+		"id": "b_str_004",
+		"card_name": "Grime Shell",
+		"cost": 2,
+		"color": "BLACK",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"description": "Give a creature Guardian.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [
+			"guardian"
+		],
+		"effect": "give_ability",
+		"effect_value": 0
+	},
+	{
+		"id": "b_str_005",
+		"card_name": "Nauseous Atmosphere",
+		"cost": 3,
+		"color": "BLACK",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"description": "Deal 2 damage to all creatures.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage_all_creatures",
+		"effect_value": 2
+	}
+]

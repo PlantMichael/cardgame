@@ -1,0 +1,240 @@
+[
+	{
+		"id": "g_001",
+		"card_name": "Foot Solder",
+		"cost": 1,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "",
+		"attack": 1,
+		"health": 1,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_002",
+		"card_name": "Commando",
+		"cost": 2,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "",
+		"attack": 2,
+		"health": 1,
+		"abilities": [
+			"reinforce"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_003",
+		"card_name": "Phalanx",
+		"cost": 4,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "Guardian.",
+		"attack": 3,
+		"health": 3,
+		"abilities": [
+			"guardian"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_004",
+		"card_name": "Bunker",
+		"cost": 5,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"description": "Guardian.",
+		"attack": 3,
+		"health": 6,
+		"abilities": [
+			"guardian"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_005",
+		"card_name": "T8 Tigershark",
+		"cost": 7,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"description": "Guardian. Deal 1 damage on entry.",
+		"attack": 3,
+		"health": 8,
+		"abilities": [
+			"guardian",
+			"tank"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_006",
+		"card_name": "Scout",
+		"cost": 2,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "Reinforce.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"reinforce"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_007",
+		"card_name": "T12 Serpent",
+		"cost": 6,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"description": "Reinforce. Deal 1 damage to any creature when reinforced",
+		"attack": 3,
+		"health": 5,
+		"abilities": [
+			"guardian",
+			"reinforce",
+			"tank"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_008",
+		"card_name": "Sapien Infantry",
+		"cost": 3,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"description": "Reinforce",
+		"attack": 2,
+		"health": 1,
+		"abilities": [
+			"reinforce"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_009",
+		"card_name": "Paratroopers",
+		"cost": 3,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"description": "Guardian. Recon.",
+		"attack": 1,
+		"health": 3,
+		"abilities": [
+			"reinforce",
+			"recon"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_010",
+		"card_name": "Heavy Unit",
+		"cost": 3,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"description": "Guardian.",
+		"attack": 4,
+		"health": 2,
+		"abilities": [
+			"reinforce"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_011",
+		"card_name": "Engineer",
+		"cost": 3,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "On Death: Draw a Tank.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"guardian",
+			"deathrattle_draw_tank"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_012",
+		"card_name": "Sniper",
+		"cost": 3,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "Rush",
+		"attack": 4,
+		"health": 1,
+		"abilities": ["rush"],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_013",
+		"card_name": "A4SI Python",
+		"cost": 7,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"description": "Guardian. Deal 1 damage to any creature when reinforced",
+		"attack": 3,
+		"health": 7,
+		"abilities": [
+			"guardian",
+			"tank"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_str_001",
+		"card_name": "Supply Drop",
+		"cost": 4,
+		"color": "GREEN",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"description": "Give a friendly creature +2/+2.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "buff_creature",
+		"effect_value": 2
+	},
+	{
+		"id": "g_str_002",
+		"card_name": "Kevlar",
+		"cost": 3,
+		"color": "GREEN",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"description": "Give a friendly creature +0/+3.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "buff_health",
+		"effect_value": 3
+	}
+]

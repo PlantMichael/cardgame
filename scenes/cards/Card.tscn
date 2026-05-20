@@ -1,0 +1,96 @@
+[gd_scene load_steps=3 format=3 uid="uid://dur40h3mbtdyp"]
+
+[ext_resource type="Script" path="res://scripts/cards/card.gd" id="1_ad7jv"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_mef5l"]
+size = Vector2(80, 120)
+
+[node name="Card" type="Area2D"]
+scale = Vector2(0.7, 0.7)
+script = ExtResource("1_ad7jv")
+
+[node name="CardVisual" type="PanelContainer" parent="."]
+custom_minimum_size = Vector2(80, 120)
+offset_right = 110.0
+offset_bottom = 160.0
+
+[node name="CardLayout" type="VBoxContainer" parent="CardVisual"]
+custom_minimum_size = Vector2(110, 160)
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="TopRow" type="HBoxContainer" parent="CardVisual/CardLayout"]
+custom_minimum_size = Vector2(110, 24)
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="CostBadge" type="Panel" parent="CardVisual/CardLayout/TopRow"]
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+
+[node name="CostLabel" type="Label" parent="CardVisual/CardLayout/TopRow/CostBadge"]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_right = 0.0
+offset_bottom = 0.0
+theme_override_font_sizes/font_size = 0
+text = "0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="NameLabel" type="Label" parent="CardVisual/CardLayout/TopRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 9
+text = "Card Name"
+
+[node name="ArtTexture" type="TextureRect" parent="CardVisual/CardLayout"]
+custom_minimum_size = Vector2(110, 60)
+layout_mode = 2
+stretch_mode = 6
+
+[node name="DescriptionLabel" type="Label" parent="CardVisual/CardLayout"]
+custom_minimum_size = Vector2(110, 30)
+layout_mode = 2
+theme_override_font_sizes/font_size = 8
+text = "Description"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="StatsRow" type="HBoxContainer" parent="CardVisual/CardLayout"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="AttackBadge" type="Panel" parent="CardVisual/CardLayout/StatsRow"]
+custom_minimum_size = Vector2(28, 20)
+layout_mode = 2
+
+[node name="AttackLabel" type="Label" parent="CardVisual/CardLayout/StatsRow/AttackBadge"]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_right = 0.0
+offset_bottom = 0.0
+theme_override_font_sizes/font_size = 10
+text = "0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HealthBadge" type="Panel" parent="CardVisual/CardLayout/StatsRow"]
+custom_minimum_size = Vector2(28, 20)
+layout_mode = 2
+
+[node name="HealthLabel" type="Label" parent="CardVisual/CardLayout/StatsRow/HealthBadge"]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_right = 0.0
+offset_bottom = 0.0
+theme_override_font_sizes/font_size = 10
+text = "0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_mef5l")

@@ -1,0 +1,333 @@
+[
+	{
+		"id": "t_013",
+		"card_name": "Scared Yeti Rancher",
+		"cost": 1,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Recon",
+		"attack": 1,
+		"health": 2,
+		"abilities": [
+			"recon"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_014",
+		"card_name": "Iceologist",
+		"cost": 1,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "When a friendly Yeti challenges, gain +1/+1",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"on_yeti_challenge_buff"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_003",
+		"card_name": "Inyuite Infantry",
+		"cost": 2,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "",
+		"attack": 2,
+		"health": 3,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_011",
+		"card_name": "Sledbearer",
+		"cost": 2,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "yeti",
+		"description": "Yeti. Challenge: Pick an enemy to fight.",
+		"attack": 1,
+		"health": 2,
+		"abilities": [
+			"challenge"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_009",
+		"card_name": "Inyuite Scout",
+		"cost": 2,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Recon",
+		"attack": 2,
+		"health": 2,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_005",
+		"card_name": "Tundra Speeder",
+		"cost": 3,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"rush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_001",
+		"card_name": "Yetiling",
+		"cost": 3,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "yeti",
+		"description": "Yeti. Challenge: Pick an enemy to fight.",
+		"attack": 2,
+		"health": 3,
+		"abilities": [
+			"challenge"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_007",
+		"card_name": "Yeti Rancher",
+		"cost": 3,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "On Death: Draw a random Yeti from your deck.",
+		"attack": 1,
+		"health": 2,
+		"abilities": [
+			"deathrattle_draw_yeti"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_002",
+		"card_name": "Snow Stinger",
+		"cost": 4,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Rush.",
+		"attack": 3,
+		"health": 3,
+		"abilities": [
+			"rush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_012",
+		"card_name": "Yeti Poker",
+		"cost": 4,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "On play select a yeti you control to challenge.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"on_play_yeti_challenge"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_015",
+		"card_name": "Inyuite Overwatch",
+		"cost": 5,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "When a friendly yeti dies, choose a friendly yeti to challenge",
+		"attack": 2,
+		"health": 3,
+		"abilities": [
+			"on_yeti_death_challenge"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_004",
+		"card_name": "Inyuite Vanguard",
+		"cost": 5,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Guardian. Safeguard",
+		"attack": 4,
+		"health": 6,
+		"abilities": [
+			"guardian",
+			"safeguard"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_010",
+		"card_name": "Yeti Grunt",
+		"cost": 6,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "yeti",
+		"description": "Guardian. Challenge: Pick an enemy to fight.",
+		"attack": 4,
+		"health": 4,
+		"abilities": [
+			"guardian",
+			"challenge"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_008",
+		"card_name": "Frost Yeti",
+		"cost": 7,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "yeti",
+		"description": "Guardian. Challenge: Pick an enemy to fight.",
+		"attack": 4,
+		"health": 6,
+		"abilities": [
+			"guardian",
+			"challenge"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_006",
+		"card_name": "Serene Yeti",
+		"cost": 8,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "yeti",
+		"description": "Guardian.",
+		"attack": 6,
+		"health": 8,
+		"abilities": [
+			"guardian"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_016",
+		"card_name": "Mother Yeti",
+		"cost": 10,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "yeti",
+		"description": "Guardian.",
+		"attack": 9,
+		"health": 10,
+		"abilities": [
+			"guardian"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_str_001",
+		"card_name": "Arrow",
+		"cost": 4,
+		"color": "TEAL",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Deal 3 damage to any target.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage",
+		"effect_value": 3
+	},
+	{
+		"id": "t_str_002",
+		"card_name": "Snow Bank",
+		"cost": 3,
+		"color": "TEAL",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Give a friendly creature +2/+2.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "buff_creature",
+		"effect_value": 2
+	},
+	{
+		"id": "t_str_003",
+		"card_name": "Icewhip",
+		"cost": 4,
+		"color": "TEAL",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Make a yeti you control challenge.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "force_challenge",
+		"effect_value": 0
+	},
+	{
+		"id": "t_str_004",
+		"card_name": "Poke the 'bear'?",
+		"cost": 5,
+		"color": "TEAL",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Deal 3 damage to a friendly yeti, it can challenge.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "poke_bear",
+		"effect_value": 3
+	}
+]
