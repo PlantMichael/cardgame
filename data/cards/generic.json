@@ -1,0 +1,66 @@
+[
+	{
+		"id": "gen_001",
+		"card_name": "Mortified Scout",
+		"cost": 1,
+		"color": "GENERIC",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Recon",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"recon"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "gen_002",
+		"card_name": "Lost Junkling",
+		"cost": 3,
+		"color": "GENERIC",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "On play: Null a creature.",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"null"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "gen_str_001",
+		"card_name": "Orbital Strike",
+		"cost": 3,
+		"color": "GENERIC",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Deal 3 damage to any target.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage",
+		"effect_value": 3
+	},
+	{
+		"id": "gen_str_002",
+		"card_name": "Laser Barrage",
+		"cost": 5,
+		"color": "GENERIC",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Deal 5 damage to any target.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage",
+		"effect_value": 6
+	}
+]

@@ -2,7 +2,7 @@
 
 ## Pipeline
 
-Card definitions live in `data/cards/{color}.json` (green, crimson, black, orange, teal). `CardDatabase` parses them at `_ready()` and exposes `get_card(id)` / `get_all_cards()`.
+Card definitions live in `data/cards/{color}.json` (green, crimson, black, orange, teal, generic). `CardDatabase` parses them at `_ready()` and exposes `get_card(id)` / `get_all_cards()`. Cards with `color = GENERIC` are usable by every faction in deckbuilding.
 
 ## CardData Fields
 
@@ -18,7 +18,7 @@ Card definitions live in `data/cards/{color}.json` (green, crimson, black, orang
 class_name CardData
 extends Resource
 
-enum CardColor { GREEN, CRIMSON, BLACK, ORANGE, TEAL }
+enum CardColor { GREEN, CRIMSON, BLACK, ORANGE, TEAL, GENERIC }
 enum CardType { CREATURE, STRATAGEM }
 enum CardRarity { COMMON, RARE, EPIC, LEGENDARY }
 

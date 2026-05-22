@@ -37,7 +37,19 @@ Abilities are plain strings stored on `CardData.abilities` and copied to `Minion
 | `ON_PLAY_TRANSFORM_CHOICE` | `"on_play_transform_choice"` | On play: show a picker to choose one form from `CardData.transform_choices`; the minion immediately transforms into the chosen card |
 | `ON_PLAY_RUMMAGE_BUFF` | `"on_play_rummage_buff"` | On play: gain +1/+1 for each time this card has been rummaged (tracked by `CardData.rummage_count`) |
 | `ATTACK_BUFF_FRIENDLY_HEALTH` | `"attack_buff_friendly_health"` | When this attacks: give a random friendly creature +1 current and max health |
-| `MIRROR_TRANSFORM` (updated) | `"mirror_transform"` | When a friendly creature transforms: transform too. If `CardData.transform_into` is set, transforms into that specific card; otherwise copies the triggering creature's new form |
+| `MIRROR_TRANSFORM` | `"mirror_transform"` | When a friendly creature transforms: transform too. If `CardData.transform_into` is set, transforms into that specific card; otherwise copies the triggering creature's new form |
+| `ON_PLAY_BUFF_FRIENDLY_HEALTH` | `"on_play_buff_friendly_health"` | On play: queue a prompt for the player to choose a friendly minion to give +1 max health |
+| `WHEN_ATTACKED_BUFF_FRIENDLY` | `"when_attacked_buff_friendly"` | When this is attacked: give all friendly minions +1 max health (displayed as "Lifegift") |
+| `APOTHECARY` | `"apothecary"` | Passive: whenever a friendly creature gains health, it gains an extra +1 max health |
+| `COMBAT_IMMUNE` | `"combat_immune"` | Cannot take damage from combat (attacks and challenges); can still be targeted by stratagems (displayed as "Ethereal") |
+| `ON_PLAY_TRANSFORM_CHOICE` | `"on_play_transform_choice"` | On play: show a picker to choose one form from `CardData.transform_choices`; the minion immediately transforms |
+| `ON_YETI_CHALLENGE_BUFF` | `"on_yeti_challenge_buff"` | When a friendly Yeti completes a challenge: this minion gains +1/+1 (displayed as "Yeti Bond") |
+| `ON_YETI_DEATH_CHALLENGE` | `"on_yeti_death_challenge"` | When a friendly Yeti dies: queue an Overwatch challenge prompt |
+| `ON_FRIENDLY_YETI_DEATH_BUFF` | `"on_friendly_yeti_death_buff"` | When a friendly Yeti dies: this minion gains +2 max health (displayed as "Yeti Bond") |
+| `ON_PLAY_BUFF_FRIENDLY_YETI_ATK` | `"on_play_buff_friendly_yeti_attack"` | On play: give all friendly Yetis +2 attack |
+| `ON_PLAY_BUFF_IF_YETI` | `"on_play_buff_if_yeti"` | On play: if you control a friendly Yeti, this minion gains +2/+1 |
+| `DEATHRATTLE_AOE_TRANSFORM` | `"deathrattle_aoe_transform"` | On death: deal 1 damage to all creatures on both boards, then place the card specified by `CardData.transform_into` on the owner's board at the same index |
+| `STINKPILE_PASSIVE` | `"stinkpile_passive"` | Passive ("Salvage"): when the owner completes a rummage, instead of adding the card to hand, immediately play it to the board for free (if board space available) |
 
 The `Abilities` autoload holds all constants and their display metadata in `DEFINITIONS`. PILOT and ON_PLAY_DAMAGE are handled separately via helper functions (`is_pilot`, `get_pilot_attack`, `get_pilot_health`, `is_on_play_damage`, `get_on_play_damage_value`) because their display strings are dynamic.
 

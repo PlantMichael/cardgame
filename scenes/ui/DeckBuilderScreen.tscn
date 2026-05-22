@@ -1,0 +1,266 @@
+[gd_scene load_steps=2 format=3 uid="uid://dy4vs7ja4xxwy"]
+
+[ext_resource type="Script" path="res://scripts/ui/deck_builder_screen.gd" id="1_dbscr"]
+
+[node name="DeckBuilderScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_dbscr")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.13, 0.1, 0.07, 1)
+
+[node name="HubPage" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Toolbar" type="PanelContainer" parent="HubPage"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 64.0
+
+[node name="HBoxContainer" type="HBoxContainer" parent="HubPage/Toolbar"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="BackButton" type="Button" parent="HubPage/Toolbar/HBoxContainer"]
+custom_minimum_size = Vector2(100, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "< Back"
+
+[node name="TitleLabel" type="Label" parent="HubPage/Toolbar/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 28
+text = "DECK BUILDER"
+vertical_alignment = 1
+
+[node name="NewDeckButton" type="Button" parent="HubPage/Toolbar/HBoxContainer"]
+custom_minimum_size = Vector2(130, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "+ New Deck"
+
+[node name="DeckScrollArea" type="ScrollContainer" parent="HubPage"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 64.0
+
+[node name="DeckMargin" type="MarginContainer" parent="HubPage/DeckScrollArea"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 30
+theme_override_constants/margin_top = 30
+theme_override_constants/margin_right = 30
+theme_override_constants/margin_bottom = 30
+
+[node name="DeckFlow" type="HFlowContainer" parent="HubPage/DeckScrollArea/DeckMargin"]
+layout_mode = 2
+theme_override_constants/h_separation = 20
+theme_override_constants/v_separation = 20
+
+[node name="FactionPage" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Toolbar" type="PanelContainer" parent="FactionPage"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 64.0
+
+[node name="HBoxContainer" type="HBoxContainer" parent="FactionPage/Toolbar"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="BackButton" type="Button" parent="FactionPage/Toolbar/HBoxContainer"]
+custom_minimum_size = Vector2(100, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "< Back"
+
+[node name="TitleLabel" type="Label" parent="FactionPage/Toolbar/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 28
+text = "Choose Faction"
+vertical_alignment = 1
+
+[node name="Center" type="CenterContainer" parent="FactionPage"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 64.0
+
+[node name="VBox" type="VBoxContainer" parent="FactionPage/Center"]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="HintLabel" type="Label" parent="FactionPage/Center/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Your deck will only include cards from the chosen faction."
+horizontal_alignment = 1
+
+[node name="FactionHBox" type="HBoxContainer" parent="FactionPage/Center/VBox"]
+custom_minimum_size = Vector2(900, 0)
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="EditorPage" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TopSection" type="VBoxContainer" parent="EditorPage"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 466.0
+theme_override_constants/separation = 0
+
+[node name="EditorToolbar" type="PanelContainer" parent="EditorPage/TopSection"]
+custom_minimum_size = Vector2(0, 54)
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="EditorPage/TopSection/EditorToolbar"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="BackButton" type="Button" parent="EditorPage/TopSection/EditorToolbar/HBoxContainer"]
+custom_minimum_size = Vector2(88, 38)
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "< Back"
+
+[node name="FactionLabel" type="Label" parent="EditorPage/TopSection/EditorToolbar/HBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+vertical_alignment = 1
+
+[node name="VSep" type="VSeparator" parent="EditorPage/TopSection/EditorToolbar/HBoxContainer"]
+layout_mode = 2
+
+[node name="DeckNameLabel" type="Label" parent="EditorPage/TopSection/EditorToolbar/HBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Deck:"
+vertical_alignment = 1
+
+[node name="NameEdit" type="LineEdit" parent="EditorPage/TopSection/EditorToolbar/HBoxContainer"]
+custom_minimum_size = Vector2(190, 36)
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+
+[node name="SaveButton" type="Button" parent="EditorPage/TopSection/EditorToolbar/HBoxContainer"]
+custom_minimum_size = Vector2(60, 36)
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Save"
+
+[node name="Spacer" type="Control" parent="EditorPage/TopSection/EditorToolbar/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="CountLabel" type="Label" parent="EditorPage/TopSection/EditorToolbar/HBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "0 / 40"
+vertical_alignment = 1
+
+[node name="VSep2" type="VSeparator" parent="EditorPage/TopSection/EditorToolbar/HBoxContainer"]
+layout_mode = 2
+
+[node name="ClearButton" type="Button" parent="EditorPage/TopSection/EditorToolbar/HBoxContainer"]
+custom_minimum_size = Vector2(58, 36)
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Clear"
+
+[node name="DeckPanel" type="PanelContainer" parent="EditorPage/TopSection"]
+custom_minimum_size = Vector2(0, 360)
+layout_mode = 2
+
+[node name="DeckScroll" type="ScrollContainer" parent="EditorPage/TopSection/DeckPanel"]
+layout_mode = 2
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 1
+
+[node name="DeckContent" type="HBoxContainer" parent="EditorPage/TopSection/DeckPanel/DeckScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/h_separation = 4
+
+[node name="SearchStrip" type="PanelContainer" parent="EditorPage/TopSection"]
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="EditorPage/TopSection/SearchStrip"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="FactionLabel" type="Label" parent="EditorPage/TopSection/SearchStrip/HBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+vertical_alignment = 1
+
+[node name="Spacer" type="Control" parent="EditorPage/TopSection/SearchStrip/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="SearchLabel" type="Label" parent="EditorPage/TopSection/SearchStrip/HBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Search:"
+vertical_alignment = 1
+
+[node name="SearchBar" type="LineEdit" parent="EditorPage/TopSection/SearchStrip/HBoxContainer"]
+custom_minimum_size = Vector2(200, 34)
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+placeholder_text = "card name..."
+
+[node name="CollectionPanel" type="PanelContainer" parent="EditorPage"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 466.0
+
+[node name="CollScroll" type="ScrollContainer" parent="EditorPage/CollectionPanel"]
+layout_mode = 2
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 1
+
+[node name="CollContent" type="VBoxContainer" parent="EditorPage/CollectionPanel/CollScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10

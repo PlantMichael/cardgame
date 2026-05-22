@@ -30,15 +30,20 @@
 - Mortar (deal_damage 4 to target creature)
 - AI controller (tactical: plays cards, trades minions, goes face, checks lethal, handles Challenge, Pilot, on-play damage, Safeguard filtering, Commanding Shout)
 - Win/loss overlay (modal with "You Win!" / "You Lose!" and Play Again button)
-- Transform system: attack-count transform (`transform_N`) and max-health-threshold transform (`transform_at_max_health_N`); Haven Guard → Haven Warden (5/4 Rush at 5 max health)
+- Transform system: attack-count transform (`transform_N`) and max-health-threshold transform (`transform_at_max_health_N`); Haven Guard → Haven Warden (5/4 Rush at 5 max health); threshold fires on all health-gain paths (Moonchild, Blood Transfusion, Sanguine, Apothecary, Pilot, stratagem buffs)
+- Crimson faction: Crypt Gangrel deathrattle (AOE 1 damage → Fleshripper); Blood Transfusion (steal 2 health from enemy creature, give to friendly); Sanguine (move 2 health from one friendly to another)
+- Cascade death handling: `_remove_dead_minions` loops until no more deaths, so AOE deathrattles chain correctly
+- Faction selection buttons uniform width via `SIZE_EXPAND_FILL` in a fixed-width HBoxContainer
+- Main menu with Play and Deck Builder buttons
+- Deck select screen (choose player deck, then opponent starter deck)
+- Deck builder UI: hub listing saved decks, faction picker, collection editor with search, filter buttons (All / Faction / Generic), save to disk
+- Generic card color (`CardData.CardColor.GENERIC`): cards usable by all factions; appear in a separate section after faction cards in the collection browser
 
 ## TODO / Not Working Yet
 
 - Dead minions not visually confirmed working (need to test with AI)
 - Card art (images not added to cards yet)
 - Networking (Nakama — planned after AI is solid)
-- Deck builder UI
-- Main menu
 - Creature-vs-creature attack animation (attacker slides to target and back, ~0.33s)
 - Sound
 

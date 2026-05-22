@@ -11,7 +11,8 @@ func _load_cards() -> void:
 		"res://data/cards/crimson.json",
 		"res://data/cards/black.json",
 		"res://data/cards/orange.json",
-		"res://data/cards/teal.json"
+		"res://data/cards/teal.json",
+		"res://data/cards/generic.json",
 	]
 	for path in files:
 		_load_file(path)

@@ -1,7 +1,7 @@
 class_name CardData
 extends Resource
 
-enum CardColor { GREEN, CRIMSON, BLACK, ORANGE, TEAL }
+enum CardColor { GREEN, CRIMSON, BLACK, ORANGE, TEAL, GENERIC }
 enum CardType { CREATURE, STRATAGEM }
 enum CardRarity { COMMON, RARE, EPIC, LEGENDARY }
 
