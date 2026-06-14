@@ -49,6 +49,21 @@
 		"effect_value": 3
 	},
 	{
+		"id": "gen_str_003",
+		"card_name": "Noxious Bombardment",
+		"cost": 4,
+		"color": "GENERIC",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Deal 2 damage to all enemy creatures.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage_all_enemy",
+		"effect_value": 2
+	},
+	{
 		"id": "gen_str_002",
 		"card_name": "Laser Barrage",
 		"cost": 5,
@@ -61,6 +76,21 @@
 		"health": 0,
 		"abilities": [],
 		"effect": "deal_damage",
-		"effect_value": 6
+		"effect_value": 5
+	},
+	{
+		"id": "gen_str_004",
+		"card_name": "Black hole",
+		"cost": 8,
+		"color": "GENERIC",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Destroy all creatures",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "destroy_all_creatures",
+		"effect_value": 0
 	}
 ]

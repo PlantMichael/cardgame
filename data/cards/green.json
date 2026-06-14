@@ -1,46 +1,14 @@
 [
 	{
-		"id": "g_001",
-		"card_name": "Foot Solder",
-		"cost": 1,
-		"color": "GREEN",
-		"card_type": "CREATURE",
-		"rarity": "COMMON",
-		"tribe": "",
-		"description": "",
-		"attack": 1,
-		"health": 1,
-		"abilities": [],
-		"effect": "",
-		"effect_value": 0
-	},
-	{
 		"id": "g_002",
-		"card_name": "Commando",
+		"card_name": "Cocky Commando",
 		"cost": 2,
 		"color": "GREEN",
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "",
+		"description": "Reinforce",
 		"attack": 2,
-		"health": 1,
-		"abilities": [
-			"reinforce"
-		],
-		"effect": "",
-		"effect_value": 0
-	},
-	{
-		"id": "g_006",
-		"card_name": "Scout",
-		"cost": 2,
-		"color": "GREEN",
-		"card_type": "CREATURE",
-		"rarity": "COMMON",
-		"tribe": "",
-		"description": "Reinforce.",
-		"attack": 1,
 		"health": 1,
 		"abilities": [
 			"reinforce"
@@ -51,14 +19,14 @@
 	{
 		"id": "g_008",
 		"card_name": "Sapien Infantry",
-		"cost": 3,
+		"cost": 4,
 		"color": "GREEN",
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "Reinforce",
-		"attack": 2,
-		"health": 1,
+		"attack": 3,
+		"health": 2,
 		"abilities": [
 			"reinforce"
 		],
@@ -73,11 +41,10 @@
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "",
-		"description": "Guardian. Recon.",
-		"attack": 1,
-		"health": 3,
+		"description": "Recon.",
+		"attack": 3,
+		"health": 2,
 		"abilities": [
-			"reinforce",
 			"recon"
 		],
 		"effect": "",
@@ -91,8 +58,8 @@
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "",
-		"description": "Guardian.",
-		"attack": 3,
+		"description": "Reinforce",
+		"attack": 2,
 		"health": 2,
 		"abilities": [
 			"reinforce"
@@ -112,7 +79,6 @@
 		"attack": 1,
 		"health": 1,
 		"abilities": [
-			"guardian",
 			"deathrattle_draw_tank"
 		],
 		"effect": "",
@@ -126,11 +92,11 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "Rush",
-		"attack": 4,
-		"health": 1,
+		"description": "On play: do 2 damage",
+		"attack": 2,
+		"health": 2,
 		"abilities": [
-			"rush"
+			"on_play_damage_2"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -213,8 +179,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "When a friendly creature reinforces, give it +1 attack.",
-		"attack": 2,
-		"health": 2,
+		"attack": 3,
+		"health": 5,
 		"abilities": [
 			"tactical_officer"
 		],
@@ -229,12 +195,12 @@
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "tank",
-		"description": "Reinforce. Deal 1 damage to any creature when reinforced",
+		"description": "Reinforce. Deal 1 damage when any creatures reinforce.",
 		"attack": 3,
 		"health": 5,
 		"abilities": [
-			"guardian",
-			"reinforce"
+			"reinforce",
+			"on_any_reinforce_shot_1"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -247,11 +213,12 @@
 		"card_type": "CREATURE",
 		"rarity": "EPIC",
 		"tribe": "tank",
-		"description": "Guardian. Deal 1 damage on entry.",
-		"attack": 3,
-		"health": 8,
+		"description": "Guardian. On play: deal 2 damage.",
+		"attack": 4,
+		"health": 7,
 		"abilities": [
-			"guardian"
+			"guardian",
+			"on_play_damage_2"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -264,11 +231,30 @@
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "tank",
-		"description": "Guardian. Deal 1 damage to any creature when reinforced",
-		"attack": 3,
-		"health": 7,
+		"description": "Reinforce. Deal 2 damage to any creature on play and when reinforced",
+		"attack": 4,
+		"health": 4,
 		"abilities": [
-			"guardian"
+			"reinforce",
+			"on_play_damage_2",
+			"on_reinforce_damage_2"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_017",
+		"card_name": "Big Bertha, the Hail Mary",
+		"cost": 10,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "LEGENDARY",
+		"tribe": "tank",
+		"description": "On play: Deal 8 damage",
+		"attack": 5,
+		"health": 5,
+		"abilities": [
+			"on_play_damage_8"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -317,20 +303,5 @@
 		"abilities": [],
 		"effect": "buff_all_friendly_attack",
 		"effect_value": 1
-	},
-	{
-		"id": "g_str_004",
-		"card_name": "Mortar",
-		"cost": 5,
-		"color": "GREEN",
-		"card_type": "STRATAGEM",
-		"rarity": "COMMON",
-		"tribe": "",
-		"description": "Deal 4 damage to a target creature.",
-		"attack": 0,
-		"health": 0,
-		"abilities": [],
-		"effect": "deal_damage",
-		"effect_value": 4
 	}
 ]

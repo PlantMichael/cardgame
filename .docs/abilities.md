@@ -41,8 +41,6 @@ Abilities are plain strings stored on `CardData.abilities` and copied to `Minion
 | `ON_PLAY_BUFF_FRIENDLY_HEALTH` | `"on_play_buff_friendly_health"` | On play: queue a prompt for the player to choose a friendly minion to give +1 max health |
 | `WHEN_ATTACKED_BUFF_FRIENDLY` | `"when_attacked_buff_friendly"` | When this is attacked: give all friendly minions +1 max health (displayed as "Lifegift") |
 | `APOTHECARY` | `"apothecary"` | Passive: whenever a friendly creature gains health, it gains an extra +1 max health |
-| `COMBAT_IMMUNE` | `"combat_immune"` | Cannot take damage from combat (attacks and challenges); can still be targeted by stratagems (displayed as "Ethereal") |
-| `ON_PLAY_TRANSFORM_CHOICE` | `"on_play_transform_choice"` | On play: show a picker to choose one form from `CardData.transform_choices`; the minion immediately transforms |
 | `ON_YETI_CHALLENGE_BUFF` | `"on_yeti_challenge_buff"` | When a friendly Yeti completes a challenge: this minion gains +1/+1 (displayed as "Yeti Bond") |
 | `ON_YETI_DEATH_CHALLENGE` | `"on_yeti_death_challenge"` | When a friendly Yeti dies: queue an Overwatch challenge prompt |
 | `ON_FRIENDLY_YETI_DEATH_BUFF` | `"on_friendly_yeti_death_buff"` | When a friendly Yeti dies: this minion gains +2 max health (displayed as "Yeti Bond") |
@@ -50,8 +48,17 @@ Abilities are plain strings stored on `CardData.abilities` and copied to `Minion
 | `ON_PLAY_BUFF_IF_YETI` | `"on_play_buff_if_yeti"` | On play: if you control a friendly Yeti, this minion gains +2/+1 |
 | `DEATHRATTLE_AOE_TRANSFORM` | `"deathrattle_aoe_transform"` | On death: deal 1 damage to all creatures on both boards, then place the card specified by `CardData.transform_into` on the owner's board at the same index |
 | `STINKPILE_PASSIVE` | `"stinkpile_passive"` | Passive ("Salvage"): when the owner completes a rummage, instead of adding the card to hand, immediately play it to the board for free (if board space available) |
+| `ON_PILOTED_GAIN_RUSH` | `"on_piloted_gain_rush"` | When a pilot merges into this Mech: gain Rush (can attack immediately); displayed as "Boost: Rush" |
+| `ON_PILOTED_GAIN_SAFEGUARD` | `"on_piloted_gain_safeguard"` | When a pilot merges into this Mech: gain Safeguard; displayed as "Boost: Safeguard" |
+| `EJECT_PILOT_ON_DEATH` | `"eject_pilot_on_death"` | On death: reverse the pilot merge — mech stats restore and pilot returns to board (or hand if full) |
+| `RUMMAGE_AND_PLAY` | `"rummage_and_play"` | On play: retrieve a creature from your graveyard costing less than this card and immediately play it to the board (bypassing hand) |
+| `CHALLENGE_ALL` | `"challenge_all"` | On play: challenge every enemy creature left-to-right in sequence; each challenge resolves fully (including deathrattles) before the next; displayed as "Rampage" |
+| `ON_PLAY_CHALLENGE_WIN_BUFF` | `"on_play_challenge_win_buff"` | On play: fight a chosen enemy minion; if this minion wins (target dies and this survives), gain +1/+1 |
+| `ON_PLAY_AOE_ENEMY` | `"on_play_aoe_enemy_N"` (e.g. `"on_play_aoe_enemy_2"`) | On play: deal N damage to all enemy minions |
+| `ON_REINFORCE_DAMAGE` | `"on_reinforce_damage_N"` (e.g. `"on_reinforce_damage_2"`) | On reinforce death trigger: deal N damage to a chosen target |
+| `ON_ANY_REINFORCE_SHOT` | `"on_any_reinforce_shot_N"` (e.g. `"on_any_reinforce_shot_1"`) | Passive: whenever any friendly creature reinforces, deal N damage to a chosen target |
 
-The `Abilities` autoload holds all constants and their display metadata in `DEFINITIONS`. PILOT and ON_PLAY_DAMAGE are handled separately via helper functions (`is_pilot`, `get_pilot_attack`, `get_pilot_health`, `is_on_play_damage`, `get_on_play_damage_value`) because their display strings are dynamic.
+The `Abilities` autoload holds all constants and their display metadata in `DEFINITIONS`. PILOT, ON_PLAY_DAMAGE, ON_PLAY_AOE_ENEMY, ON_REINFORCE_DAMAGE, ON_ANY_REINFORCE_SHOT, TRANSFORM, and TRANSFORM_AT_MAX_HEALTH are handled separately via helper functions (e.g. `is_pilot`, `is_on_play_damage`, `is_on_reinforce_damage`, `is_on_any_reinforce_shot`, `is_transform`) because their display strings are dynamic.
 
 ## Tribes vs Keywords
 

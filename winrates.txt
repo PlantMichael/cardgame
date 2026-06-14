@@ -1,0 +1,4 @@
+Games Played: 1
+
+GREEN: 1 wins (100.0%)
+ORANGE: 0 wins (0.0%)

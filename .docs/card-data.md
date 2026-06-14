@@ -33,6 +33,7 @@ enum CardRarity { COMMON, RARE, EPIC, LEGENDARY }
 @export var art: Texture2D
 
 var cost_modifier: int = 0  # runtime only; set by rummage (-1 discount)
+var rummage_count: int = 0  # runtime only; number of times rummaged (for ON_PLAY_RUMMAGE_BUFF)
 
 func effective_cost() -> int:
     return clamp(cost + cost_modifier, 1, 10)
@@ -40,6 +41,11 @@ func effective_cost() -> int:
 @export var attack: int = 0
 @export var health: int = 0
 @export var abilities: Array[String] = []  # e.g. ["guardian", "rush", "reinforce"]
+@export var transform_into: String = ""    # card id to become after transform
+@export var transform_choices: Array[String] = []  # for on_play_transform_choice
+@export var is_token: bool = false
+
+# Stratagem only
 @export var effect: String = ""
 @export var effect_value: int = 0
 ```

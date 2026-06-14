@@ -1,27 +1,92 @@
-Winrate percentages
-
-Games played: 4
-
-Green - 0
-Orange - 0
-Teal - 0
-Black - 0
-
-
-
-
-Blood transfusion 2 mana
-
-Transfer two max health from enemy creature to ur own
+1.02
+- Fixed multiple card description discrepancies.
+- Made the ai better. 
+- Made reinforced units display when they're reinforced.
+- Fixed the pilot token not going away on hovered cards. 
+- Fixed Rummage list going off screen.
+- Fixed Generic cards
+- Fixed the ai not recognizing ethereal.
+- Fixed the tanks betraying their owners.
 
 
-2 2/3
+1.03
+- A cards on play's are no longer ignored when rummaged with stinkpile.
+- Damage now resolves before effects. 
+- Trash collector is now 2 mana.
+- Changed Dumptruck to Filth Eater, 3 mana 3/3 "Guardian. Whenever you Rummage, this creature gains +0/+1".
+- Changed Sniper to 3/1
+- Engineer is now 1/1
+- Heavy Unit now 2/2
+- Sniper is now 3/2
+- Bunch of other shi i couldn't type fast enough.
 
-When max health == 5. Sanguine
-into
-3 5/4
-rush Lifesteal
+1.04
+- Added green legendary "Big Bertha, the Hail Mary"
+- Turned "Nauseous fumes" into "Decaying Junkling."
+- Made T12 Serpent 6 mana 3/6 deal 1 damage when anything reinforces and keeps reinforced.
+- Adjusted some pilots.
+- Fixed Sniper, Tigershark, and Big Bertha being able to target players.
+- Fixed the python and tigershark dry firing.
+- Fixed green starter deck.
+- Fixed Laser Barrage dealing 6 damage, rather than 5
 
-Vampire lord 7
-2/1 Bat
-7/8 buffs other cards +2/+1
+1.04.1 Hotfix
+
+- Added Generic card "Noxious Bombardment" 4 mana deal 2 damage to all enemy creatures.
+- A4SI Python now does 2 damage on play and when reinforcing (was 3) and no longer has Guardian.
+
+1.05
+
+General
+
+- Non-black cards are no longer discounted by 1 mana when fetched from the graveyard.
+- Killing a player with a stratagem now ends the game instantly. 
+
+Black
+
+- Stinkpile no longer throws your game. All on plays will proc one by one when rummaging.
+- Added Hot Garbage, 2 mana "Give a creature rush."
+- Added Greedy Junkling 4 mana 2/2 "On play: Rummage a creature and play it."
+- Slime launcher can now deal 2 damage to anything. 
+
+Teal
+
+- Challenging now has an animation.
+- Added Abominus, primal wraith 10 mana 10/10 "On play: Challenge every enemy creature from left to right.
+- Teal starter deck is now standardized. 
+- Removed "Poke the bear" stratagem.
+- Changed Icewhip to 2 mana "Make a yeti you control challenge. If it wins, give it +2/+2"
+- Changed Iceologist to "When a friendly yeti challenges, give it +1/+1 if it survives"
+- Changed Yeti Grunt ability to "On play: Challenge. If this yeti wins, gain +1/+1".
+
+Green
+
+- Engineer is now 3 mana (was 2)
+- T12 Serpent is now 3/5 (was 3/6)
+- Sapien Infantry is now 3/2 (was 3/3) 
+
+Generic
+
+- Added Black hole. 8 mana "Destroy all creatures"
+- Generic card "Noxious Bombardment" actually works. 
+
+Known Issues
+
+- Game will softlock on opponents turn.
+- Challenge animation is fucked up.
+- Legendaries are bulbus and gassy for some reason. 
+
+
+ 
+Shi to do:
+
+
+
+
+
+Orange legendary free pilot
+
+Artillery strike 4 
+deal 2 damage to 3 random enemies
+
+

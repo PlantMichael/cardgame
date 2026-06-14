@@ -21,6 +21,10 @@ var transform_counter: int = 0
 
 var instance_id: String
 
+var piloted_by: CardData = null
+var pilot_atk_bonus: int = 0
+var pilot_hp_bonus: int = 0
+
 func _init(card_data: CardData, owner: String) -> void:
 	data = card_data
 	owner_id = owner
@@ -66,3 +70,47 @@ func to_dict() -> Dictionary:
 		"is_piloted": is_piloted,
 		"abilities": abilities
 	}
+
+func to_net_dict() -> Dictionary:
+	return {
+		"instance_id": instance_id,
+		"card_id": data.id,
+		"owner_id": owner_id,
+		"current_attack": current_attack,
+		"current_health": current_health,
+		"max_health": max_health,
+		"has_attacked": has_attacked,
+		"is_exhausted": is_exhausted,
+		"is_piloted": is_piloted,
+		"is_nulled": is_nulled,
+		"divine_shield": divine_shield,
+		"transform_counter": transform_counter,
+		"pilot_atk_bonus": pilot_atk_bonus,
+		"pilot_hp_bonus": pilot_hp_bonus,
+		"piloted_by_id": piloted_by.id if piloted_by != null else "",
+		"abilities": abilities,
+	}
+
+static func from_net_dict(d: Dictionary) -> Minion:
+	var card = CardDatabase.get_card(str(d["card_id"]))
+	if card == null:
+		return null
+	var m := Minion.new(card, str(d["owner_id"]))
+	m.instance_id = str(d["instance_id"])
+	m.current_attack = int(d["current_attack"])
+	m.current_health = int(d["current_health"])
+	m.max_health = int(d["max_health"])
+	m.has_attacked = bool(d["has_attacked"])
+	m.is_exhausted = bool(d["is_exhausted"])
+	m.is_piloted = bool(d["is_piloted"])
+	m.is_nulled = bool(d["is_nulled"])
+	m.divine_shield = bool(d["divine_shield"])
+	m.transform_counter = int(d["transform_counter"])
+	m.pilot_atk_bonus = int(d["pilot_atk_bonus"])
+	m.pilot_hp_bonus = int(d["pilot_hp_bonus"])
+	var piloted_by_id = str(d.get("piloted_by_id", ""))
+	m.piloted_by = CardDatabase.get_card(piloted_by_id) if piloted_by_id != "" else null
+	m.abilities.clear()
+	for a in d["abilities"]:
+		m.abilities.append(str(a))
+	return m

@@ -1,22 +1,5 @@
 [
 	{
-		"id": "b_005",
-		"card_name": "Heap Meddler",
-		"cost": 1,
-		"color": "BLACK",
-		"card_type": "CREATURE",
-		"rarity": "COMMON",
-		"tribe": "",
-		"description": "Recon",
-		"attack": 1,
-		"health": 1,
-		"abilities": [
-			"recon"
-		],
-		"effect": "",
-		"effect_value": 0
-	},
-	{
 		"id": "b_009",
 		"card_name": "Trash Runt",
 		"cost": 1,
@@ -25,8 +8,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "",
-		"attack": 1,
-		"health": 2,
+		"attack": 2,
+		"health": 1,
 		"abilities": [],
 		"effect": "",
 		"effect_value": 0
@@ -39,7 +22,7 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "On play: Deal 2 damage to target creature.",
+		"description": "On play: Deal 2.",
 		"attack": 1,
 		"health": 1,
 		"abilities": [
@@ -66,26 +49,9 @@
 		"effect_value": 0
 	},
 	{
-		"id": "b_013",
-		"card_name": "Slime Slinger",
-		"cost": 3,
-		"color": "BLACK",
-		"card_type": "CREATURE",
-		"rarity": "RARE",
-		"tribe": "",
-		"description": "On play: Null a creature.",
-		"attack": 1,
-		"health": 1,
-		"abilities": [
-			"null"
-		],
-		"effect": "",
-		"effect_value": 0
-	},
-	{
 		"id": "b_016",
-		"card_name": "Ball of Scrap",
-		"cost": 3,
+		"card_name": "Trash Collector",
+		"cost": 2,
 		"color": "BLACK",
 		"card_type": "CREATURE",
 		"rarity": "RARE",
@@ -186,6 +152,23 @@
 		"effect_value": 0
 	},
 	{
+		"id": "b_013",
+		"card_name": "Decaying Junkling",
+		"cost": 5,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "On play: Deal 2 damage to all enemy creatures.",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"on_play_aoe_enemy_2"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "b_004",
 		"card_name": "Dump Scummer",
 		"cost": 4,
@@ -199,6 +182,24 @@
 		"abilities": [
 			"guardian",
 			"rummage"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_005",
+		"card_name": "Greedy Junkling",
+		"cost": 4,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "On play: Rummage and play it",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"guardian",
+			"rummage_and_play"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -228,7 +229,7 @@
 		"card_type": "CREATURE",
 		"rarity": "EPIC",
 		"tribe": "",
-		"description": "On play: Rummage, Rummage.",
+		"description": "On play: Rummage, Rummage",
 		"attack": 5,
 		"health": 4,
 		"abilities": [
@@ -241,17 +242,17 @@
 	},
 	{
 		"id": "b_014",
-		"card_name": "Dumptruck",
-		"cost": 6,
+		"card_name": "Filth Eater",
+		"cost": 3,
 		"color": "BLACK",
 		"card_type": "CREATURE",
 		"rarity": "EPIC",
 		"tribe": "",
-		"description": "Safeguard. Whenever you Rummage, this creature gains +0/+1",
-		"attack": 4,
-		"health": 4,
+		"description": "Guardian. Whenever you Rummage, this creature gains +0/+1",
+		"attack": 3,
+		"health": 3,
 		"abilities": [
-			"safeguard",
+			"guardian",
 			"rummage_buff"
 		],
 		"effect": "",
@@ -275,37 +276,27 @@
 		"effect_value": 0
 	},
 	{
+		"id": "b_017",
+		"card_name": "StinkPile, Lord of Garbage",
+		"cost": 9,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "LEGENDARY",
+		"tribe": "",
+		"description": "When a card is rummaged, put it on the battlefield instead. On play: Rummage 3.",
+		"attack": 7,
+		"health": 7,
+		"abilities": [
+			"rummage",
+			"rummage",
+			"rummage",
+			"stinkpile_passive"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "b_str_001",
-		"card_name": "Garbage Grenade",
-		"cost": 3,
-		"color": "BLACK",
-		"card_type": "STRATAGEM",
-		"rarity": "COMMON",
-		"tribe": "",
-		"description": "Deal 3 damage to any target.",
-		"attack": 0,
-		"health": 0,
-		"abilities": [],
-		"effect": "deal_damage",
-		"effect_value": 3
-	},
-	{
-		"id": "b_str_002",
-		"card_name": "Death Knell",
-		"cost": 5,
-		"color": "BLACK",
-		"card_type": "STRATAGEM",
-		"rarity": "RARE",
-		"tribe": "",
-		"description": "Deal 6 damage to any target.",
-		"attack": 0,
-		"health": 0,
-		"abilities": [],
-		"effect": "deal_damage",
-		"effect_value": 6
-	},
-	{
-		"id": "b_str_003",
 		"card_name": "Trash Pact",
 		"cost": 4,
 		"color": "BLACK",
@@ -322,18 +313,20 @@
 		"effect_value": 0
 	},
 	{
-		"id": "b_str_004",
-		"card_name": "Nauseous Atmosphere",
-		"cost": 3,
+		"id": "b_str_002",
+		"card_name": "Hot Garbage",
+		"cost": 2,
 		"color": "BLACK",
 		"card_type": "STRATAGEM",
-		"rarity": "COMMON",
+		"rarity": "RARE",
 		"tribe": "",
-		"description": "Deal 2 damage to all creatures.",
+		"description": "Give a creature rush",
 		"attack": 0,
 		"health": 0,
-		"abilities": [],
-		"effect": "deal_damage_all_creatures",
-		"effect_value": 2
+		"abilities": [
+			"rush"
+		],
+		"effect": "give_ability",
+		"effect_value": 0
 	}
 ]

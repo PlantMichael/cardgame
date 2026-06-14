@@ -41,9 +41,9 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "Pilot 1/1",
+		"description": "Pilot 1/2",
 		"attack": 1,
-		"health": 3,
+		"health": 1,
 		"abilities": [
 			"pilot_1_1"
 		],
@@ -60,14 +60,31 @@
 		"tribe": "",
 		"description": "Pilot 0/4",
 		"attack": 2,
-		"health": 2,
+		"health": 4,
 		"abilities": [
 			"pilot_0_4"
 		],
 		"effect": "",
 		"effect_value": 0
 	},
-{
+	{
+		"id": "o_014",
+		"card_name": "F4lcon",
+		"cost": 3,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "mech",
+		"description": "When piloted, gain rush",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"on_piloted_gain_rush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "o_013",
 		"card_name": "Air control",
 		"cost": 3,
@@ -108,7 +125,7 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "mech",
-		"description": "Rush. Mech.",
+		"description": "Rush",
 		"attack": 5,
 		"health": 2,
 		"abilities": [
@@ -129,7 +146,7 @@
 		"attack": 2,
 		"health": 6,
 		"abilities": [
-			"guardian",
+			"rush",
 			"pilot_4_1"
 		],
 		"effect": "",
@@ -143,11 +160,11 @@
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "mech",
-		"description": "",
-		"attack": 3,
-		"health": 3,
+		"description": "Gain Safeguard when piloted",
+		"attack": 4,
+		"health": 4,
 		"abilities": [
-			"rush"
+			"on_piloted_gain_safeguard"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -155,14 +172,14 @@
 	{
 		"id": "o_004",
 		"card_name": "Veteran Pilot",
-		"cost": 5,
+		"cost": 4,
 		"color": "ORANGE",
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "Pilot 3/3",
-		"attack": 4,
-		"health": 4,
+		"description": "Pilot 4/4",
+		"attack": 3,
+		"health": 3,
 		"abilities": [
 			"pilot_3_3"
 		],
@@ -204,36 +221,58 @@
 		"effect_value": 0
 	},
 	{
+		"id": "o_015",
+		"card_name": "Damen Captain",
+		"cost": 6,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Guardian. Pilot 5/4",
+		"attack": 6,
+		"health": 6,
+		"abilities": [
+			"pilot_5_4",
+			"guardian"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "o_016",
+		"card_name": "Qu3tzalcoatl, the Serpent",
+		"cost": 6,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "LEGENDARY",
+		"tribe": "mech",
+		"description": "On pilot, gain Rush and Safeguard. When this creature dies, eject the pilot.",
+		"attack": 5,
+		"health": 5,
+		"abilities": [
+			"on_piloted_gain_rush",
+			"on_piloted_gain_safeguard",
+			"eject_pilot_on_death"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "o_012",
 		"card_name": "C4ladrius",
-		"cost": 8,
+		"cost": 7,
 		"color": "ORANGE",
 		"card_type": "CREATURE",
 		"rarity": "EPIC",
 		"tribe": "mech",
 		"description": "Rush",
 		"attack": 6,
-		"health": 8,
+		"health": 7,
 		"abilities": [
 			"rush"
 		],
 		"effect": "",
 		"effect_value": 0
-	},
-	{
-		"id": "o_str_001",
-		"card_name": "Laser",
-		"cost": 2,
-		"color": "ORANGE",
-		"card_type": "STRATAGEM",
-		"rarity": "COMMON",
-		"tribe": "",
-		"description": "Deal 3 damage to any target.",
-		"attack": 0,
-		"health": 0,
-		"abilities": [],
-		"effect": "deal_damage",
-		"effect_value": 3
 	},
 	{
 		"id": "o_str_002",
@@ -243,7 +282,7 @@
 		"card_type": "STRATAGEM",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "Give a friendly creature +2/+2.",
+		"description": "Give a creature +2/+2.",
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
@@ -252,17 +291,17 @@
 	},
 	{
 		"id": "o_str_003",
-		"card_name": "Orbital Strike",
+		"card_name": "Panic Button",
 		"cost": 4,
 		"color": "ORANGE",
 		"card_type": "STRATAGEM",
 		"rarity": "RARE",
 		"tribe": "",
-		"description": "Deal 2 damage to all creatures.",
+		"description": "Eject a pilot from a friendly Mech. The pilot returns to the field.",
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
-		"effect": "deal_damage_all_creatures",
-		"effect_value": 2
+		"effect": "eject_pilot",
+		"effect_value": 0
 	}
 ]

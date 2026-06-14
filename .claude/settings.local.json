@@ -3,7 +3,12 @@
     "allow": [
       "Bash(grep '\"id\"' C:/Users/thecr/documents/cardgame/data/cards/__TRACKED_VAR__.json)",
       "Bash(python3 *)",
-      "Bash(git init *)"
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "WebSearch",
+      "Bash(python *)",
+      "Bash(railway --version)"
     ]
   }
 }

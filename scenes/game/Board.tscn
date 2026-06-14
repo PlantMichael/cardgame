@@ -11,44 +11,49 @@ script = ExtResource("1_gn7yc")
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_right = 1280.0
-offset_bottom = 720.0
+offset_right = 1920.0
+offset_bottom = 1080.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.0710651, 0.199196, 0.059003, 1)
+color = Color(0.0442546, 0.144949, 0.0349135, 1)
 
 [node name="OpponentHandZone" type="HBoxContainer" parent="."]
-offset_left = 340.0
-offset_top = 2.0
-offset_right = 940.0
-offset_bottom = 82.0
+offset_left = 300.0
+offset_top = 5.0
+offset_right = 1620.0
+offset_bottom = 130.0
 theme_override_constants/separation = 4
 
 [node name="OpponentHero" type="Panel" parent="."]
-offset_left = 20.0
-offset_top = 20.0
-offset_right = 110.0
-offset_bottom = 130.0
+offset_left = 870.0
+offset_top = 140.0
+offset_right = 1050.0
+offset_bottom = 310.0
 script = ExtResource("1_km1cx")
 
 [node name="HPLabel" type="Label" parent="OpponentHero"]
-layout_mode = 0
-offset_right = 40.0
-offset_bottom = 23.0
-theme_override_font_sizes/font_size = 30
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 36
 horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="OpponentBoardZone" type="HBoxContainer" parent="."]
-offset_left = 200.0
-offset_top = 170.0
-offset_right = 1000.0
-offset_bottom = 320.0
+offset_left = 300.0
+offset_top = 325.0
+offset_right = 1620.0
+offset_bottom = 515.0
 theme_override_constants/separation = 10
 
 [node name="CenterBar" type="HBoxContainer" parent="."]
-offset_top = 330.0
-offset_right = 1280.0
-offset_bottom = 380.0
+offset_left = 300.0
+offset_top = 525.0
+offset_right = 1620.0
+offset_bottom = 575.0
 theme_override_constants/separation = 40
 alignment = 1
 
@@ -69,17 +74,17 @@ layout_mode = 2
 text = "0 / 0"
 
 [node name="PlayerBoardZone" type="HBoxContainer" parent="."]
-offset_left = 200.0
-offset_top = 395.0
-offset_right = 1000.0
-offset_bottom = 545.0
+offset_left = 300.0
+offset_top = 585.0
+offset_right = 1620.0
+offset_bottom = 775.0
 theme_override_constants/separation = 10
 
 [node name="PlayerHero" type="Panel" parent="."]
-offset_left = 20.0
-offset_top = 570.0
-offset_right = 110.0
-offset_bottom = 680.0
+offset_left = 130.0
+offset_top = 800.0
+offset_right = 310.0
+offset_bottom = 975.0
 script = ExtResource("1_km1cx")
 
 [node name="HPLabel" type="Label" parent="PlayerHero"]
@@ -89,22 +94,22 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_font_sizes/font_size = 30
+theme_override_font_sizes/font_size = 36
 horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="PlayerHandZone" type="HBoxContainer" parent="."]
-offset_left = 200.0
-offset_top = 590.0
-offset_right = 1080.0
-offset_bottom = 710.0
+offset_left = 300.0
+offset_top = 900.0
+offset_right = 1620.0
+offset_bottom = 1065.0
 theme_override_constants/separation = 8
 
 [node name="CombatLogPanel" type="PanelContainer" parent="."]
-offset_left = 10.0
-offset_top = 140.0
-offset_right = 190.0
-offset_bottom = 560.0
+offset_left = 39.0
+offset_top = 274.0
+offset_right = 248.0
+offset_bottom = 749.0
 
 [node name="CombatLogScroll" type="ScrollContainer" parent="CombatLogPanel"]
 layout_mode = 2
@@ -118,11 +123,11 @@ theme_override_constants/separation = 2
 [node name="CardPreviewZone" type="Control" parent="."]
 layout_mode = 3
 anchors_preset = 0
-offset_left = 1050.0
-offset_top = 180.0
-offset_right = 1250.0
-offset_bottom = 480.0
+offset_left = 1700.0
+offset_top = 200.0
+offset_right = 1920.0
+offset_bottom = 760.0
 
 [node name="PreviewCard" parent="CardPreviewZone" instance=ExtResource("3_gyq52")]
-position = Vector2(-100, -11)
+position = Vector2(-80, -11)
 scale = Vector2(2, 2)

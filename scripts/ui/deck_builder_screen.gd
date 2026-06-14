@@ -17,10 +17,12 @@ const TOOLBAR_BG := Color(0.08, 0.06, 0.05)
 var _faction_idx: int = -1
 var _deck_ids: Array[String] = []
 var _deck_name: String = "My Deck"
+var _original_deck_name: String = ""
 var _search_text: String = ""
 var _color_filter: int = 0  # 0 = all, 1 = faction only, 2 = generic only
 var _filter_btns: Array[Button] = []
 var _filter_box: HBoxContainer = null
+var _delete_btn: Button = null
 
 # ── Hub page ───────────────────────────────────────────────────────────────
 @onready var _hub_page: Control = $HubPage
@@ -46,6 +48,7 @@ func _ready() -> void:
 	_apply_styles()
 	_build_faction_buttons()
 	_setup_filter_box()
+	_setup_delete_button()
 
 	$HubPage/Toolbar/HBoxContainer/BackButton.pressed.connect(func(): back_pressed.emit())
 	$HubPage/Toolbar/HBoxContainer/NewDeckButton.pressed.connect(_show_faction_page)
@@ -64,6 +67,22 @@ func _ready() -> void:
 	)
 
 	_show_hub_page()
+
+func _setup_delete_button() -> void:
+	var hbox := $EditorPage/TopSection/EditorToolbar/HBoxContainer
+	_delete_btn = Button.new()
+	_delete_btn.text = "Delete"
+	_delete_btn.add_theme_color_override("font_color", Color(1.0, 0.40, 0.40))
+	_delete_btn.add_theme_color_override("font_hover_color", Color(1.0, 0.60, 0.60))
+	var ns := StyleBoxFlat.new()
+	ns.bg_color = Color(0.32, 0.08, 0.08); ns.set_corner_radius_all(4)
+	_delete_btn.add_theme_stylebox_override("normal", ns)
+	var hs := StyleBoxFlat.new()
+	hs.bg_color = Color(0.48, 0.12, 0.12); hs.set_corner_radius_all(4)
+	_delete_btn.add_theme_stylebox_override("hover", hs)
+	_delete_btn.hide()
+	_delete_btn.pressed.connect(_do_delete)
+	hbox.add_child(_delete_btn)
 
 func _apply_styles() -> void:
 	var mk := func(c: Color) -> StyleBoxFlat:
@@ -134,9 +153,10 @@ func _show_faction_page() -> void:
 	_faction_page.visible = true
 	_editor_page.visible = false
 
-func _show_editor_page(faction_idx: int, deck_name: String, initial_ids: Array[String]) -> void:
+func _show_editor_page(faction_idx: int, deck_name: String, initial_ids: Array[String], is_saved: bool = false) -> void:
 	_faction_idx = faction_idx
 	_deck_name = deck_name
+	_original_deck_name = deck_name if is_saved else ""
 	_deck_ids = initial_ids.duplicate()
 	_search_text = ""
 	_color_filter = 0
@@ -152,6 +172,9 @@ func _show_editor_page(faction_idx: int, deck_name: String, initial_ids: Array[S
 	_search_faction_lbl.add_theme_color_override("font_color", sw.lightened(0.3))
 	_name_edit.text = deck_name
 	_search_bar.text = ""
+
+	if _delete_btn:
+		_delete_btn.visible = is_saved
 
 	_rebuild_filter_buttons()
 	_refresh_deck()
@@ -275,7 +298,7 @@ func _hub_deck_card(deck: Dictionary) -> Control:
 		var ids: Array[String] = []
 		for id in deck.get("card_ids", []):
 			ids.append(str(id))
-		_show_editor_page(fi, dname, ids)
+		_show_editor_page(fi, dname, ids, true)
 	)
 	return btn
 
@@ -565,10 +588,16 @@ func _coll_card(card: CardData, in_deck: int, deck_full: bool) -> Button:
 	)
 	return btn
 
-# ── Save ───────────────────────────────────────────────────────────────────
+# ── Save / Delete ──────────────────────────────────────────────────────────
 
 func _do_save() -> void:
 	var name := _name_edit.text.strip_edges()
 	if name.is_empty(): return
 	_deck_name = name
 	DeckManager.save_deck(_deck_name, _faction_idx, _deck_ids)
+
+func _do_delete() -> void:
+	if _original_deck_name.is_empty():
+		return
+	DeckManager.delete_deck(_original_deck_name)
+	_show_hub_page()

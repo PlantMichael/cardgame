@@ -1,22 +1,5 @@
 [
 	{
-		"id": "t_013",
-		"card_name": "Scared Yeti Rancher",
-		"cost": 1,
-		"color": "TEAL",
-		"card_type": "CREATURE",
-		"rarity": "COMMON",
-		"tribe": "",
-		"description": "Recon",
-		"attack": 1,
-		"health": 2,
-		"abilities": [
-			"recon"
-		],
-		"effect": "",
-		"effect_value": 0
-	},
-	{
 		"id": "t_014",
 		"card_name": "Iceologist",
 		"cost": 1,
@@ -24,7 +7,7 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "When a friendly Yeti challenges, gain +1/+1",
+		"description": "When a friendly Yeti challenges and survives, it gains +1/+1.",
 		"attack": 1,
 		"health": 1,
 		"abilities": [
@@ -44,7 +27,9 @@
 		"description": "On play: If you control a yeti, gain +2/+1",
 		"attack": 2,
 		"health": 3,
-		"abilities": ["on_play_buff_if_yeti"],
+		"abilities": [
+			"on_play_buff_if_yeti"
+		],
 		"effect": "",
 		"effect_value": 0
 	},
@@ -76,7 +61,10 @@
 		"description": "Recon. Safeguard",
 		"attack": 2,
 		"health": 2,
-		"abilities": ["recon", "safeguard"],
+		"abilities": [
+			"recon",
+			"safeguard"
+		],
 		"effect": "",
 		"effect_value": 0
 	},
@@ -210,12 +198,12 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "yeti",
-		"description": "Guardian. Challenge: Pick an enemy to fight.",
+		"description": "Guardian. On play: Challenge. If this yeti wins, gain +1/+1.",
 		"attack": 4,
 		"health": 4,
 		"abilities": [
 			"guardian",
-			"challenge"
+			"on_play_challenge_win_buff"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -228,7 +216,7 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "yeti",
-		"description": "Guardian. Challenge: Pick an enemy to fight.",
+		"description": "Guardian. Challenge",
 		"attack": 4,
 		"health": 6,
 		"abilities": [
@@ -273,19 +261,21 @@
 		"effect_value": 0
 	},
 	{
-		"id": "t_str_001",
-		"card_name": "Arrow",
-		"cost": 3,
+		"id": "t_013",
+		"card_name": "Abominus, Primal Wraith",
+		"cost": 10,
 		"color": "TEAL",
-		"card_type": "STRATAGEM",
-		"rarity": "COMMON",
-		"tribe": "",
-		"description": "Deal 3 damage to any target.",
-		"attack": 0,
-		"health": 0,
-		"abilities": [],
-		"effect": "deal_damage",
-		"effect_value": 3
+		"card_type": "CREATURE",
+		"rarity": "LEGENDARY",
+		"tribe": "yeti",
+		"description": "On play: Challenge every enemy creature from left to right",
+		"attack": 10,
+		"health": 10,
+		"abilities": [
+			"challenge_all"
+		],
+		"effect": "",
+		"effect_value": 0
 	},
 	{
 		"id": "t_str_002",
@@ -305,31 +295,16 @@
 	{
 		"id": "t_str_003",
 		"card_name": "Icewhip",
-		"cost": 5,
-		"color": "TEAL",
-		"card_type": "STRATAGEM",
-		"rarity": "COMMON",
-		"tribe": "",
-		"description": "Make a yeti you control challenge.",
-		"attack": 0,
-		"health": 0,
-		"abilities": [],
-		"effect": "force_challenge",
-		"effect_value": 0
-	},
-	{
-		"id": "t_str_004",
-		"card_name": "Poke the 'bear'?",
 		"cost": 2,
 		"color": "TEAL",
 		"card_type": "STRATAGEM",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "Deal 2 damage to a friendly yeti, it can challenge.",
+		"description": "Make a yeti you control challenge. If it wins, give it +2/+2",
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
-		"effect": "poke_bear",
+		"effect": "force_challenge",
 		"effect_value": 2
 	}
 ]

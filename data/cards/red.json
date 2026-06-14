@@ -1,0 +1,328 @@
+[
+	{
+		"id": "r_001",
+		"card_name": "Flickerling",
+		"cost": 1,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "sprite",
+		"description": "Recon: Draw a card.",
+		"attack": 2,
+		"health": 1,
+		"abilities": [
+			"recon"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_002",
+		"card_name": "Helian Emberclaw",
+		"cost": 3,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "",
+		"attack": 3,
+		"health": 4,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_003",
+		"card_name": "Flameling",
+		"cost": 2,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "sprite",
+		"description": "Solar Flare",
+		"attack": 1,
+		"health": 2,
+		"abilities": [
+			"solarflare"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_004",
+		"card_name": "Helian Raider",
+		"cost": 4,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Rush",
+		"attack": 4,
+		"health": 2,
+		"abilities": [
+			"rush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_005",
+		"card_name": "Helian Colossus",
+		"cost": 7,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "",
+		"description": "Safeguard.",
+		"attack": 6,
+		"health": 7,
+		"abilities": [
+			"safeguard"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_006",
+		"card_name": "Scorchrunner",
+		"cost": 3,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "sprite",
+		"description": "Solar Flare",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"solarflare"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_007",
+		"card_name": "Inferno Basilisk",
+		"cost": 5,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "When an opponent plays a solar flared card, gain +1/+1",
+		"attack": 3,
+		"health": 3,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_008",
+		"card_name": "Helian Shard Holder",
+		"cost": 4,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Safeguard",
+		"attack": 2,
+		"health": 5,
+		"abilities": [
+			"safeguard"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_009",
+		"card_name": "Combustion Gunner",
+		"cost": 3,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Solar Flare",
+		"attack": 2,
+		"health": 1,
+		"abilities": [
+			"solarflare"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_010",
+		"card_name": "Flickerling Herder",
+		"cost": 3,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "On play gain +1/+1 if you control a sprite",
+		"attack": 2,
+		"health": 3,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_011",
+		"card_name": "Magma Guard",
+		"cost": 4,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Guardian.",
+		"attack": 2,
+		"health": 6,
+		"abilities": [
+			"guardian"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_012",
+		"card_name": "Cinder Guardian",
+		"cost": 5,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "",
+		"attack": 5,
+		"health": 6,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_013",
+		"card_name": "Char Giant",
+		"cost": 8,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "",
+		"attack": 6,
+		"health": 6,
+		"abilities": [
+			"solarflare"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_014",
+		"card_name": "Incendiary Commander",
+		"cost": 6,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "When this creature dies, deal 1 damage to ALL creatures.",
+		"attack": 4,
+		"health": 4,
+		"abilities": [
+			"solarflare"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_015",
+		"card_name": "Sprite Hoard",
+		"cost": 4,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "sprite",
+		"description": "On death: Return a sprite from your graveyard to your hand.",
+		"attack": 2,
+		"health": 2,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_016",
+		"card_name": "Glycerin Fueler",
+		"cost": 2,
+		"color": "RED",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "",
+		"attack": 3,
+		"health": 1,
+		"abilities": [
+			"rush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "r_str_001",
+		"card_name": "Ignite",
+		"cost": 2,
+		"color": "RED",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Deal 3 damage to any target. Solar Flare.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [
+			"solarflare"
+		],
+		"effect": "deal_damage",
+		"effect_value": 3
+	},
+	{
+		"id": "r_str_002",
+		"card_name": "Inferno Warp",
+		"cost": 3,
+		"color": "RED",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Deal 3 damage to any target.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage",
+		"effect_value": 3
+	},
+	{
+		"id": "r_str_003",
+		"card_name": "Ignite",
+		"cost": 4,
+		"color": "RED",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Deal 5 damage to any target. Solar Flare.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [
+			"solarflare"
+		],
+		"effect": "deal_damage",
+		"effect_value": 5
+	},
+	{
+		"id": "r_str_004",
+		"card_name": "Supernova",
+		"cost": 6,
+		"color": "RED",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Deal 5 damage to ALL creatures",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage",
+		"effect_value": 5
+	}
+]

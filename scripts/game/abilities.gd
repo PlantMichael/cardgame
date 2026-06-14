@@ -31,6 +31,11 @@ const ATTACK_BUFF_FRIENDLY_HEALTH    = "attack_buff_friendly_health"
 const ON_PLAY_BUFF_FRIENDLY_YETI_ATK = "on_play_buff_friendly_yeti_attack"
 const ON_FRIENDLY_YETI_DEATH_BUFF    = "on_friendly_yeti_death_buff"
 const ON_PLAY_BUFF_IF_YETI           = "on_play_buff_if_yeti"
+const DEATHRATTLE_AOE_TRANSFORM      = "deathrattle_aoe_transform"
+const STINKPILE_PASSIVE              = "stinkpile_passive"
+const RUMMAGE_AND_PLAY               = "rummage_and_play"
+const CHALLENGE_ALL                  = "challenge_all"
+const ON_PLAY_CHALLENGE_WIN_BUFF     = "on_play_challenge_win_buff"
 
 const DEFINITIONS: Dictionary = {
 	GUARDIAN:              { "display": "Guardian",    "color": Color(0.55, 0.42, 0.08) },
@@ -69,9 +74,19 @@ const DEFINITIONS: Dictionary = {
 	ON_PLAY_BUFF_FRIENDLY_YETI_ATK:  { "display": "On Play:",        "color": Color(0.45, 0.70, 0.85) },
 	ON_FRIENDLY_YETI_DEATH_BUFF:     { "display": "Yeti Bond",       "color": Color(0.45, 0.70, 0.85) },
 	ON_PLAY_BUFF_IF_YETI:            { "display": "On Play:",        "color": Color(0.45, 0.70, 0.85) },
+	DEATHRATTLE_AOE_TRANSFORM:       { "display": "On Death:",       "color": Color(0.50, 0.20, 0.60) },
+	STINKPILE_PASSIVE:               { "display": "Salvage",         "color": Color(0.25, 0.45, 0.15) },
+	RUMMAGE_AND_PLAY:                { "display": "Rummage & Play",  "color": Color(0.30, 0.08, 0.42) },
+	CHALLENGE_ALL:                   { "display": "Rampage",         "color": Color(0.70, 0.30, 0.10) },
+	ON_PLAY_CHALLENGE_WIN_BUFF:      { "display": "On Play:",        "color": Color(0.70, 0.30, 0.10) },
+	ON_PILOTED_GAIN_SAFEGUARD:       { "display": "Boost: Safeguard","color": Color(0.20, 0.50, 0.80) },
+	EJECT_PILOT_ON_DEATH:            { "display": "On Death:",       "color": Color(0.50, 0.20, 0.60) },
 }
 
 const ON_PLAY_DAMAGE             = "on_play_damage"
+const ON_PLAY_AOE_ENEMY          = "on_play_aoe_enemy"
+const ON_REINFORCE_DAMAGE        = "on_reinforce_damage"
+const ON_ANY_REINFORCE_SHOT      = "on_any_reinforce_shot"
 const TRANSFORM                  = "transform"
 const TRANSFORM_AT_MAX_HEALTH    = "transform_at_max_health"
 const COMBAT_IMMUNE              = "combat_immune"
@@ -80,44 +95,91 @@ const ON_PLAY_BUFF_FRIENDLY_HEALTH = "on_play_buff_friendly_health"
 const WHEN_ATTACKED_BUFF_FRIENDLY  = "when_attacked_buff_friendly"
 const APOTHECARY                   = "apothecary"
 const MIRROR_TRANSFORM             = "mirror_transform"
+const ON_PILOTED_GAIN_RUSH         = "on_piloted_gain_rush"
+const ON_PILOTED_GAIN_SAFEGUARD    = "on_piloted_gain_safeguard"
+const EJECT_PILOT_ON_DEATH         = "eject_pilot_on_death"
 
 const TRIBES: Array = [YETI, MECH, TANK, SPRITE]
 
 func is_tribe(ability: String) -> bool:
 	return ability in TRIBES
 
-const ON_PLAY_DAMAGE_COLOR := Color(0.55, 0.12, 0.55)
-const PILOT_COLOR          := Color(0.85, 0.45, 0.05)
-const TRANSFORM_COLOR      := Color(0.80, 0.25, 0.10)
+const ON_PLAY_DAMAGE_COLOR        := Color(0.55, 0.12, 0.55)
+const ON_PLAY_AOE_ENEMY_COLOR        := Color(0.55, 0.12, 0.12)
+const ON_REINFORCE_DAMAGE_COLOR      := Color(0.15, 0.55, 0.25)
+const ON_ANY_REINFORCE_SHOT_COLOR    := Color(0.10, 0.42, 0.55)
+const PILOT_COLOR                 := Color(0.85, 0.45, 0.05)
+const TRANSFORM_COLOR             := Color(0.80, 0.25, 0.10)
+const ON_PILOTED_GAIN_RUSH_COLOR  := Color(0.10, 0.42, 0.10)
 
 func get_display(ability: String) -> String:
 	if is_on_play_damage(ability):
 		return "On Play: %d dmg" % get_on_play_damage_value(ability)
+	if is_on_play_aoe_enemy(ability):
+		return "On Play: %d to all enemies" % get_on_play_aoe_enemy_value(ability)
+	if is_on_reinforce_damage(ability):
+		return "On Reinforce: %d dmg" % get_on_reinforce_damage_value(ability)
+	if is_on_any_reinforce_shot(ability):
+		return "Any Reinforce: %d dmg" % get_on_any_reinforce_shot_value(ability)
 	if is_pilot(ability):
 		return "Pilot %d/%d" % [get_pilot_attack(ability), get_pilot_health(ability)]
 	if is_transform(ability):
 		return "Transform: %d" % get_transform_threshold(ability)
 	if is_transform_at_max_health(ability):
 		return "Transform at %dhp" % get_transform_health_threshold(ability)
+	if ability == ON_PILOTED_GAIN_RUSH:
+		return "Boost: Rush"
 	return DEFINITIONS[ability]["display"]
 
 func get_color(ability: String) -> Color:
 	if is_on_play_damage(ability):
 		return ON_PLAY_DAMAGE_COLOR
+	if is_on_play_aoe_enemy(ability):
+		return ON_PLAY_AOE_ENEMY_COLOR
+	if is_on_reinforce_damage(ability):
+		return ON_REINFORCE_DAMAGE_COLOR
+	if is_on_any_reinforce_shot(ability):
+		return ON_ANY_REINFORCE_SHOT_COLOR
 	if is_pilot(ability):
 		return PILOT_COLOR
 	if is_transform(ability):
 		return TRANSFORM_COLOR
 	if is_transform_at_max_health(ability):
 		return TRANSFORM_COLOR
+	if ability == ON_PILOTED_GAIN_RUSH:
+		return ON_PILOTED_GAIN_RUSH_COLOR
 	return DEFINITIONS[ability]["color"]
 
 func is_on_play_damage(ability: String) -> bool:
-	return ability.begins_with(ON_PLAY_DAMAGE + "_")
+	return ability.begins_with(ON_PLAY_DAMAGE + "_") and not ability.begins_with(ON_PLAY_AOE_ENEMY + "_") and not ability.begins_with(ON_REINFORCE_DAMAGE + "_")
 
 func get_on_play_damage_value(ability: String) -> int:
 	if is_on_play_damage(ability):
 		return int(ability.substr(ON_PLAY_DAMAGE.length() + 1))
+	return 0
+
+func is_on_play_aoe_enemy(ability: String) -> bool:
+	return ability.begins_with(ON_PLAY_AOE_ENEMY + "_")
+
+func get_on_play_aoe_enemy_value(ability: String) -> int:
+	if is_on_play_aoe_enemy(ability):
+		return int(ability.substr(ON_PLAY_AOE_ENEMY.length() + 1))
+	return 0
+
+func is_on_any_reinforce_shot(ability: String) -> bool:
+	return ability.begins_with(ON_ANY_REINFORCE_SHOT + "_")
+
+func get_on_any_reinforce_shot_value(ability: String) -> int:
+	if is_on_any_reinforce_shot(ability):
+		return int(ability.substr(ON_ANY_REINFORCE_SHOT.length() + 1))
+	return 0
+
+func is_on_reinforce_damage(ability: String) -> bool:
+	return ability.begins_with(ON_REINFORCE_DAMAGE + "_")
+
+func get_on_reinforce_damage_value(ability: String) -> int:
+	if is_on_reinforce_damage(ability):
+		return int(ability.substr(ON_REINFORCE_DAMAGE.length() + 1))
 	return 0
 
 func is_pilot(ability: String) -> bool:
@@ -157,10 +219,17 @@ func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 				if drawn != null and owner.player_id == gs.player.player_id:
 					gs.pending_drawn_cards.append(drawn)
 			TANK:
-				gs._get_player_by_id(gs._opponent_id(owner.player_id)).hero_health -= 1
-				gs._check_win_condition()
+				var _has_opd := false
+				for _ab in minion.abilities:
+					if is_on_play_damage(_ab):
+						_has_opd = true
+						break
+				if not _has_opd:
+					gs.pending_tank_shots.append(owner.player_id)
 			RUMMAGE:
 				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": minion.data.cost, "type_filter": ""})
+			RUMMAGE_AND_PLAY:
+				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": minion.data.cost, "type_filter": "", "play_it": true})
 			RUMMAGE_SPELL:
 				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": -1, "type_filter": "stratagem"})
 			NULL:
@@ -185,6 +254,15 @@ func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 						minion.max_health += 1
 						gs._try_apothecary_bonus(owner.player_id, minion)
 						break
+	for ability in minion.abilities:
+		if is_on_play_aoe_enemy(ability):
+			var damage = get_on_play_aoe_enemy_value(ability)
+			var enemy = gs.opponent if owner == gs.player else gs.player
+			for m in enemy.board.duplicate():
+				m.take_damage(damage)
+			gs._remove_dead_minions()
+			gs._check_win_condition()
+			break
 
 func fire_on_attack(attacker: Minion, owner: PlayerState, gs: GameState) -> void:
 	for ability in attacker.abilities:
@@ -221,6 +299,16 @@ func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 						copy.current_attack += 1
 				if copy.has_ability(TANK) and enemy != null:
 					tank_shots += 1
+				for ab in minion.abilities:
+					if is_on_reinforce_damage(ab):
+						gs.pending_on_reinforce_damages.append({"player_id": owner.player_id, "damage": get_on_reinforce_damage_value(ab), "source": minion.data.card_name})
+						break
+				for p in [gs.player, gs.opponent]:
+					for watcher in p.board:
+						for ab in watcher.abilities:
+							if is_on_any_reinforce_shot(ab):
+								gs.pending_on_reinforce_damages.append({"player_id": watcher.owner_id, "damage": get_on_any_reinforce_shot_value(ab), "source": watcher.data.card_name})
+								break
 			DEATHRATTLE_DRAW_YETI:
 				var card = _draw_by_tag(owner, YETI)
 				if card:
@@ -237,9 +325,27 @@ func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 			RUMMAGE_ON_DEATH:
 				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": minion.data.cost, "type_filter": ""})
 			RUMMAGE_MECH_ON_DEATH:
-				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": -1, "type_filter": "mech"})
+				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": -1, "type_filter": "mech", "discount": false})
 			DEATHRATTLE_RETURN_STRATAGEM:
-				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": -1, "type_filter": "stratagem"})
+				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": -1, "type_filter": "stratagem", "discount": false})
+			DEATHRATTLE_AOE_TRANSFORM:
+				for p in [gs.player, gs.opponent]:
+					for m in p.board:
+						m.take_damage(1)
+				if not minion.data.transform_into.is_empty():
+					var new_data = CardDatabase.get_card(minion.data.transform_into)
+					if new_data != null:
+						var new_minion = Minion.new(new_data, minion.owner_id)
+						new_minion.is_newly_reinforced = true
+						owner.board.insert(board_index, new_minion)
+			EJECT_PILOT_ON_DEATH:
+				if minion.is_piloted and minion.piloted_by != null:
+					if owner.board.size() < PlayerState.MAX_BOARD_SIZE:
+						var pilot_minion = Minion.new(minion.piloted_by, minion.owner_id)
+						pilot_minion.is_newly_reinforced = true
+						owner.board.insert(board_index, pilot_minion)
+					elif owner.hand.size() < owner.MAX_HAND_SIZE:
+						owner.hand.append(minion.piloted_by)
 	if YETI in minion.abilities:
 		for watcher in owner.board:
 			if watcher.has_ability(ON_FRIENDLY_YETI_DEATH_BUFF):

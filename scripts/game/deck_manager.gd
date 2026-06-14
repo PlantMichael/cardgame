@@ -26,22 +26,6 @@ func max_copies_for(card: CardData) -> int:
 
 # ── Deck builders ──────────────────────────────────────────────────────
 
-func get_starter_card_ids(faction_idx: int) -> Array[String]:
-	var pool: Array[CardData] = CardDatabase.get_all_cards().filter(
-		func(c: CardData) -> bool: return int(c.color) == faction_idx and not c.is_token
-	)
-	pool.sort_custom(func(a: CardData, b: CardData) -> bool: return a.cost < b.cost)
-	var ids: Array[String] = []
-	for card in pool:
-		ids.append(card.id)
-		if card.rarity != CardData.CardRarity.LEGENDARY:
-			ids.append(card.id)
-	var fi := 0
-	while ids.size() < MAX_DECK_SIZE:
-		ids.append(pool[fi % pool.size()].id)
-		fi += 1
-	return ids
-
 func build_deck_from_ids(ids: Array[String]) -> Array[CardData]:
 	var deck: Array[CardData] = []
 	for id in ids:
@@ -54,14 +38,19 @@ func build_deck_from_ids(ids: Array[String]) -> Array[CardData]:
 # ── Deck listings ──────────────────────────────────────────────────────
 
 func get_starter_decks() -> Array[Dictionary]:
+	var file := FileAccess.open("res://data/starters.json", FileAccess.READ)
+	if not file:
+		return []
+	var parsed = JSON.parse_string(file.get_as_text())
+	file.close()
+	if not parsed is Array:
+		return []
 	var out: Array[Dictionary] = []
-	for i in FACTION_NAMES.size():
-		out.append({
-			"name": FACTION_NAMES[i] + " Starter",
-			"faction_idx": i,
-			"is_starter": true,
-			"card_ids": get_starter_card_ids(i),
-		})
+	for entry in parsed:
+		if entry is Dictionary and entry.has("card_ids"):
+			var d: Dictionary = entry.duplicate()
+			d["is_starter"] = true
+			out.append(d)
 	return out
 
 func get_all_decks() -> Array[Dictionary]:

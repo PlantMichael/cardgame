@@ -21,7 +21,8 @@
 - Challenge ability (on-play mini-combat: pick an enemy to fight)
 - Yeti tag and deathrattle draw (teal faction mechanics, Yeti Rancher)
 - Tank ability (on-play hero damage + reinforce death-trigger shot)
-- Pilot/Mech system (pilot merges into a Mech, buffing its stats)
+- Pilot/Mech system (pilot merges into a Mech, buffing its stats; F4lcon gains Rush when piloted via `on_piloted_gain_rush`)
+- Eject pilot mechanic (`apply_eject_pilot`): reverses a pilot merge, restoring mech stats and returning pilot to the field; used by Panic Button stratagem
 - Rummage system (retrieve cards from graveyard; on-play, on-death, and spell variants)
 - Safeguard keyword (cannot be targeted by any stratagem from either player)
 - Tactical Officer (passive: reinforce copies get +1 attack per Officer on board)
@@ -38,6 +39,17 @@
 - Deck select screen (choose player deck, then opponent starter deck)
 - Deck builder UI: hub listing saved decks, faction picker, collection editor with search, filter buttons (All / Faction / Generic), save to disk
 - Generic card color (`CardData.CardColor.GENERIC`): cards usable by all factions; appear in a separate section after faction cards in the collection browser
+- Inyuites (Teal) starter deck: 2× every non-legendary teal card + 1× Abominus + 1× each of the 5 generic cards = 40
+- `challenge_all` ability (Rampage): on play, challenges every enemy creature left-to-right; each challenge resolves fully before the next
+- `rummage_and_play` ability: retrieve a creature from graveyard and immediately play it to board (Greedy Junkling)
+- `force_challenge` stratagem effect: prompts a Yeti to challenge; if `effect_value > 0` and the Yeti kills the target, it gains that many +atk/+hp (Icewhip)
+- `deal_damage_all_enemy` stratagem effect: deals damage to every enemy minion with no target prompt (Noxious Bombardment)
+- Rummage vs Fetch distinction: black rummage mechanics discount retrieved cards by 1 mana; orange/green fetch mechanics (`rummage_mech_on_death`, `deathrattle_return_stratagem`) do not
+- Stinkpile on-play sequencing: rummaged cards' on-play effects and all pending queues resolve between each rummage prompt
+- `on_play_aoe_enemy_N` ability: on-play creature ability that deals N damage to all enemy minions (distinct from the `deal_damage_all_enemy` stratagem effect)
+- `on_reinforce_damage_N` ability: on reinforce death trigger, deal N damage to a chosen target; prompts via `pending_on_reinforce_damages`
+- `on_any_reinforce_shot_N` ability: passive watcher — whenever any friendly reinforces, deal N damage to a chosen target
+- `on_play_challenge_win_buff` ability: on play, fight a chosen enemy; if this minion wins (target dies, this survives), gain +1/+1
 
 ## TODO / Not Working Yet
 

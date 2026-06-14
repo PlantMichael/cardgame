@@ -43,7 +43,7 @@ signal action_pilot(pilot_instance_id: String, target_instance_id: String)
 signal end_turn_pressed
 signal decline_pressed
 signal challenge_target_selected(target: Minion)
-signal on_play_damage_target_selected(target: Minion)
+signal on_play_damage_target_selected(target_minion: Minion, target_player_id: String)
 signal rummage_card_selected(card: CardData)
 signal transform_choice_selected(card: CardData)
 signal yeti_selected(minion: Minion)
@@ -91,14 +91,18 @@ func start_on_play_damage_targeting() -> void:
 	_on_play_damage_mode = true
 	_highlight_board_minions(player_board_zone, true)
 	_highlight_board_minions(opponent_board_zone, true)
+	_highlight_hero(player_hero, true)
+	_highlight_hero(opponent_hero, true)
 	show_decline_button("Decline")
 
-func _end_on_play_damage_mode(target: Minion) -> void:
+func _end_on_play_damage_mode(target_minion: Minion, target_player_id: String) -> void:
 	_on_play_damage_mode = false
 	_highlight_board_minions(player_board_zone, false)
 	_highlight_board_minions(opponent_board_zone, false)
+	_highlight_hero(player_hero, false)
+	_highlight_hero(opponent_hero, false)
 	hide_decline_button()
-	on_play_damage_target_selected.emit(target)
+	on_play_damage_target_selected.emit(target_minion, target_player_id)
 
 func _end_pilot_mode(target: Minion) -> void:
 	var pilot_id = _piloting_minion.instance_id if _piloting_minion else ""
@@ -114,13 +118,17 @@ func _end_pilot_mode(target: Minion) -> void:
 
 func start_tank_shot_targeting() -> void:
 	_tank_shot_mode = true
+	_highlight_board_minions(player_board_zone, true)
 	_highlight_board_minions(opponent_board_zone, true)
+	_highlight_hero(player_hero, true)
 	_highlight_hero(opponent_hero, true)
 	show_decline_button("Skip")
 
 func _end_tank_shot_mode(target_minion: Minion, target_player_id: String) -> void:
 	_tank_shot_mode = false
+	_highlight_board_minions(player_board_zone, false)
 	_highlight_board_minions(opponent_board_zone, false)
+	_highlight_hero(player_hero, false)
 	_highlight_hero(opponent_hero, false)
 	hide_decline_button()
 	tank_shot_resolved.emit(target_minion, target_player_id)
@@ -196,7 +204,7 @@ func _on_decline_pressed() -> void:
 	if _challenge_mode:
 		_end_challenge_mode(null)
 	elif _on_play_damage_mode:
-		_end_on_play_damage_mode(null)
+		_end_on_play_damage_mode(null, "")
 	elif _pilot_mode:
 		_end_pilot_mode(null)
 	elif _yeti_select_mode:
@@ -224,16 +232,24 @@ func _add_board_zone_backgrounds() -> void:
 
 func _create_player_deck_icon() -> void:
 	_player_deck_icon = CardBackScene.instantiate()
-	_player_deck_icon.scale = Vector2(0.58, 0.58)
-	_player_deck_icon.position = Vector2(1075, 565)
+	_player_deck_icon.scale = Vector2(0.75, 0.75)
+	_player_deck_icon.position = Vector2(1632, 910)
 	add_child(_player_deck_icon)
 
 	_deck_count_label = Label.new()
-	_deck_count_label.add_theme_font_size_override("font_size", 11)
+	_deck_count_label.add_theme_font_size_override("font_size", 14)
 	_deck_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_deck_count_label.custom_minimum_size = Vector2(64, 0)
-	_deck_count_label.position = Vector2(1075, 662)
+	_deck_count_label.custom_minimum_size = Vector2(80, 0)
+	_deck_count_label.position = Vector2(1632, 1035)
 	add_child(_deck_count_label)
+
+	var graveyard_btn := Button.new()
+	graveyard_btn.text = "Graveyard"
+	graveyard_btn.custom_minimum_size = Vector2(100, 32)
+	graveyard_btn.position = Vector2(1630, 1050)
+	graveyard_btn.add_theme_font_size_override("font_size", 13)
+	graveyard_btn.pressed.connect(_open_graveyard_viewer)
+	add_child(graveyard_btn)
 
 func setup(state: GameState) -> void:
 	game_state = state
@@ -273,6 +289,12 @@ func _input(event: InputEvent) -> void:
 								if _stratagem_needs_creature_target(card.data):
 									if _stratagem_needs_friendly_yeti(card.data):
 										_highlight_yeti_targets(true)
+									elif _stratagem_needs_enemy_creature_only(card.data):
+										_highlight_stratagem_minions(opponent_board_zone, true)
+									elif _stratagem_needs_friendly_piloted_mech(card.data):
+										_highlight_piloted_mech_targets(true)
+									elif _stratagem_needs_friendly_creature_only(card.data):
+										_highlight_stratagem_minions(player_board_zone, true)
 									else:
 										_highlight_stratagem_minions(player_board_zone, true)
 										_highlight_stratagem_minions(opponent_board_zone, true)
@@ -294,8 +316,11 @@ func _input(event: InputEvent) -> void:
 				if card is Card:
 					var rect = wrapper.get_global_rect().grow(4)
 					if rect.has_point(event.position):
+						if _tank_shot_mode:
+							_end_tank_shot_mode(card.minion, "")
+							return
 						if _on_play_damage_mode:
-							_end_on_play_damage_mode(card.minion)
+							_end_on_play_damage_mode(card.minion, "")
 							return
 						if _buff_friendly_mode:
 							_end_buff_friendly_mode(card.minion)
@@ -315,7 +340,7 @@ func _input(event: InputEvent) -> void:
 							_end_challenge_mode(card.minion)
 							return
 						if _on_play_damage_mode:
-							_end_on_play_damage_mode(card.minion)
+							_end_on_play_damage_mode(card.minion, "")
 							return
 						if _tank_shot_mode:
 							_end_tank_shot_mode(card.minion, "")
@@ -326,10 +351,22 @@ func _input(event: InputEvent) -> void:
 						_on_enemy_minion_clicked(card)
 						return
 
+			# Check player hero
+			if player_hero.get_global_rect().grow(4).has_point(event.position):
+				if _tank_shot_mode:
+					_end_tank_shot_mode(null, game_state.player.player_id)
+					return
+				if _on_play_damage_mode:
+					_end_on_play_damage_mode(null, game_state.player.player_id)
+					return
+
 			# Check opponent hero
 			if opponent_hero.get_global_rect().grow(4).has_point(event.position):
 				if _tank_shot_mode:
 					_end_tank_shot_mode(null, game_state.opponent.player_id)
+					return
+				if _on_play_damage_mode:
+					_end_on_play_damage_mode(null, game_state.opponent.player_id)
 					return
 				_on_enemy_hero_clicked()
 				return
@@ -474,6 +511,15 @@ func _on_card_dropped(card: Card) -> void:
 						if _stratagem_needs_friendly_yeti(card.data):
 							if zone != player_board_zone or not target_card.minion.has_ability(Abilities.YETI):
 								continue
+						elif _stratagem_needs_enemy_creature_only(card.data):
+							if zone != opponent_board_zone:
+								continue
+						elif _stratagem_needs_friendly_piloted_mech(card.data):
+							if zone != player_board_zone or not target_card.minion.is_piloted:
+								continue
+						elif _stratagem_needs_friendly_creature_only(card.data):
+							if zone != player_board_zone:
+								continue
 						var card_data_to_play = card.data
 						var target_minion = target_card.minion
 						get_viewport().remove_child(card)
@@ -519,11 +565,11 @@ func _refresh_hand() -> void:
 	for card_data in game_state.player.hand:
 		var card = CardScene.instantiate()
 		var wrapper = Button.new()
-		wrapper.custom_minimum_size = Vector2(90, 130)
+		wrapper.custom_minimum_size = Vector2(108, 155)
 		wrapper.flat = true
 		player_hand_zone.add_child(wrapper)
 		wrapper.add_child(card)
-		card.scale = Vector2(0.7, 0.7)
+		card.scale = Vector2(0.85, 0.85)
 		card.is_in_hand = true
 		card.dropped.connect(_on_card_dropped)
 		card.setup(card_data)
@@ -532,9 +578,9 @@ func _refresh_hand() -> void:
 
 	for i in game_state.opponent.hand.size():
 		var back = CardBackScene.instantiate()
-		back.scale = Vector2(0.5, 0.5)
+		back.scale = Vector2(0.62, 0.62)
 		var wrapper = Control.new()
-		wrapper.custom_minimum_size = Vector2(55, 80)
+		wrapper.custom_minimum_size = Vector2(68, 98)
 		opponent_hand_zone.add_child(wrapper)
 		wrapper.add_child(back)
 
@@ -551,11 +597,11 @@ func _refresh_boards() -> void:
 	for minion in game_state.player.board:
 		var card = CardScene.instantiate()
 		var wrapper = Control.new()
-		wrapper.custom_minimum_size = Vector2(90, 130)
+		wrapper.custom_minimum_size = Vector2(108, 155)
 		player_board_zone.add_child(wrapper)
 		wrapper.add_child(card)
-		card.scale = Vector2(0.7, 0.7)
-		card.position = Vector2(7, 19)
+		card.scale = Vector2(0.85, 0.85)
+		card.position = Vector2(4, 12)
 		card.setup_as_minion(minion)
 		card.set_can_attack(is_my_turn and minion.can_attack())
 		if minion.is_newly_reinforced:
@@ -568,11 +614,11 @@ func _refresh_boards() -> void:
 	for minion in game_state.opponent.board:
 		var card = CardScene.instantiate()
 		var wrapper = Control.new()
-		wrapper.custom_minimum_size = Vector2(90, 130)
+		wrapper.custom_minimum_size = Vector2(108, 155)
 		opponent_board_zone.add_child(wrapper)
 		wrapper.add_child(card)
-		card.scale = Vector2(0.7, 0.7)
-		card.position = Vector2(7, 19)
+		card.scale = Vector2(0.85, 0.85)
+		card.position = Vector2(4, 12)
 		card.setup_as_minion(minion)
 		card.set_can_attack(false)
 		if minion.is_newly_reinforced:
@@ -594,7 +640,7 @@ func _refresh_ui() -> void:
 		game_state.player.current_mana,
 		game_state.player.max_mana
 	]
-	_deck_count_label.text = str(game_state.player.deck.size())
+	_deck_count_label.text = str(game_state.player.get_deck_size())
 
 # --- Board minion click (for attacking) ---
 
@@ -694,6 +740,14 @@ func _clear_selections() -> void:
 		_yeti_select_mode = false
 		hide_decline_button()
 		yeti_selected.emit(null)
+	if _on_play_damage_mode:
+		_on_play_damage_mode = false
+		_highlight_board_minions(player_board_zone, false)
+		_highlight_board_minions(opponent_board_zone, false)
+		_highlight_hero(player_hero, false)
+		_highlight_hero(opponent_hero, false)
+		hide_decline_button()
+		on_play_damage_target_selected.emit(null, "")
 	if _tank_shot_mode:
 		_tank_shot_mode = false
 		hide_decline_button()
@@ -765,6 +819,49 @@ func animate_creature_attack(attacker_instance_id: String, attacker_player_id: S
 	attacker_card.z_index = 0
 	attacker_card.position = base_pos
 
+func animate_creature_challenge(challenger_instance_id: String, challenger_player_id: String, target_instance_id: String) -> void:
+	var is_local_attacker = (challenger_player_id == game_state.player.player_id)
+	var attacker_zone: HBoxContainer = player_board_zone if is_local_attacker else opponent_board_zone
+	var target_zone: HBoxContainer = opponent_board_zone if is_local_attacker else player_board_zone
+
+	var attacker_card: Card = null
+	var target_card: Card = null
+
+	for wrapper in attacker_zone.get_children():
+		var card = _get_card_child(wrapper)
+		if card and card.minion and card.minion.instance_id == challenger_instance_id:
+			attacker_card = card
+			break
+
+	for wrapper in target_zone.get_children():
+		var card = _get_card_child(wrapper)
+		if card and card.minion and card.minion.instance_id == target_instance_id:
+			target_card = card
+			break
+
+	if not attacker_card or not target_card:
+		return
+
+	var attacker_center: Vector2 = attacker_card.get_parent().get_global_rect().get_center()
+	var target_center: Vector2 = target_card.get_parent().get_global_rect().get_center()
+	var delta: Vector2 = target_center - attacker_center
+
+	var base_pos := attacker_card.position
+	var attack_pos := base_pos + delta
+
+	attacker_card.z_as_relative = false
+	attacker_card.z_index = 100
+
+	var tween := create_tween()
+	tween.tween_property(attacker_card, "position", attack_pos, 0.20).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tween.tween_callback(target_card.damage_flash)
+	tween.tween_property(attacker_card, "position", base_pos, 0.13).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	await tween.finished
+
+	attacker_card.z_as_relative = true
+	attacker_card.z_index = 0
+	attacker_card.position = base_pos
+
 func animate_draw() -> void:
 	var flying = CardBackScene.instantiate()
 	flying.scale = _player_deck_icon.scale
@@ -808,18 +905,26 @@ func show_graveyard_picker(options: Array[CardData]) -> CardData:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	panel.add_child(title)
 
-	var cards_row = HBoxContainer.new()
-	cards_row.add_theme_constant_override("separation", 10)
-	cards_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	panel.add_child(cards_row)
+	var cards_container = VBoxContainer.new()
+	cards_container.add_theme_constant_override("separation", 8)
+	panel.add_child(cards_container)
 
 	var _selection_made := false
+	var current_row: HBoxContainer = null
+	var cards_in_row := 0
+	const MAX_PER_ROW := 10
 
 	for card_data in options:
+		if current_row == null or cards_in_row >= MAX_PER_ROW:
+			current_row = HBoxContainer.new()
+			current_row.add_theme_constant_override("separation", 10)
+			current_row.alignment = BoxContainer.ALIGNMENT_CENTER
+			cards_container.add_child(current_row)
+			cards_in_row = 0
 		var wrapper = Button.new()
 		wrapper.custom_minimum_size = Vector2(100, 148)
 		wrapper.flat = true
-		cards_row.add_child(wrapper)
+		current_row.add_child(wrapper)
 		var card = CardScene.instantiate()
 		card.scale = Vector2(0.9, 0.9)
 		card.position = Vector2(4, 4)
@@ -834,6 +939,7 @@ func show_graveyard_picker(options: Array[CardData]) -> CardData:
 			_selection_made = true
 			rummage_card_selected.emit(captured)
 		)
+		cards_in_row += 1
 
 	var skip = Button.new()
 	skip.text = "Skip"
@@ -848,6 +954,70 @@ func show_graveyard_picker(options: Array[CardData]) -> CardData:
 	var chosen: CardData = await rummage_card_selected
 	overlay.queue_free()
 	return chosen
+
+func _open_graveyard_viewer() -> void:
+	if game_state == null or game_state.player == null:
+		return
+	var graveyard := game_state.player.graveyard
+	var overlay := CanvasLayer.new()
+	overlay.layer = 10
+	add_child(overlay)
+
+	var bg := ColorRect.new()
+	bg.color = Color(0, 0, 0, 0.78)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(bg)
+
+	var panel := VBoxContainer.new()
+	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	panel.add_theme_constant_override("separation", 14)
+	overlay.add_child(panel)
+
+	var title := Label.new()
+	title.text = "Graveyard (%d)" % graveyard.size()
+	title.add_theme_font_size_override("font_size", 17)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	panel.add_child(title)
+
+	if graveyard.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "Your graveyard is empty."
+		empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		panel.add_child(empty_label)
+	else:
+		var cards_container := VBoxContainer.new()
+		cards_container.add_theme_constant_override("separation", 8)
+		panel.add_child(cards_container)
+
+		const MAX_PER_ROW := 10
+		var current_row: HBoxContainer = null
+		var cards_in_row := 0
+		for card_data in graveyard:
+			if current_row == null or cards_in_row >= MAX_PER_ROW:
+				current_row = HBoxContainer.new()
+				current_row.add_theme_constant_override("separation", 10)
+				current_row.alignment = BoxContainer.ALIGNMENT_CENTER
+				cards_container.add_child(current_row)
+				cards_in_row = 0
+			var wrapper := Control.new()
+			wrapper.custom_minimum_size = Vector2(100, 148)
+			current_row.add_child(wrapper)
+			var card := CardScene.instantiate()
+			card.scale = Vector2(0.9, 0.9)
+			card.position = Vector2(4, 4)
+			wrapper.add_child(card)
+			card.setup(card_data)
+			_ignore_control_input(card)
+			cards_in_row += 1
+
+	var close_btn := Button.new()
+	close_btn.text = "Close"
+	close_btn.custom_minimum_size = Vector2(100, 34)
+	close_btn.pressed.connect(overlay.queue_free)
+	panel.add_child(close_btn)
 
 func show_transform_picker(options: Array[CardData]) -> CardData:
 	var overlay = CanvasLayer.new()
@@ -905,13 +1075,30 @@ func show_transform_picker(options: Array[CardData]) -> CardData:
 	return chosen
 
 func _stratagem_needs_target(data: CardData) -> bool:
-	return data.effect not in ["deal_damage_all_creatures", "buff_all_friendly_attack"]
+	return data.effect not in ["destroy_all_creatures", "deal_damage_all_creatures", "deal_damage_all_enemy", "buff_all_friendly_attack"]
 
 func _stratagem_needs_creature_target(data: CardData) -> bool:
-	return data.effect in ["give_ability", "buff_creature", "buff_health", "force_challenge", "poke_bear"]
+	return data.effect in ["give_ability", "buff_creature", "buff_health", "force_challenge", "poke_bear", "blood_transfusion", "sanguine", "heal", "eject_pilot"]
 
 func _stratagem_needs_friendly_yeti(data: CardData) -> bool:
 	return data.effect in ["force_challenge", "poke_bear"]
+
+func _stratagem_needs_enemy_creature_only(data: CardData) -> bool:
+	return data.effect in ["blood_transfusion"]
+
+func _stratagem_needs_friendly_creature_only(data: CardData) -> bool:
+	return data.effect in ["sanguine", "heal", "give_ability"]
+
+func _stratagem_needs_friendly_piloted_mech(data: CardData) -> bool:
+	return data.effect == "eject_pilot"
+
+func _highlight_piloted_mech_targets(value: bool) -> void:
+	for wrapper in player_board_zone.get_children():
+		if wrapper.get_child_count() == 0:
+			continue
+		var card = wrapper.get_child(0)
+		if card is Card and card.minion.is_piloted:
+			card.set_targeted(value)
 
 func _ignore_control_input(node: Node) -> void:
 	if node is Control:

@@ -20,23 +20,27 @@ var _drag_start_pos: Vector2
 var _original_parent: Node
 var _original_index: int
 var _is_highlighted_as_target: bool = false
+var _pilot_token: Panel = null
+var _reinforce_token: Panel = null
 
 signal clicked(card: Card)
 signal dropped(card: Card)
 
 const CARD_COLORS = {
-	CardData.CardColor.GREEN:  Color(0.18, 0.38, 0.18),
-	CardData.CardColor.CRIMSON:    Color(0.38, 0.18, 0.18),
-	CardData.CardColor.BLACK:  Color(0.14, 0.14, 0.14),
-	CardData.CardColor.ORANGE: Color(0.38, 0.28, 0.12),
-	CardData.CardColor.TEAL:   Color(0.15, 0.35, 0.35),
+	CardData.CardColor.GREEN:    Color(0.18, 0.38, 0.18),
+	CardData.CardColor.CRIMSON:  Color(0.38, 0.18, 0.18),
+	CardData.CardColor.BLACK:    Color(0.14, 0.14, 0.14),
+	CardData.CardColor.ORANGE:   Color(0.38, 0.28, 0.12),
+	CardData.CardColor.TEAL:     Color(0.15, 0.35, 0.35),
+	CardData.CardColor.GENERIC:  Color(0.22, 0.22, 0.26),
 }
 const CARD_BORDER_COLORS = {
-	CardData.CardColor.GREEN:  Color(0.35, 0.72, 0.35),
-	CardData.CardColor.CRIMSON:    Color(0.72, 0.35, 0.35),
-	CardData.CardColor.BLACK:  Color(0.42, 0.42, 0.42),
-	CardData.CardColor.ORANGE: Color(0.72, 0.58, 0.30),
-	CardData.CardColor.TEAL:   Color(0.30, 0.72, 0.72),
+	CardData.CardColor.GREEN:    Color(0.35, 0.72, 0.35),
+	CardData.CardColor.CRIMSON:  Color(0.72, 0.35, 0.35),
+	CardData.CardColor.BLACK:    Color(0.42, 0.42, 0.42),
+	CardData.CardColor.ORANGE:   Color(0.72, 0.58, 0.30),
+	CardData.CardColor.TEAL:     Color(0.30, 0.72, 0.72),
+	CardData.CardColor.GENERIC:  Color(0.55, 0.55, 0.62),
 }
 
 func _ready() -> void:
@@ -55,6 +59,7 @@ func setup(card_data: CardData) -> void:
 		health_label.text = str(card_data.health)
 		attack_label.remove_theme_color_override("font_color")
 		health_label.remove_theme_color_override("font_color")
+	update_piloted_token(false)
 	if card_data.art:
 		art_texture.texture = card_data.art
 	_apply_color_theme(card_data.color)
@@ -63,12 +68,7 @@ func setup(card_data: CardData) -> void:
 func set_targeted(value: bool) -> void:
 	_is_highlighted_as_target = value
 	if value:
-		var s = StyleBoxFlat.new()
-		s.bg_color = Color(0.4, 0.1, 0.4, 0.8)
-		s.border_color = Color(0.9, 0.3, 0.9, 1.0)
-		s.set_border_width_all(3)
-		s.set_corner_radius_all(6)
-		card_visual.add_theme_stylebox_override("panel", s)
+		card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0.4, 0.1, 0.4, 0.8), Color(0.9, 0.3, 0.9, 1.0), 3))
 	else:
 		# Restore appropriate state
 		if minion and minion.can_attack():
@@ -88,6 +88,7 @@ func setup_as_minion(m: Minion) -> void:
 		description_label.text = "Silenced."
 		_apply_silenced_style()
 	update_piloted_token(m.is_piloted)
+	update_reinforce_token(m.has_ability(Abilities.REINFORCE))
 	_update_tribe_tag(m.abilities)
 
 func _apply_stat_colors(m: Minion) -> void:
@@ -221,31 +222,37 @@ func _apply_color_theme(color: CardData.CardColor) -> void:
 	var border = CARD_BORDER_COLORS[color]
 	card_visual.add_theme_stylebox_override("panel", _make_stylebox(bg, border, 2))
 
+func _get_corner_radius() -> int:
+	if minion != null and data != null and data.rarity == CardData.CardRarity.LEGENDARY:
+		return 55
+	return 6
+
 func _make_stylebox(bg: Color, border: Color, border_width: int) -> StyleBoxFlat:
 	var s = StyleBoxFlat.new()
 	s.bg_color = bg
 	s.border_color = border
 	s.set_border_width_all(border_width)
-	s.set_corner_radius_all(6)
+	s.set_corner_radius_all(_get_corner_radius())
 	return s
 
 func update_piloted_token(piloted: bool) -> void:
-	var existing = get_node_or_null("PilotedToken")
-	if existing:
-		existing.queue_free()
+	if is_instance_valid(_pilot_token):
+		remove_child(_pilot_token)
+		_pilot_token.queue_free()
+	_pilot_token = null
 	if not piloted:
 		return
-	var panel = Panel.new()
+	var panel := Panel.new()
 	panel.name = "PilotedToken"
 	panel.size = Vector2(16, 16)
-	var style = StyleBoxFlat.new()
+	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.85, 0.45, 0.05)
 	style.set_corner_radius_all(8)
 	style.border_color = Color(1.0, 0.85, 0.5)
 	style.set_border_width_all(1)
 	panel.add_theme_stylebox_override("panel", style)
 	panel.position = Vector2(94, 20)
-	var label = Label.new()
+	var label := Label.new()
 	label.text = "P"
 	label.add_theme_font_size_override("font_size", 9)
 	label.add_theme_color_override("font_color", Color.WHITE)
@@ -254,10 +261,40 @@ func update_piloted_token(piloted: bool) -> void:
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	panel.add_child(label)
 	add_child(panel)
+	_pilot_token = panel
+
+func update_reinforce_token(reinforced: bool) -> void:
+	if is_instance_valid(_reinforce_token):
+		remove_child(_reinforce_token)
+		_reinforce_token.queue_free()
+	_reinforce_token = null
+	if not reinforced:
+		return
+	var panel := Panel.new()
+	panel.name = "ReinforceToken"
+	panel.size = Vector2(16, 16)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.15, 0.55, 0.25)
+	style.set_corner_radius_all(8)
+	style.border_color = Color(0.5, 1.0, 0.6)
+	style.set_border_width_all(1)
+	panel.add_theme_stylebox_override("panel", style)
+	panel.position = Vector2(94, 40)
+	var label := Label.new()
+	label.text = "R"
+	label.add_theme_font_size_override("font_size", 9)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	panel.add_child(label)
+	add_child(panel)
+	_reinforce_token = panel
 
 func _update_tribe_tag(abilities_list: Array[String]) -> void:
 	for child in stats_row.get_children():
 		if child.has_meta("is_tribe"):
+			stats_row.remove_child(child)
 			child.queue_free()
 
 	var tribe_ability := ""

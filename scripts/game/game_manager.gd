@@ -11,10 +11,8 @@ func _ready() -> void:
 	ai_controller = AIController.new()
 	add_child(ai_controller)
 
-func start_local_game(board_node: Board, player_color: int = CardData.CardColor.GREEN, opponent_color: int = CardData.CardColor.TEAL) -> void:
+func start_local_game(board_node: Board, player_deck: Array[CardData], opponent_deck: Array[CardData]) -> void:
 	board = board_node
-	var player_deck = _build_deck_for_color(player_color as CardData.CardColor)
-	var opponent_deck = _build_deck_for_color(opponent_color as CardData.CardColor)
 	game_state = GameState.new(LOCAL_PLAYER_ID, OPPONENT_PLAYER_ID, player_deck, opponent_deck)
 	board.action_play_card.connect(_on_play_card)
 	board.action_play_stratagem.connect(_on_play_stratagem)
@@ -35,6 +33,7 @@ func start_local_game(board_node: Board, player_color: int = CardData.CardColor.
 		await _process_pending_rummages()
 		await _process_pending_nulls()
 		await _process_pending_buff_friendly_health()
+		await _process_pending_on_reinforce_damages()
 		await _process_pending_overwatch_challenges()
 		if game_state.current_phase == GameState.Phase.GAME_OVER:
 			_handle_game_over()
@@ -46,6 +45,7 @@ func start_local_game(board_node: Board, player_color: int = CardData.CardColor.
 		await _process_pending_rummages()
 		await _process_pending_nulls()
 		await _process_pending_buff_friendly_health()
+		await _process_pending_on_reinforce_damages()
 		await _process_pending_overwatch_challenges()
 		board.log_action("--- Your Turn %d ---" % game_state.turn_number)
 
@@ -62,87 +62,155 @@ func _on_play_card(card_data: CardData) -> void:
 		await _process_pending_rummages()
 		await _process_pending_nulls()
 		await _process_pending_buff_friendly_health()
+		await _process_pending_on_reinforce_damages()
 		await _process_pending_overwatch_challenges()
-		if minion.has_ability(Abilities.ON_PLAY_TRANSFORM_CHOICE) and not minion.data.transform_choices.is_empty():
-			var options: Array[CardData] = []
-			for cid in minion.data.transform_choices:
-				var cd = CardDatabase.get_card(cid)
-				if cd != null:
-					options.append(cd)
-			if not options.is_empty():
-				var chosen: CardData = await board.show_transform_picker(options)
-				if chosen != null:
-					board.log_action("Your %s transformed into %s" % [minion.data.card_name, chosen.card_name])
-					game_state.apply_transform_choice(minion, chosen.id)
-					board.refresh()
-		for ability in minion.abilities:
-			if Abilities.is_on_play_damage(ability):
-				var damage = Abilities.get_on_play_damage_value(ability)
-				if game_state.player.board.size() + game_state.opponent.board.size() > 0:
-					board.start_on_play_damage_targeting()
-					var target: Minion = await board.on_play_damage_target_selected
-					if target != null:
-						board.log_action("Your %s dealt %d damage to %s" % [minion.data.card_name, damage, target.data.card_name])
-						game_state.apply_on_play_damage(target, damage)
-						board.refresh()
-				if game_state.current_phase == GameState.Phase.GAME_OVER:
-					_handle_game_over()
-					return
-				break
-		if minion.has_ability(Abilities.CHALLENGE) and not game_state.opponent.board.is_empty():
-			board.start_challenge_targeting(minion)
-			var target: Minion = await board.challenge_target_selected
-			if target != null:
-				board.log_action("Your %s challenged opponent's %s" % [minion.data.card_name, target.data.card_name])
-				game_state.apply_challenge(minion, target)
+		await _run_player_on_play(minion)
+
+func _run_player_on_play(minion: Minion) -> void:
+	if minion.has_ability(Abilities.ON_PLAY_TRANSFORM_CHOICE) and not minion.data.transform_choices.is_empty():
+		var options: Array[CardData] = []
+		for cid in minion.data.transform_choices:
+			var cd = CardDatabase.get_card(cid)
+			if cd != null:
+				options.append(cd)
+		if not options.is_empty():
+			var chosen: CardData = await board.show_transform_picker(options)
+			if chosen != null:
+				board.log_action("Your %s transformed into %s" % [minion.data.card_name, chosen.card_name])
+				game_state.apply_transform_choice(minion, chosen.id)
 				board.refresh()
-				await _announce_pending_draws()
-				await _process_pending_tank_shots()
-				await _process_pending_rummages()
-				await _process_pending_nulls()
-				await _process_pending_buff_friendly_health()
-				await _process_pending_overwatch_challenges()
-				if game_state.current_phase == GameState.Phase.GAME_OVER:
-					_handle_game_over()
-		if minion.has_ability(Abilities.ON_PLAY_YETI_CHALLENGE) and not game_state.opponent.board.is_empty():
-			var friendly_yeti: Minion = null
-			for m in game_state.player.board:
-				if m != minion and m.has_ability(Abilities.YETI):
-					friendly_yeti = m
-					break
-			if friendly_yeti != null:
-				board.start_yeti_selection()
-				var chosen: Minion = await board.yeti_selected
-				if chosen != null:
-					board.start_challenge_targeting(chosen)
-					var target: Minion = await board.challenge_target_selected
-					if target != null:
-						board.log_action("Your %s challenged opponent's %s" % [chosen.data.card_name, target.data.card_name])
-						game_state.apply_challenge(chosen, target)
-						board.refresh()
-						await _announce_pending_draws()
-						await _process_pending_overwatch_challenges()
-						if game_state.current_phase == GameState.Phase.GAME_OVER:
-							_handle_game_over()
+	for ability in minion.abilities:
+		if Abilities.is_on_play_damage(ability):
+			var damage = Abilities.get_on_play_damage_value(ability)
+			board.start_on_play_damage_targeting()
+			var result = await board.on_play_damage_target_selected
+			var dmg_target: Minion = result[0]
+			var dmg_player_id: String = result[1]
+			if dmg_target != null:
+				board.log_action("Your %s dealt %d damage to %s" % [minion.data.card_name, damage, dmg_target.data.card_name])
+				game_state.apply_on_play_damage(dmg_target, damage)
+				board.refresh()
+			elif dmg_player_id != "":
+				var target_name := "your hero" if dmg_player_id == LOCAL_PLAYER_ID else "opponent's hero"
+				board.log_action("Your %s dealt %d damage to the %s" % [minion.data.card_name, damage, target_name])
+				game_state._get_player_by_id(dmg_player_id).hero_health -= damage
+				game_state._check_win_condition()
+				board.refresh()
+			if game_state.current_phase == GameState.Phase.GAME_OVER:
+				_handle_game_over()
+				return
+			break
+	if minion.has_ability(Abilities.CHALLENGE) and not game_state.opponent.board.is_empty():
+		board.start_challenge_targeting(minion)
+		var target: Minion = await board.challenge_target_selected
+		if target != null:
+			board.log_action("Your %s challenged opponent's %s" % [minion.data.card_name, target.data.card_name])
+			game_state.apply_challenge(minion, target)
+			await board.animate_creature_challenge(minion.instance_id, LOCAL_PLAYER_ID, target.instance_id)
+			board.refresh()
+			await _announce_pending_draws()
+			await _process_pending_tank_shots()
+			await _process_pending_rummages()
+			await _process_pending_nulls()
+			await _process_pending_buff_friendly_health()
+			await _process_pending_on_reinforce_damages()
+			await _process_pending_overwatch_challenges()
+			if game_state.current_phase == GameState.Phase.GAME_OVER:
+				_handle_game_over()
+	if minion.has_ability(Abilities.ON_PLAY_YETI_CHALLENGE) and not game_state.opponent.board.is_empty():
+		var friendly_yeti: Minion = null
+		for m in game_state.player.board:
+			if m != minion and m.has_ability(Abilities.YETI):
+				friendly_yeti = m
+				break
+		if friendly_yeti != null:
+			board.start_yeti_selection()
+			var chosen: Minion = await board.yeti_selected
+			if chosen != null:
+				board.start_challenge_targeting(chosen)
+				var target: Minion = await board.challenge_target_selected
+				if target != null:
+					board.log_action("Your %s challenged opponent's %s" % [chosen.data.card_name, target.data.card_name])
+					game_state.apply_challenge(chosen, target)
+					await board.animate_creature_challenge(chosen.instance_id, LOCAL_PLAYER_ID, target.instance_id)
+					board.refresh()
+					await _announce_pending_draws()
+					await _process_pending_on_reinforce_damages()
+					await _process_pending_overwatch_challenges()
+					if game_state.current_phase == GameState.Phase.GAME_OVER:
+						_handle_game_over()
+	if minion.has_ability(Abilities.CHALLENGE_ALL) and not game_state.opponent.board.is_empty():
+		var enemies := game_state.opponent.board.duplicate()
+		for enemy in enemies:
+			if minion.is_dead() or minion not in game_state.player.board:
+				break
+			if enemy not in game_state.opponent.board:
+				continue
+			board.log_action("Your %s challenged opponent's %s" % [minion.data.card_name, enemy.data.card_name])
+			game_state.apply_challenge(minion, enemy)
+			await board.animate_creature_challenge(minion.instance_id, LOCAL_PLAYER_ID, enemy.instance_id)
+			board.refresh()
+			await _announce_pending_draws()
+			await _process_pending_tank_shots()
+			await _process_pending_rummages()
+			await _process_pending_nulls()
+			await _process_pending_buff_friendly_health()
+			await _process_pending_on_reinforce_damages()
+			await _process_pending_overwatch_challenges()
+			if game_state.current_phase == GameState.Phase.GAME_OVER:
+				_handle_game_over()
+				return
+	if minion.has_ability(Abilities.ON_PLAY_CHALLENGE_WIN_BUFF) and not game_state.opponent.board.is_empty():
+		board.start_challenge_targeting(minion)
+		var target: Minion = await board.challenge_target_selected
+		if target != null:
+			board.log_action("Your %s challenged opponent's %s" % [minion.data.card_name, target.data.card_name])
+			game_state.apply_challenge(minion, target)
+			await board.animate_creature_challenge(minion.instance_id, LOCAL_PLAYER_ID, target.instance_id)
+			board.refresh()
+			if minion in game_state.player.board and target not in game_state.opponent.board:
+				minion.current_attack += 1
+				minion.current_health += 1
+				minion.max_health += 1
+				game_state._try_apothecary_bonus(LOCAL_PLAYER_ID, minion)
+				board.log_action("Your %s won and gained +1/+1!" % minion.data.card_name)
+				board.refresh()
+			await _announce_pending_draws()
+			await _process_pending_tank_shots()
+			await _process_pending_rummages()
+			await _process_pending_nulls()
+			await _process_pending_buff_friendly_health()
+			await _process_pending_on_reinforce_damages()
+			await _process_pending_overwatch_challenges()
+			if game_state.current_phase == GameState.Phase.GAME_OVER:
+				_handle_game_over()
 
 func _process_pending_tank_shots() -> void:
 	while not game_state.pending_tank_shots.is_empty():
 		var owner_id: String = game_state.pending_tank_shots.pop_front()
+		var source := "Your Tank" if owner_id == LOCAL_PLAYER_ID else "Opponent's Tank"
 		if owner_id == LOCAL_PLAYER_ID:
 			board.start_tank_shot_targeting()
 			var result = await board.tank_shot_resolved
 			var target_minion: Minion = result[0]
 			var target_player_id: String = result[1]
 			if target_minion != null:
-				board.log_action("Tank reinforcement dealt 1 damage to %s" % target_minion.data.card_name)
+				board.log_action("%s dealt 1 damage to %s" % [source, target_minion.data.card_name])
 				game_state.apply_on_play_damage(target_minion, 1)
 			elif target_player_id != "":
-				board.log_action("Tank reinforcement dealt 1 damage to the opponent's hero")
-				game_state.opponent.hero_health -= 1
+				var target_name := "your hero" if target_player_id == LOCAL_PLAYER_ID else "opponent's hero"
+				board.log_action("%s dealt 1 damage to the %s" % [source, target_name])
+				game_state._get_player_by_id(target_player_id).hero_health -= 1
 				game_state._check_win_condition()
 		else:
-			game_state.player.hero_health -= 1
-			board.log_action("Opponent tank reinforcement dealt 1 damage to your hero")
+			var target = ai_controller._pick_best_removal_target(game_state.player.board.duplicate(), 1)
+			if target != null:
+				board.log_action("%s dealt 1 damage to your %s" % [source, target.data.card_name])
+				game_state.apply_on_play_damage(target, 1)
+			else:
+				board.log_action("%s dealt 1 damage to your hero" % source)
+				game_state.player.hero_health -= 1
+				game_state._check_win_condition()
 		board.refresh()
 
 func _process_pending_overwatch_challenges() -> void:
@@ -165,6 +233,7 @@ func _process_pending_overwatch_challenges() -> void:
 				if target != null:
 					board.log_action("Overwatch: Your %s challenged opponent's %s" % [chosen.data.card_name, target.data.card_name])
 					game_state.apply_challenge(chosen, target)
+					await board.animate_creature_challenge(chosen.instance_id, LOCAL_PLAYER_ID, target.instance_id)
 					board.refresh()
 					if game_state.current_phase == GameState.Phase.GAME_OVER:
 						_handle_game_over()
@@ -178,10 +247,46 @@ func _process_pending_overwatch_challenges() -> void:
 			if target != null:
 				board.log_action("Opponent Overwatch: %s challenged your %s" % [best_yeti.data.card_name, target.data.card_name])
 				game_state.apply_challenge(best_yeti, target)
+				await board.animate_creature_challenge(best_yeti.instance_id, OPPONENT_PLAYER_ID, target.instance_id)
 				board.refresh()
 				if game_state.current_phase == GameState.Phase.GAME_OVER:
 					_handle_game_over()
 					return
+
+func _process_pending_on_reinforce_damages() -> void:
+	while not game_state.pending_on_reinforce_damages.is_empty():
+		var entry: Dictionary = game_state.pending_on_reinforce_damages.pop_front()
+		var owner_id: String = entry["player_id"]
+		var damage: int = entry["damage"]
+		var source: String = entry["source"]
+		if owner_id == LOCAL_PLAYER_ID:
+			board.start_on_play_damage_targeting()
+			var result = await board.on_play_damage_target_selected
+			var dmg_target: Minion = result[0]
+			var dmg_player_id: String = result[1]
+			if dmg_target != null:
+				board.log_action("Your reinforced %s dealt %d damage to %s" % [source, damage, dmg_target.data.card_name])
+				game_state.apply_on_play_damage(dmg_target, damage)
+				board.refresh()
+			elif dmg_player_id != "":
+				var target_name := "your hero" if dmg_player_id == LOCAL_PLAYER_ID else "opponent's hero"
+				board.log_action("Your reinforced %s dealt %d damage to the %s" % [source, damage, target_name])
+				game_state._get_player_by_id(dmg_player_id).hero_health -= damage
+				game_state._check_win_condition()
+				board.refresh()
+		else:
+			var target = ai_controller._pick_best_removal_target(game_state.player.board.duplicate(), damage)
+			if target != null:
+				board.log_action("Opponent's reinforced %s dealt %d damage to your %s" % [source, damage, target.data.card_name])
+				game_state.apply_on_play_damage(target, damage)
+			else:
+				board.log_action("Opponent's reinforced %s dealt %d damage to your hero" % [source, damage])
+				game_state.player.hero_health -= damage
+				game_state._check_win_condition()
+			board.refresh()
+		if game_state.current_phase == GameState.Phase.GAME_OVER:
+			_handle_game_over()
+			return
 
 func _process_pending_buff_friendly_health() -> void:
 	while not game_state.pending_buff_friendly_health.is_empty():
@@ -238,6 +343,8 @@ func _process_pending_rummages() -> void:
 		var player_id: String = entry["player_id"]
 		var max_cost: int = entry["max_cost"]
 		var type_filter: String = entry.get("type_filter", "")
+		var play_it: bool = entry.get("play_it", false)
+		var discount: bool = entry.get("discount", true)
 		var options = game_state.get_rummage_options(player_id, max_cost, type_filter)
 		if options.is_empty():
 			continue
@@ -248,8 +355,22 @@ func _process_pending_rummages() -> void:
 			options.sort_custom(func(a, b): return a.cost > b.cost)
 			chosen = options[0]
 		if chosen:
-			game_state.complete_rummage(player_id, chosen)
+			var placed: Minion = game_state.complete_rummage(player_id, chosen, play_it, discount)
 			board.refresh()
+			if placed != null:
+				if player_id == LOCAL_PLAYER_ID:
+					await _run_player_on_play(placed)
+					await _announce_pending_draws()
+					await _process_pending_tank_shots()
+					await _process_pending_nulls()
+					await _process_pending_buff_friendly_health()
+					await _process_pending_on_reinforce_damages()
+					await _process_pending_overwatch_challenges()
+					if game_state.current_phase == GameState.Phase.GAME_OVER:
+						_handle_game_over()
+						return
+				else:
+					await ai_controller._handle_on_play_effects(placed, game_state, board)
 
 func _announce_pending_draws() -> void:
 	if game_state.pending_drawn_cards.is_empty():
@@ -294,6 +415,7 @@ func _on_attack(attacker_id: String, target_type: String, target_id: String) -> 
 	await _process_pending_rummages()
 	await _process_pending_nulls()
 	await _process_pending_buff_friendly_health()
+	await _process_pending_on_reinforce_damages()
 	await _process_pending_overwatch_challenges()
 	if game_state.current_phase == GameState.Phase.GAME_OVER:
 		_handle_game_over()
@@ -316,7 +438,16 @@ func _on_play_stratagem(card_data: CardData, target_minion: Minion, target_playe
 				if target != null:
 					board.log_action("Your %s challenged opponent's %s" % [target_minion.data.card_name, target.data.card_name])
 					game_state.apply_challenge(target_minion, target)
+					await board.animate_creature_challenge(target_minion.instance_id, LOCAL_PLAYER_ID, target.instance_id)
 					board.refresh()
+					if card_data.effect_value > 0 and target.is_dead() and target_minion in game_state.player.board:
+						var win_buff: int = card_data.effect_value
+						target_minion.current_attack += win_buff
+						target_minion.current_health += win_buff
+						target_minion.max_health += win_buff
+						game_state._try_apothecary_bonus(LOCAL_PLAYER_ID, target_minion)
+						board.log_action("Your %s won and gained +%d/+%d!" % [target_minion.data.card_name, win_buff, win_buff])
+						board.refresh()
 	if card_data.effect == "poke_bear" and target_minion != null:
 		if target_minion in game_state.player.board and target_minion.has_ability(Abilities.YETI):
 			if not game_state.opponent.board.is_empty():
@@ -325,12 +456,29 @@ func _on_play_stratagem(card_data: CardData, target_minion: Minion, target_playe
 				if target != null:
 					board.log_action("Your %s challenged opponent's %s" % [target_minion.data.card_name, target.data.card_name])
 					game_state.apply_challenge(target_minion, target)
+					await board.animate_creature_challenge(target_minion.instance_id, LOCAL_PLAYER_ID, target.instance_id)
 					board.refresh()
+	if card_data.effect == "blood_transfusion" and target_minion != null:
+		if not game_state.player.board.is_empty():
+			board.start_buff_friendly_targeting()
+			var recipient: Minion = await board.buff_friendly_target_selected
+			if recipient != null and recipient in game_state.player.board:
+				board.log_action("Blood Transfusion gave %s +2 health" % recipient.data.card_name)
+				game_state.apply_heal_buff(recipient, 2)
+				board.refresh()
+	if card_data.effect == "sanguine" and not game_state.player.board.is_empty():
+		board.start_buff_friendly_targeting()
+		var recipient: Minion = await board.buff_friendly_target_selected
+		if recipient != null and recipient in game_state.player.board:
+			board.log_action("Sanguine gave %s +2 health" % recipient.data.card_name)
+			game_state.apply_heal_buff(recipient, 2)
+			board.refresh()
 	await _announce_pending_draws()
 	await _process_pending_tank_shots()
 	await _process_pending_rummages()
 	await _process_pending_nulls()
 	await _process_pending_buff_friendly_health()
+	await _process_pending_on_reinforce_damages()
 	await _process_pending_overwatch_challenges()
 	if game_state.current_phase == GameState.Phase.GAME_OVER:
 		_handle_game_over()
@@ -346,6 +494,7 @@ func _on_end_turn() -> void:
 		await _process_pending_rummages()
 		await _process_pending_nulls()
 		await _process_pending_buff_friendly_health()
+		await _process_pending_on_reinforce_damages()
 		await _process_pending_overwatch_challenges()
 		if game_state.current_phase == GameState.Phase.GAME_OVER:
 			_handle_game_over()
@@ -357,6 +506,7 @@ func _on_end_turn() -> void:
 		await _process_pending_rummages()
 		await _process_pending_nulls()
 		await _process_pending_buff_friendly_health()
+		await _process_pending_on_reinforce_damages()
 		await _process_pending_overwatch_challenges()
 		board.log_action("--- Your Turn %d ---" % game_state.turn_number)
 
@@ -369,22 +519,3 @@ func _find_minion(player_id: String, instance_id: String) -> Minion:
 
 func _handle_game_over() -> void:
 	board.show_game_over(game_state.winner_id == LOCAL_PLAYER_ID)
-
-func _build_deck_for_color(color: CardData.CardColor) -> Array[CardData]:
-	const TARGET = 40
-	var color_cards: Array[CardData] = []
-	for card in CardDatabase.get_all_cards():
-		if card.color == color and not card.is_token:
-			color_cards.append(card)
-	var deck: Array[CardData] = []
-	for card in color_cards:
-		deck.append(card)
-		deck.append(card)
-	if deck.size() < TARGET:
-		var sorted = color_cards.duplicate()
-		sorted.sort_custom(func(a, b): return a.cost < b.cost)
-		var fill_idx = 0
-		while deck.size() < TARGET:
-			deck.append(sorted[fill_idx % sorted.size()])
-			fill_idx += 1
-	return deck

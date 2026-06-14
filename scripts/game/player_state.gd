@@ -84,3 +84,48 @@ func to_dict() -> Dictionary:
 		"board": board_data,
 		"deck_size": deck.size()
 	}
+
+var _serialized_deck_size: int = -1
+
+func get_deck_size() -> int:
+	if _serialized_deck_size >= 0 and deck.is_empty():
+		return _serialized_deck_size
+	return deck.size()
+
+func to_net_dict() -> Dictionary:
+	return {
+		"player_id": player_id,
+		"hero_health": hero_health,
+		"max_mana": max_mana,
+		"current_mana": current_mana,
+		"hand": hand.map(func(c): return {"id": c.id, "cost_modifier": c.cost_modifier, "rummage_count": c.rummage_count}),
+		"board": board.map(func(m): return m.to_net_dict()),
+		"deck_size": deck.size(),
+		"graveyard": graveyard.map(func(c): return c.id),
+	}
+
+static func from_net_dict(d: Dictionary) -> PlayerState:
+	var ps := PlayerState.new(str(d["player_id"]), [])
+	ps.hero_health = int(d["hero_health"])
+	ps.max_mana = int(d["max_mana"])
+	ps.current_mana = int(d["current_mana"])
+	ps.hand.clear()
+	for h in d["hand"]:
+		var card = CardDatabase.get_card(str(h["id"]))
+		if card != null:
+			var c := card.duplicate()
+			c.cost_modifier = int(h.get("cost_modifier", 0))
+			c.rummage_count = int(h.get("rummage_count", 0))
+			ps.hand.append(c)
+	ps.board.clear()
+	for bd in d["board"]:
+		var minion = Minion.from_net_dict(bd)
+		if minion != null:
+			ps.board.append(minion)
+	ps._serialized_deck_size = int(d.get("deck_size", 0))
+	ps.graveyard.clear()
+	for gid in d["graveyard"]:
+		var card = CardDatabase.get_card(str(gid))
+		if card != null:
+			ps.graveyard.append(card)
+	return ps
