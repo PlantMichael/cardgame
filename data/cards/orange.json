@@ -58,11 +58,12 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "Pilot 0/4",
+		"description": "Pilot 0/3, gives Safeguard to piloted mech",
 		"attack": 2,
 		"health": 4,
 		"abilities": [
-			"pilot_0_4"
+			"pilot_0_3",
+			"pilot_gives_safeguard"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -75,11 +76,11 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "mech",
-		"description": "When piloted, gain rush",
+		"description": "When piloted, gain 1+/+1",
 		"attack": 2,
 		"health": 2,
 		"abilities": [
-			"on_piloted_gain_rush"
+			"on_piloted_stat_boost"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -142,12 +143,12 @@
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "",
-		"description": "Rush. Pilot 4/1",
+		"description": "Pilot 3/1, gives mech Rush when piloted.",
 		"attack": 2,
 		"health": 6,
 		"abilities": [
-			"rush",
-			"pilot_4_1"
+			"pilot_3_1",
+			"pilot_gives_rush"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -160,11 +161,11 @@
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "mech",
-		"description": "Gain Safeguard when piloted",
+		"description": "Safeguard.",
 		"attack": 4,
 		"health": 4,
 		"abilities": [
-			"on_piloted_gain_safeguard"
+			"safeguard"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -177,11 +178,12 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "Pilot 4/4",
+		"description": "Recon. Pilot 3/3",
 		"attack": 3,
 		"health": 3,
 		"abilities": [
-			"pilot_3_3"
+			"pilot_3_3",
+			"recon"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -228,12 +230,12 @@
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "",
-		"description": "Guardian. Pilot 5/4",
+		"description": "Pilot 4/3, give Guardian to piloted mech.",
 		"attack": 6,
 		"health": 6,
 		"abilities": [
-			"pilot_5_4",
-			"guardian"
+			"pilot_4_3",
+			"pilot_gives_guardian"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -250,9 +252,27 @@
 		"attack": 5,
 		"health": 5,
 		"abilities": [
-			"on_piloted_gain_rush",
+			"on_piloted_stat_boost",
 			"on_piloted_gain_safeguard",
 			"eject_pilot_on_death"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "o_017",
+		"card_name": "Newt Nano, the Cunning",
+		"cost": 4,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "LEGENDARY",
+		"tribe": "mech",
+		"description": "Pilot 2/2. On play: Pilot a mech for free.",
+		"attack": 2,
+		"health": 3,
+		"abilities": [
+			"pilot_2_2",
+			"on_play_pilot_mech"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -302,6 +322,21 @@
 		"health": 0,
 		"abilities": [],
 		"effect": "eject_pilot",
+		"effect_value": 0
+	},
+	{
+		"id": "o_str_004",
+		"card_name": "Doomsday Protocol",
+		"cost": 3,
+		"color": "ORANGE",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Eject all friendly pilots.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "eject_all_pilots",
 		"effect_value": 0
 	}
 ]

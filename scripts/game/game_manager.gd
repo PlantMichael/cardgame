@@ -65,6 +65,8 @@ func _on_play_card(card_data: CardData) -> void:
 		await _process_pending_on_reinforce_damages()
 		await _process_pending_overwatch_challenges()
 		await _run_player_on_play(minion)
+		await _announce_pending_draws()
+		board.refresh()
 
 func _run_player_on_play(minion: Minion) -> void:
 	if minion.has_ability(Abilities.ON_PLAY_TRANSFORM_CHOICE) and not minion.data.transform_choices.is_empty():
@@ -160,6 +162,15 @@ func _run_player_on_play(minion: Minion) -> void:
 			if game_state.current_phase == GameState.Phase.GAME_OVER:
 				_handle_game_over()
 				return
+	if minion.has_ability(Abilities.ON_PLAY_PILOT_MECH):
+		var has_target = game_state.player.board.any(func(m): return m != minion and m.has_ability(Abilities.MECH) and not m.is_piloted)
+		if has_target:
+			board.start_on_play_pilot_targeting(minion)
+			var target: Minion = await board.on_play_pilot_target_selected
+			if target != null:
+				board.log_action("Your %s piloted %s" % [minion.data.card_name, target.data.card_name])
+				game_state.apply_pilot(minion, target, game_state.player)
+				board.refresh()
 	if minion.has_ability(Abilities.ON_PLAY_CHALLENGE_WIN_BUFF) and not game_state.opponent.board.is_empty():
 		board.start_challenge_targeting(minion)
 		var target: Minion = await board.challenge_target_selected

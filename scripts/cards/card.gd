@@ -9,7 +9,12 @@ extends Area2D
 @onready var attack_label: Label = $AttackLabel
 @onready var health_label: Label = $HealthLabel
 @onready var art_texture: TextureRect = $ArtTexture
+@onready var background: TextureRect = $Background
 @onready var stats_row: HBoxContainer = $StatsRow
+
+const CARD_TEMPLATES = {
+	CardData.CardColor.GREEN: preload("res://assets/greencard.png"),
+}
 
 var data: CardData = null
 var minion: Minion = null
@@ -25,6 +30,7 @@ var _reinforce_token: Panel = null
 
 signal clicked(card: Card)
 signal dropped(card: Card)
+signal drag_started(card: Card)
 
 const CARD_COLORS = {
 	CardData.CardColor.GREEN:    Color(0.18, 0.38, 0.18),
@@ -86,8 +92,7 @@ func setup(card_data: CardData) -> void:
 		attack_label.add_theme_color_override("font_color", Color.WHITE)
 		health_label.add_theme_color_override("font_color", Color.WHITE)
 	update_piloted_token(false)
-	if card_data.art:
-		art_texture.texture = card_data.art
+	art_texture.texture = card_data.art
 	_apply_color_theme(card_data.color)
 	_update_tribe_tag(card_data.abilities)
 	call_deferred("_fit_text")
@@ -201,6 +206,7 @@ func start_drag() -> void:
 	_original_parent = get_parent()
 	_original_index = get_index()
 	_dragging = true
+	drag_started.emit(self)
 	var viewport = get_viewport()
 	_original_parent.remove_child(self)
 	viewport.add_child(self)
@@ -261,6 +267,7 @@ func _update_mana_dots(cost: int) -> void:
 func _apply_color_theme(color: CardData.CardColor) -> void:
 	var border = CARD_BORDER_COLORS[color]
 	card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0, 0, 0, 0), border, 2))
+	background.texture = CARD_TEMPLATES.get(color, preload("res://assets/card_template.png"))
 
 func _get_corner_radius() -> int:
 	if minion != null and data != null and data.rarity == CardData.CardRarity.LEGENDARY:

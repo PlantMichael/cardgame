@@ -81,6 +81,12 @@ const DEFINITIONS: Dictionary = {
 	ON_PLAY_CHALLENGE_WIN_BUFF:      { "display": "On Play:",        "color": Color(0.70, 0.30, 0.10) },
 	ON_PILOTED_GAIN_SAFEGUARD:       { "display": "Boost: Safeguard","color": Color(0.20, 0.50, 0.80) },
 	EJECT_PILOT_ON_DEATH:            { "display": "On Death:",       "color": Color(0.50, 0.20, 0.60) },
+	PILOT_GIVES_RUSH:                { "display": "Boost: Rush",     "color": Color(0.10, 0.42, 0.10) },
+	PILOT_GIVES_SAFEGUARD:           { "display": "Boost: Safeguard","color": Color(0.20, 0.50, 0.80) },
+	PILOT_GIVES_GUARDIAN:            { "display": "Boost: Guardian", "color": Color(0.55, 0.42, 0.08) },
+	ON_PILOTED_STAT_BOOST:           { "display": "Boost: +1/+1",   "color": Color(0.60, 0.38, 0.08) },
+	ON_PLAY_PILOT_MECH:              { "display": "On Play:",        "color": Color(0.60, 0.38, 0.08) },
+	HEAL_TO_DRAW:                    { "display": "Crypt Hunger",    "color": Color(0.65, 0.10, 0.20) },
 }
 
 const ON_PLAY_DAMAGE             = "on_play_damage"
@@ -98,6 +104,12 @@ const MIRROR_TRANSFORM             = "mirror_transform"
 const ON_PILOTED_GAIN_RUSH         = "on_piloted_gain_rush"
 const ON_PILOTED_GAIN_SAFEGUARD    = "on_piloted_gain_safeguard"
 const EJECT_PILOT_ON_DEATH         = "eject_pilot_on_death"
+const PILOT_GIVES_RUSH             = "pilot_gives_rush"
+const PILOT_GIVES_SAFEGUARD        = "pilot_gives_safeguard"
+const PILOT_GIVES_GUARDIAN         = "pilot_gives_guardian"
+const ON_PILOTED_STAT_BOOST        = "on_piloted_stat_boost"
+const ON_PLAY_PILOT_MECH           = "on_play_pilot_mech"
+const HEAL_TO_DRAW                 = "heal_to_draw"
 
 const TRIBES: Array = [YETI, MECH, TANK, SPRITE]
 

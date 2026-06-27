@@ -73,18 +73,66 @@ Generic
 Known Issues
 
 - Game will softlock on opponents turn.
-- Challenge animation is fucked up.
 - Legendaries are bulbus and gassy for some reason. 
 
 
  
+1.06
+
+General
+
+- Added multiplayer.
+- Fixed guest missing on play and challenge handlers not working.
+- Fixed some symbols not appearing correctly on browser. 
+- Fixed Recon not triggering the card draw animation.
+- Reworked the art of cards.
+- Slightly reworked mana. Cards will cost a certain amount of unit slots, and you only have so many unit slots per turn. Functionality is the exact same, but this leaves room for experimentation in the future. 
+
+
+Orange
+
+- Veteran Pilot now has "Recon"
+- Panic Button is now 2 mana (was 4)
+- Panic Button can now be cast on mech's with Safeguard. 
+- Changed Nervous flyer "Pilot 0/3 Gives mech Safeguard"
+- Changed F4lcon "When piloted, gain +1/+1
+- Changed Brash Captain "Pilot 3/1 Give mech Rush"
+- Changed Sterling "Safeguard"
+- Changed Damen Captain "Pilot 4/3, Give guardian to mech."
+- Added Newt Nano, the Cunning 4 2/2 "Pilot 2/2. On play: pilot a mech for free."
+- Added Doomsday Protocol "Eject all friendly Pilots"
+- Fixed a bug that prevented Pilots from attacking.
+
+Crimson
+
+- Standardized the Crimson starter deck. 3-4 copies of cards will not appear anymore. 
+- Added Fletchling 2 3/3 "On play: Transform into a 2/1 Bat with rush or a 1/2 Gargoyle with guardian".
+- Added Delos, the Crypt Priest 4 2/3 "When this creature gains health, lose it and draw a card."
+- Reworked Moonhowl "Heal a creature for 3. If it's full health, give it +1 max health".
+
+Teal
+
+- Yeti Poker is now 3 mana (Was 4).
+
+Known technical and gameplay issues
+
+- Orange suffers from lack of mechs sometimes.
+- Game will softlock on opponents turn in AI battles.
+- Guest is laggy, this is a server diff. 
+
+Black
+
+- Trash Tallyer now has Recon.
+
+
 Shi to do:
 
 
+changes:
 
 
 
-Orange legendary free pilot
+
 
 Artillery strike 4 
 deal 2 damage to 3 random enemies

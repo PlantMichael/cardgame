@@ -17,14 +17,15 @@
 		"name": "Moonlight Coven Starter",
 		"faction_idx": 1,
 		"card_ids": [
-			"cr_002","cr_002","cr_str_003","cr_str_003",
+			"cr_002","cr_002","cr_018","cr_018","cr_str_003","cr_str_003",
 			"cr_003","cr_003","cr_016","cr_016","cr_str_001","cr_str_001",
 			"cr_006","cr_006","cr_009","cr_009","cr_str_004","cr_str_004",
-			"cr_008","cr_008","cr_007","cr_007","cr_011","cr_011","cr_015","cr_015",
+			"cr_008","cr_008","cr_011","cr_011","cr_015","cr_015",
 			"cr_004","cr_004","cr_012","cr_012",
 			"cr_014","cr_014",
 			"cr_005","cr_005","cr_013","cr_013",
-			"gen_001","gen_001","gen_002","gen_002","gen_str_001","gen_str_002"
+			"cr_019",
+			"gen_001","gen_001","gen_002","gen_002","gen_str_002"
 		]
 	},
 	{

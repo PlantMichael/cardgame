@@ -64,14 +64,18 @@ func play_creature(acting_player_id: String, card: CardData) -> Minion:
 	return minion
 
 func apply_buff_friendly_health(target: Minion) -> void:
+	var pre := target.current_health
 	target.current_health += 1
 	target.max_health += 1
+	_try_heal_to_draw(target, target.current_health - pre)
 	_try_apothecary_bonus(target.owner_id, target)
 	_try_health_transform(target)
 
 func apply_heal_buff(target: Minion, amount: int) -> void:
+	var pre := target.current_health
 	target.current_health += amount
 	target.max_health += amount
+	_try_heal_to_draw(target, target.current_health - pre)
 	_try_apothecary_bonus(target.owner_id, target)
 	_try_health_transform(target)
 
@@ -81,7 +85,7 @@ func apply_null(target: Minion) -> void:
 
 func play_stratagem(acting_player_id: String, card: CardData,
 					target_minion: Minion = null, target_player_id: String = "") -> bool:
-	if target_minion != null and target_minion.has_ability(Abilities.SAFEGUARD):
+	if target_minion != null and target_minion.has_ability(Abilities.SAFEGUARD) and card.effect != "eject_pilot":
 		return false
 	var acting = _get_player_by_id(acting_player_id)
 	if not acting.play_card_from_hand(card):
@@ -164,6 +168,20 @@ func apply_pilot(pilot_minion: Minion, target_mech: Minion, pilot_owner: PlayerS
 			if target_mech.has_ability(Abilities.ON_PILOTED_GAIN_SAFEGUARD):
 				if Abilities.SAFEGUARD not in target_mech.abilities:
 					target_mech.abilities.append(Abilities.SAFEGUARD)
+			if pilot_minion.has_ability(Abilities.PILOT_GIVES_RUSH):
+				if Abilities.RUSH not in target_mech.abilities:
+					target_mech.abilities.append(Abilities.RUSH)
+				target_mech.is_exhausted = false
+			if pilot_minion.has_ability(Abilities.PILOT_GIVES_SAFEGUARD):
+				if Abilities.SAFEGUARD not in target_mech.abilities:
+					target_mech.abilities.append(Abilities.SAFEGUARD)
+			if pilot_minion.has_ability(Abilities.PILOT_GIVES_GUARDIAN):
+				if Abilities.GUARDIAN not in target_mech.abilities:
+					target_mech.abilities.append(Abilities.GUARDIAN)
+			if target_mech.has_ability(Abilities.ON_PILOTED_STAT_BOOST):
+				target_mech.current_attack += 1
+				target_mech.current_health += 1
+				target_mech.max_health += 1
 			if hp_bonus > 0:
 				_try_apothecary_bonus(target_mech.owner_id, target_mech)
 			_try_health_transform(target_mech)
@@ -321,10 +339,23 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 				_check_win_condition()
 		"heal":
 			if target_minion:
-				target_minion.current_health = min(target_minion.current_health + card.effect_value, target_minion.max_health)
+				var pre := target_minion.current_health
+				if target_minion.current_health >= target_minion.max_health:
+					target_minion.max_health += 1
+					target_minion.current_health += 1
+					_try_heal_to_draw(target_minion, 1)
+					_try_apothecary_bonus(target_minion.owner_id, target_minion)
+				else:
+					target_minion.current_health = min(target_minion.current_health + card.effect_value, target_minion.max_health)
+					_try_heal_to_draw(target_minion, target_minion.current_health - pre)
 		"eject_pilot":
 			if target_minion != null and target_minion.is_piloted:
 				apply_eject_pilot(target_minion, _get_player_by_id(acting_player_id))
+		"eject_all_pilots":
+			var acting := _get_player_by_id(acting_player_id)
+			for minion in acting.board.duplicate():
+				if minion.is_piloted:
+					apply_eject_pilot(minion, acting)
 
 func _remove_dead_minions() -> void:
 	var any_removed := true
@@ -454,9 +485,18 @@ func _try_apothecary_bonus(owner_id: String, target: Minion) -> void:
 	var owner = _get_player_by_id(owner_id)
 	for m in owner.board:
 		if m.has_ability(Abilities.APOTHECARY):
+			var pre := target.current_health
 			target.current_health += 1
 			target.max_health += 1
+			_try_heal_to_draw(target, target.current_health - pre)
 			return
+
+func _try_heal_to_draw(target: Minion, gained: int) -> void:
+	if gained <= 0 or not target.has_ability(Abilities.HEAL_TO_DRAW):
+		return
+	target.current_health -= gained
+	target.max_health -= gained
+	_get_player_by_id(target.owner_id).draw_card()
 
 func _try_mirror_transform(new_data: CardData, transforming: Minion, owner: PlayerState) -> void:
 	var candidates: Array[Minion] = []

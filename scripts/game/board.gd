@@ -9,6 +9,10 @@ extends Node2D
 @onready var coinflip_label: Label = $CenterBar/CoinflipLabel
 @onready var turn_label: Label = $CenterBar/TurnLabel
 @onready var mana_label: RichTextLabel = $CenterBar/ManaLabel
+var _mana_dots: Array[Panel] = []
+var _drag_tween: Tween = null
+var _flash_cost: int = 0
+var _flash_start: int = 0
 @onready var player_hero: Panel = $PlayerHero
 @onready var opponent_hero: Panel = $OpponentHero
 @onready var card_preview_zone: Control = $CardPreviewZone
@@ -33,6 +37,7 @@ var _yeti_select_mode: bool = false
 var _tank_shot_mode: bool = false
 var _null_mode: bool = false
 var _buff_friendly_mode: bool = false
+var _on_play_pilot_mode: bool = false
 var _player_deck_icon: Node2D
 var _deck_count_label: Label
 
@@ -50,11 +55,23 @@ signal yeti_selected(minion: Minion)
 signal tank_shot_resolved(target_minion: Minion, target_player_id: String)
 signal null_target_selected(target: Minion)
 signal buff_friendly_target_selected(target: Minion)
+signal on_play_pilot_target_selected(target: Minion)
 
 func _ready() -> void:
-	mana_label.scroll_active = false
-	mana_label.custom_minimum_size = Vector2(150, 0)
-	mana_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	mana_label.hide()
+	var dot_container := HBoxContainer.new()
+	dot_container.add_theme_constant_override("separation", 3)
+	dot_container.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	mana_label.get_parent().add_child(dot_container)
+	var _dot_style_filled := StyleBoxFlat.new()
+	_dot_style_filled.bg_color = Color.WHITE
+	_dot_style_filled.set_corner_radius_all(6)
+	for i in 10:
+		var dot := Panel.new()
+		dot.custom_minimum_size = Vector2(12, 12)
+		dot.add_theme_stylebox_override("panel", _dot_style_filled)
+		dot_container.add_child(dot)
+		_mana_dots.append(dot)
 	end_turn_button.pressed.connect(_on_end_turn_pressed)
 	_create_decline_button()
 	set_process_input(true)
@@ -106,6 +123,19 @@ func _end_on_play_damage_mode(target_minion: Minion, target_player_id: String) -
 	_highlight_hero(opponent_hero, false)
 	hide_decline_button()
 	on_play_damage_target_selected.emit(target_minion, target_player_id)
+
+func start_on_play_pilot_targeting(pilot: Minion) -> void:
+	_on_play_pilot_mode = true
+	_piloting_minion = pilot
+	_highlight_mech_targets(true)
+	show_decline_button("Cancel")
+
+func _end_on_play_pilot_mode(target: Minion) -> void:
+	_highlight_mech_targets(false)
+	_on_play_pilot_mode = false
+	_piloting_minion = null
+	hide_decline_button()
+	on_play_pilot_target_selected.emit(target)
 
 func _end_pilot_mode(target: Minion) -> void:
 	var pilot_id = _piloting_minion.instance_id if _piloting_minion else ""
@@ -214,6 +244,8 @@ func _on_decline_pressed() -> void:
 		_end_yeti_select_mode(null)
 	elif _tank_shot_mode:
 		_end_tank_shot_mode(null, "")
+	elif _on_play_pilot_mode:
+		_end_on_play_pilot_mode(null)
 	elif _null_mode:
 		_end_null_mode(null)
 	elif _buff_friendly_mode:
@@ -468,7 +500,31 @@ func _highlight_hero(hero: Panel, value: bool) -> void:
 	else:
 		hero.remove_theme_stylebox_override("panel")
 
+func _on_card_drag_started(card: Card) -> void:
+	_stop_mana_flash()
+	_flash_start = game_state.player.current_mana
+	_flash_cost = mini(card.data.effective_cost(), _mana_dots.size() - _flash_start)
+	if _flash_cost <= 0:
+		return
+	_drag_tween = create_tween().set_loops()
+	_drag_tween.tween_method(_set_flash_alpha, 1.0, 0.15, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_drag_tween.tween_method(_set_flash_alpha, 0.15, 1.0, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+func _set_flash_alpha(alpha: float) -> void:
+	for i in _flash_cost:
+		_mana_dots[_flash_start + i].modulate.a = alpha
+
+func _stop_mana_flash() -> void:
+	if _drag_tween and _drag_tween.is_valid():
+		_drag_tween.kill()
+	_drag_tween = null
+	_flash_cost = 0
+	_flash_start = 0
+	for dot in _mana_dots:
+		dot.modulate.a = 1.0
+
 func _on_card_dropped(card: Card) -> void:
+	_stop_mana_flash()
 	_highlight_board_zone(false)
 	_highlight_all_targets(false)
 	_dragging_stratagem = false
@@ -509,7 +565,7 @@ func _on_card_dropped(card: Card) -> void:
 				if target_card is Card:
 					var rect = wrapper.get_global_rect().grow(10)
 					if rect.has_point(mouse_pos):
-						if target_card.minion.has_ability(Abilities.SAFEGUARD):
+						if target_card.minion.has_ability(Abilities.SAFEGUARD) and not _stratagem_needs_friendly_piloted_mech(card.data):
 							continue
 						if _stratagem_needs_friendly_yeti(card.data):
 							if zone != player_board_zone or not target_card.minion.has_ability(Abilities.YETI):
@@ -575,6 +631,7 @@ func _refresh_hand() -> void:
 		card.scale = Vector2(0.5, 0.5)
 		card.is_in_hand = true
 		card.dropped.connect(_on_card_dropped)
+		card.drag_started.connect(_on_card_drag_started)
 		card.setup(card_data)
 		card.set_playable(game_state.player.can_play_card(card_data))
 		wrapper.button_down.connect(card.start_drag)
@@ -640,8 +697,13 @@ func _refresh_ui() -> void:
 	var is_my_turn = game_state.is_local_player_turn()
 	end_turn_button.disabled = not is_my_turn
 	turn_label.text = "Turn %d" % game_state.turn_number
-	var spent = game_state.player.max_mana - game_state.player.current_mana
-	mana_label.text = "[color=white]" + "●".repeat(game_state.player.current_mana) + "[/color][color=#555555]" + "●".repeat(spent) + "[/color]"
+	for i in _mana_dots.size():
+		var dot = _mana_dots[i]
+		if i < game_state.player.max_mana:
+			dot.show()
+			dot.modulate = Color.WHITE if i < game_state.player.current_mana else Color(0.25, 0.25, 0.25)
+		else:
+			dot.hide()
 	_deck_count_label.text = str(game_state.player.get_deck_size())
 
 # --- Board minion click (for attacking) ---
@@ -656,6 +718,10 @@ func _on_player_minion_clicked(card: Card) -> void:
 		if card.minion.has_ability(Abilities.YETI):
 			_end_yeti_select_mode(card.minion)
 		return
+	if _on_play_pilot_mode:
+		if card.minion.has_ability(Abilities.MECH) and not card.minion.is_piloted and card.minion != _piloting_minion:
+			_end_on_play_pilot_mode(card.minion)
+		return
 	if _pilot_mode:
 		if card.minion.has_ability(Abilities.MECH) and not card.minion.is_piloted and card.minion != _piloting_minion:
 			_end_pilot_mode(card.minion)
@@ -663,23 +729,31 @@ func _on_player_minion_clicked(card: Card) -> void:
 	if selected_attacker == card:
 		_clear_selections()
 		return
-	if _has_pilot_ability(card.minion) and _has_mech_target(card.minion):
-		_clear_selections()
-		selected_attacker = card
-		card.set_selected(true)
-		_pilot_mode = true
+	# If a pilot is already selected and we click a valid friendly mech → pilot it
+	if selected_attacker != null and _has_pilot_ability(selected_attacker.minion):
+		if card.minion.has_ability(Abilities.MECH) and not card.minion.is_piloted and card.minion != selected_attacker.minion:
+			var pilot_card = selected_attacker
+			_clear_selections()
+			action_pilot.emit(pilot_card.minion.instance_id, card.minion.instance_id)
+			return
+	_clear_selections()
+	var is_pilot = _has_pilot_ability(card.minion)
+	var has_mech = _has_mech_target(card.minion)
+	var can_atk = card.minion.can_attack()
+	if not is_pilot and not can_atk:
+		return
+	selected_attacker = card
+	card.set_selected(true)
+	if can_atk:
+		_highlight_attack_targets(true)
+	if is_pilot and has_mech:
 		_piloting_minion = card.minion
 		_highlight_mech_targets(true)
-		show_decline_button("Cancel Pilot")
-		return
-	if card.minion.can_attack():
-		_clear_selections()
-		selected_attacker = card
-		card.set_selected(true)
-		_highlight_attack_targets(true)
+	if is_pilot or can_atk:
+		show_decline_button("Cancel")
 
 func _on_enemy_minion_clicked(card: Card) -> void:
-	if not selected_attacker or _pilot_mode:
+	if not selected_attacker or _on_play_pilot_mode:
 		return
 	# Taunt check
 	var taunts = game_state.opponent.get_guardian_minions()
@@ -694,7 +768,7 @@ func _on_enemy_minion_clicked(card: Card) -> void:
 	_clear_selections()
 
 func _on_enemy_hero_clicked() -> void:
-	if not selected_attacker or _pilot_mode:
+	if not selected_attacker or _on_play_pilot_mode:
 		return
 	var taunts = game_state.opponent.get_guardian_minions()
 	if not taunts.is_empty():
@@ -733,11 +807,11 @@ func _clear_selections() -> void:
 	selected_attacker = null
 	_highlight_attack_targets(false)
 	_highlight_hero(opponent_hero, false)
+	_highlight_mech_targets(false)
+	_piloting_minion = null
+	hide_decline_button()
 	if _pilot_mode:
-		_highlight_mech_targets(false)
 		_pilot_mode = false
-		_piloting_minion = null
-		hide_decline_button()
 	if _yeti_select_mode:
 		_yeti_select_mode = false
 		hide_decline_button()
@@ -1077,7 +1151,7 @@ func show_transform_picker(options: Array[CardData]) -> CardData:
 	return chosen
 
 func _stratagem_needs_target(data: CardData) -> bool:
-	return data.effect not in ["destroy_all_creatures", "deal_damage_all_creatures", "deal_damage_all_enemy", "buff_all_friendly_attack"]
+	return data.effect not in ["destroy_all_creatures", "deal_damage_all_creatures", "deal_damage_all_enemy", "buff_all_friendly_attack", "eject_all_pilots"]
 
 func _stratagem_needs_creature_target(data: CardData) -> bool:
 	return data.effect in ["give_ability", "buff_creature", "buff_health", "force_challenge", "poke_bear", "blood_transfusion", "sanguine", "heal", "eject_pilot"]

@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3 uid="uid://cspvyss0uahwd"]
+[gd_scene load_steps=3 format=3 uid="uid://cspvyss0uahwd"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_uvs1o"]
 bg_color = Color(0.215686, 0.611765, 1, 0.996078)
@@ -12,6 +12,13 @@ corner_radius_top_right = 6
 corner_radius_bottom_right = 6
 corner_radius_bottom_left = 6
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_star"]
+bg_color = Color(0.95, 0.95, 1, 0.85)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
 [node name="CardBack" type="Node2D"]
 
 [node name="Panel" type="Panel" parent="."]
@@ -20,12 +27,10 @@ offset_right = 40.0
 offset_bottom = 40.0
 theme_override_styles/panel = SubResource("StyleBoxFlat_uvs1o")
 
-[node name="Label" type="Label" parent="Panel"]
+[node name="Star" type="Panel" parent="Panel"]
 layout_mode = 0
-offset_left = 35.0
-offset_top = 60.0
-offset_right = 75.0
-offset_bottom = 100.0
-text = "✦"
-horizontal_alignment = 1
-vertical_alignment = 1
+offset_left = 37.0
+offset_top = 62.0
+offset_right = 73.0
+offset_bottom = 98.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_star")

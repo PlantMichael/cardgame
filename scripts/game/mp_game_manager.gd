@@ -124,6 +124,9 @@ func _host_on_play_card(card_data: CardData) -> void:
 	_send_state()
 	await _host_process_pending()
 	await _host_run_on_play(minion)
+	await _host_announce_pending_draws()
+	board.refresh()
+	_send_state()
 
 func _host_on_attack(attacker_id: String, target_type: String, target_id: String) -> void:
 	var attacker := _find_minion(HOST_ID, attacker_id)
@@ -223,6 +226,9 @@ func _host_run_guest_turn() -> void:
 				_send_state()
 				await _host_process_pending()
 				await _host_run_guest_on_play(minion)
+				await _guest_announce_pending_draws()
+				board.refresh()
+				_send_state()
 
 		elif t == "action_attack":
 			var attacker := _find_minion(GUEST_ID, str(action.get("attacker_id", "")))
@@ -565,6 +571,15 @@ func _host_run_on_play(minion: Minion) -> void:
 			if game_state.current_phase == GameState.Phase.GAME_OVER:
 				_handle_game_over()
 				return
+	if minion.has_ability(Abilities.ON_PLAY_PILOT_MECH):
+		var has_target = game_state.player.board.any(func(m): return m != minion and m.has_ability(Abilities.MECH) and not m.is_piloted)
+		if has_target:
+			board.start_on_play_pilot_targeting(minion)
+			var target: Minion = await board.on_play_pilot_target_selected
+			if target != null:
+				game_state.apply_pilot(minion, target, game_state.player)
+				board.refresh()
+				_send_state()
 	if minion.has_ability(Abilities.ON_PLAY_CHALLENGE_WIN_BUFF) and not game_state.opponent.board.is_empty():
 		board.start_challenge_targeting(minion)
 		var target: Minion = await board.challenge_target_selected
@@ -618,6 +633,38 @@ func _host_run_guest_on_play(minion: Minion) -> void:
 			_relay_animate_challenge(minion.instance_id, GUEST_ID, target.instance_id)
 			board.refresh()
 			_send_state()
+			await _host_process_pending()
+			if game_state.current_phase == GameState.Phase.GAME_OVER:
+				_handle_game_over()
+	if minion.has_ability(Abilities.ON_PLAY_PILOT_MECH):
+		var has_target = game_state.opponent.board.any(func(m): return m != minion and m.has_ability(Abilities.MECH) and not m.is_piloted)
+		if has_target:
+			Net.relay({"type": "prompt_on_play_pilot", "pilot_id": minion.instance_id})
+			_send_state()
+			var resp: Dictionary = await Net.await_relay_of_type("response_on_play_pilot")
+			var target := _find_minion(GUEST_ID, str(resp.get("target_id", "")))
+			if target != null:
+				game_state.apply_pilot(minion, target, game_state.opponent)
+				board.refresh()
+				_send_state()
+	if minion.has_ability(Abilities.ON_PLAY_CHALLENGE_WIN_BUFF) and not game_state.player.board.is_empty():
+		Net.relay({"type": "prompt_challenge", "challenger_id": minion.instance_id})
+		_send_state()
+		var resp: Dictionary = await Net.await_relay_of_type("response_challenge")
+		var target := _find_minion(HOST_ID, str(resp.get("target_id", "")))
+		if target != null:
+			game_state.apply_challenge(minion, target)
+			await board.animate_creature_challenge(minion.instance_id, GUEST_ID, target.instance_id)
+			_relay_animate_challenge(minion.instance_id, GUEST_ID, target.instance_id)
+			board.refresh()
+			_send_state()
+			if minion in game_state.opponent.board and target not in game_state.player.board:
+				minion.current_attack += 1
+				minion.current_health += 1
+				minion.max_health += 1
+				game_state._try_apothecary_bonus(GUEST_ID, minion)
+				board.refresh()
+				_send_state()
 			await _host_process_pending()
 			if game_state.current_phase == GameState.Phase.GAME_OVER:
 				_handle_game_over()
@@ -828,6 +875,14 @@ func _guest_respond_to_prompt(prompt: Dictionary) -> void:
 				"target_minion_id": result[0].instance_id if result[0] != null else "",
 				"target_player_id": result[1] if result[0] == null else "",
 			})
+		"prompt_on_play_pilot":
+			var pilot := _find_minion(GUEST_ID, str(prompt.get("pilot_id", "")))
+			if pilot != null:
+				board.start_on_play_pilot_targeting(pilot)
+				var target: Minion = await board.on_play_pilot_target_selected
+				Net.relay({"type": "response_on_play_pilot", "target_id": target.instance_id if target != null else ""})
+			else:
+				Net.relay({"type": "response_on_play_pilot", "target_id": ""})
 		"prompt_challenge":
 			var challenger := _find_minion(GUEST_ID, str(prompt.get("challenger_id", "")))
 			if challenger != null and not game_state.opponent.board.is_empty():

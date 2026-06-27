@@ -142,7 +142,7 @@
 	{
 		"id": "t_012",
 		"card_name": "Yeti Poker",
-		"cost": 4,
+		"cost": 3,
 		"color": "TEAL",
 		"card_type": "CREATURE",
 		"rarity": "COMMON",

@@ -17,13 +17,34 @@
 		"effect_value": 0
 	},
 	{
+		"id": "cr_018",
+		"card_name": "Fletchling",
+		"cost": 2,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "On play: Transform into a 2/1 bat with rush or a 1/2 gargoyle with guardian.",
+		"attack": 3,
+		"health": 3,
+		"abilities": [
+			"on_play_transform_choice"
+		],
+		"transform_choices": [
+			"cr_005t",
+			"cr_007t"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "cr_003",
 		"card_name": "Haven Guard",
 		"cost": 2,
 		"color": "CRIMSON",
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
-		"tribe": "sprite",
+		"tribe": "",
 		"description": "Transform when health reaches 5.",
 		"attack": 2,
 		"health": 3,
@@ -47,27 +68,6 @@
 		"health": 1,
 		"abilities": [
 			"rush"
-		],
-		"effect": "",
-		"effect_value": 0
-	},
-	{
-		"id": "cr_017",
-		"card_name": "Animus Soldier",
-		"cost": 3,
-		"color": "CRIMSON",
-		"card_type": "CREATURE",
-		"rarity": "COMMON",
-		"tribe": "",
-		"description": "On play: Transform into Bat with Guardian or rush",
-		"attack": 3,
-		"health": 3,
-		"abilities": [
-			"on_play_transform_choice"
-		],
-		"transform_choices": [
-			"cr_005t",
-			"cr_006t"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -245,7 +245,7 @@
 	},
 	{
 		"id": "cr_013",
-		"card_name": "Monstrosity",
+		"card_name": "Fleshraker",
 		"cost": 8,
 		"color": "CRIMSON",
 		"card_type": "CREATURE",
@@ -255,6 +255,23 @@
 		"attack": 8,
 		"health": 8,
 		"abilities": [],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_019",
+		"card_name": "Delos, the Crypt Priest",
+		"cost": 4,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "When this creature gains health, lose it and draw a card.",
+		"attack": 2,
+		"health": 3,
+		"abilities": [
+			"heal_to_draw"
+		],
 		"effect": "",
 		"effect_value": 0
 	},
@@ -296,7 +313,7 @@
 		"card_type": "STRATAGEM",
 		"rarity": "RARE",
 		"tribe": "",
-		"description": "Heal a creature for 3",
+		"description": "Heal a creature for 3. If it's full health, give it +1 max health",
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
@@ -399,9 +416,9 @@
 		"effect_value": 0
 	},
 	{
-		"id": "cr_006t",
-		"card_name": "Husky Bat",
-		"cost": 3,
+		"id": "cr_007t",
+		"card_name": "Warding Gargoyle",
+		"cost": 2,
 		"color": "CRIMSON",
 		"card_type": "CREATURE",
 		"rarity": "COMMON",

@@ -31,16 +31,16 @@ func draw_card() -> CardData:
 
 func gain_mana_crystal() -> void:
 	max_mana = min(max_mana + 1, MAX_MANA)
-	current_mana = max_mana
+	current_mana = 0
 
 func spend_mana(amount: int) -> bool:
-	if current_mana < amount:
+	if current_mana + amount > max_mana:
 		return false
-	current_mana -= amount
+	current_mana += amount
 	return true
 
 func can_play_card(card: CardData) -> bool:
-	return current_mana >= card.effective_cost()
+	return current_mana + card.effective_cost() <= max_mana
 
 func play_card_from_hand(card: CardData) -> bool:
 	if not can_play_card(card):

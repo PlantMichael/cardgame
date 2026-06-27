@@ -108,10 +108,11 @@
 		"card_type": "CREATURE",
 		"rarity": "EPIC",
 		"tribe": "",
-		"description": "Whenever you Rummage, draw a card.",
+		"description": "Recon. Whenever you Rummage, draw a card.",
 		"attack": 2,
 		"health": 2,
 		"abilities": [
+			"recon",
 			"rummage_draw"
 		],
 		"effect": "",
