@@ -88,7 +88,6 @@ General
 - Reworked the art of cards.
 - Slightly reworked mana. Cards will cost a certain amount of unit slots, and you only have so many unit slots per turn. Functionality is the exact same, but this leaves room for experimentation in the future. 
 
-
 Orange
 
 - Veteran Pilot now has "Recon"
@@ -113,6 +112,12 @@ Crimson
 Teal
 
 - Yeti Poker is now 3 mana (Was 4).
+
+Black
+
+- Trash Tallyer now has Recon.
+
+
 
 Known technical and gameplay issues
 
