@@ -8,7 +8,7 @@ extends Node2D
 @onready var end_turn_button: Button = $CenterBar/EndTurnButton
 @onready var coinflip_label: Label = $CenterBar/CoinflipLabel
 @onready var turn_label: Label = $CenterBar/TurnLabel
-@onready var mana_label: Label = $CenterBar/ManaLabel
+@onready var mana_label: RichTextLabel = $CenterBar/ManaLabel
 @onready var player_hero: Panel = $PlayerHero
 @onready var opponent_hero: Panel = $OpponentHero
 @onready var card_preview_zone: Control = $CardPreviewZone
@@ -52,6 +52,9 @@ signal null_target_selected(target: Minion)
 signal buff_friendly_target_selected(target: Minion)
 
 func _ready() -> void:
+	mana_label.scroll_active = false
+	mana_label.custom_minimum_size = Vector2(150, 0)
+	mana_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	end_turn_button.pressed.connect(_on_end_turn_pressed)
 	_create_decline_button()
 	set_process_input(true)
@@ -565,11 +568,11 @@ func _refresh_hand() -> void:
 	for card_data in game_state.player.hand:
 		var card = CardScene.instantiate()
 		var wrapper = Button.new()
-		wrapper.custom_minimum_size = Vector2(108, 155)
+		wrapper.custom_minimum_size = Vector2(112, 162)
 		wrapper.flat = true
 		player_hand_zone.add_child(wrapper)
 		wrapper.add_child(card)
-		card.scale = Vector2(0.85, 0.85)
+		card.scale = Vector2(0.5, 0.5)
 		card.is_in_hand = true
 		card.dropped.connect(_on_card_dropped)
 		card.setup(card_data)
@@ -597,13 +600,14 @@ func _refresh_boards() -> void:
 	for minion in game_state.player.board:
 		var card = CardScene.instantiate()
 		var wrapper = Control.new()
-		wrapper.custom_minimum_size = Vector2(108, 155)
+		wrapper.custom_minimum_size = Vector2(127, 184)
 		player_board_zone.add_child(wrapper)
 		wrapper.add_child(card)
-		card.scale = Vector2(0.85, 0.85)
-		card.position = Vector2(4, 12)
+		card.scale = Vector2(0.57, 0.57)
+		card.position = Vector2(2, 2)
 		card.setup_as_minion(minion)
 		card.set_can_attack(is_my_turn and minion.can_attack())
+		card.set_summoning_sick(minion.is_exhausted)
 		if minion.is_newly_reinforced:
 			minion.is_newly_reinforced = false
 			_blink_card_green(card)
@@ -614,11 +618,11 @@ func _refresh_boards() -> void:
 	for minion in game_state.opponent.board:
 		var card = CardScene.instantiate()
 		var wrapper = Control.new()
-		wrapper.custom_minimum_size = Vector2(108, 155)
+		wrapper.custom_minimum_size = Vector2(137, 198)
 		opponent_board_zone.add_child(wrapper)
 		wrapper.add_child(card)
-		card.scale = Vector2(0.85, 0.85)
-		card.position = Vector2(4, 12)
+		card.scale = Vector2(0.6125, 0.6125)
+		card.position = Vector2(2, 2)
 		card.setup_as_minion(minion)
 		card.set_can_attack(false)
 		if minion.is_newly_reinforced:
@@ -636,10 +640,8 @@ func _refresh_ui() -> void:
 	var is_my_turn = game_state.is_local_player_turn()
 	end_turn_button.disabled = not is_my_turn
 	turn_label.text = "Turn %d" % game_state.turn_number
-	mana_label.text = "%d / %d" % [
-		game_state.player.current_mana,
-		game_state.player.max_mana
-	]
+	var spent = game_state.player.max_mana - game_state.player.current_mana
+	mana_label.text = "[color=white]" + "●".repeat(game_state.player.current_mana) + "[/color][color=#555555]" + "●".repeat(spent) + "[/color]"
 	_deck_count_label.text = str(game_state.player.get_deck_size())
 
 # --- Board minion click (for attacking) ---
@@ -926,7 +928,7 @@ func show_graveyard_picker(options: Array[CardData]) -> CardData:
 		wrapper.flat = true
 		current_row.add_child(wrapper)
 		var card = CardScene.instantiate()
-		card.scale = Vector2(0.9, 0.9)
+		card.scale = Vector2(0.45, 0.45)
 		card.position = Vector2(4, 4)
 		wrapper.add_child(card)
 		card.setup(card_data)
@@ -1006,7 +1008,7 @@ func _open_graveyard_viewer() -> void:
 			wrapper.custom_minimum_size = Vector2(100, 148)
 			current_row.add_child(wrapper)
 			var card := CardScene.instantiate()
-			card.scale = Vector2(0.9, 0.9)
+			card.scale = Vector2(0.45, 0.45)
 			card.position = Vector2(4, 4)
 			wrapper.add_child(card)
 			card.setup(card_data)
@@ -1056,7 +1058,7 @@ func show_transform_picker(options: Array[CardData]) -> CardData:
 		wrapper.flat = true
 		cards_row.add_child(wrapper)
 		var card = CardScene.instantiate()
-		card.scale = Vector2(0.9, 0.9)
+		card.scale = Vector2(0.45, 0.45)
 		card.position = Vector2(4, 4)
 		wrapper.add_child(card)
 		card.setup(card_data)

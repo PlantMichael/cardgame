@@ -15,7 +15,7 @@ offset_right = 1920.0
 offset_bottom = 1080.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.0442546, 0.144949, 0.0349135, 1)
+color = Color(0.0872749, 0.113865, 0.146131, 1)
 
 [node name="OpponentHandZone" type="HBoxContainer" parent="."]
 offset_left = 300.0
@@ -69,9 +69,10 @@ text = "Turn 1"
 layout_mode = 2
 text = "END TURN"
 
-[node name="ManaLabel" type="Label" parent="CenterBar"]
+[node name="ManaLabel" type="RichTextLabel" parent="CenterBar"]
 layout_mode = 2
-text = "0 / 0"
+bbcode_enabled = true
+fit_content = true
 
 [node name="PlayerBoardZone" type="HBoxContainer" parent="."]
 offset_left = 300.0
@@ -123,11 +124,11 @@ theme_override_constants/separation = 2
 [node name="CardPreviewZone" type="Control" parent="."]
 layout_mode = 3
 anchors_preset = 0
-offset_left = 1700.0
+offset_left = 1590.0
 offset_top = 200.0
 offset_right = 1920.0
 offset_bottom = 760.0
 
 [node name="PreviewCard" parent="CardPreviewZone" instance=ExtResource("3_gyq52")]
-position = Vector2(-80, -11)
-scale = Vector2(2, 2)
+position = Vector2(0, 40)
+scale = Vector2(1.5, 1.5)

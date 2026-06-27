@@ -1,15 +1,15 @@
 class_name Card
 extends Area2D
 
-@onready var card_visual: PanelContainer = $CardVisual
-@onready var name_label: Label = $CardVisual/CardLayout/TopRow/NameLabel
-@onready var cost_badge: Panel = $CardVisual/CardLayout/TopRow/CostBadge
-@onready var cost_label: Label = $CardVisual/CardLayout/TopRow/CostBadge/CostLabel
-@onready var description_label: Label = $CardVisual/CardLayout/DescriptionLabel
-@onready var attack_label: Label = $CardVisual/CardLayout/StatsRow/AttackBadge/AttackLabel
-@onready var health_label: Label = $CardVisual/CardLayout/StatsRow/HealthBadge/HealthLabel
-@onready var art_texture: TextureRect = $CardVisual/CardLayout/ArtTexture
-@onready var stats_row: HBoxContainer = $CardVisual/CardLayout/StatsRow
+@onready var card_visual: Panel = $CardVisual
+@onready var name_label: Label = $NameLabel
+@onready var mana_dots_panel: Panel = $maxmana
+@onready var image_size_panel: Panel = $imagesize
+@onready var description_label: Label = $DescriptionLabel
+@onready var attack_label: Label = $AttackLabel
+@onready var health_label: Label = $HealthLabel
+@onready var art_texture: TextureRect = $ArtTexture
+@onready var stats_row: HBoxContainer = $StatsRow
 
 var data: CardData = null
 var minion: Minion = null
@@ -44,31 +44,58 @@ const CARD_BORDER_COLORS = {
 }
 
 func _ready() -> void:
-	pass
+	mana_dots_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	image_size_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+
+func _fit_label_to_width(label: Label, max_font: int) -> void:
+	var font := label.get_theme_font("font")
+	for size in range(max_font, 7, -1):
+		label.add_theme_font_size_override("font_size", size)
+		if font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x <= label.size.x:
+			return
+
+func _fit_label_to_height(label: Label, max_font: int) -> void:
+	var font := label.get_theme_font("font")
+	var line_spacing := label.get_theme_constant("line_spacing")
+	for size in range(max_font, 6, -1):
+		label.add_theme_font_size_override("font_size", size)
+		var sz := font.get_multiline_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, label.size.x, size)
+		var fh := font.get_height(size)
+		var line_count := ceili(sz.y / fh) if fh > 0 else 1
+		if sz.y + line_spacing * maxi(0, line_count - 1) <= label.size.y:
+			return
+
+func _fit_text() -> void:
+	_fit_label_to_width(name_label, 18)
+	_fit_label_to_height(description_label, 16)
 
 func setup(card_data: CardData) -> void:
 	data = card_data
 	name_label.text = card_data.card_name
-	cost_label.text = str(card_data.effective_cost())
-	_apply_cost_style(card_data.cost_modifier)
+	_update_mana_dots(card_data.effective_cost())
 	description_label.text = card_data.description
 	var is_creature = card_data.card_type == CardData.CardType.CREATURE
+	attack_label.visible = is_creature
+	health_label.visible = is_creature
 	stats_row.visible = is_creature
+	name_label.add_theme_color_override("font_color", Color.WHITE)
+	description_label.add_theme_color_override("font_color", Color.WHITE)
 	if is_creature:
 		attack_label.text = str(card_data.attack)
 		health_label.text = str(card_data.health)
-		attack_label.remove_theme_color_override("font_color")
-		health_label.remove_theme_color_override("font_color")
+		attack_label.add_theme_color_override("font_color", Color.WHITE)
+		health_label.add_theme_color_override("font_color", Color.WHITE)
 	update_piloted_token(false)
 	if card_data.art:
 		art_texture.texture = card_data.art
 	_apply_color_theme(card_data.color)
 	_update_tribe_tag(card_data.abilities)
+	call_deferred("_fit_text")
 
 func set_targeted(value: bool) -> void:
 	_is_highlighted_as_target = value
 	if value:
-		card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0.4, 0.1, 0.4, 0.8), Color(0.9, 0.3, 0.9, 1.0), 3))
+		card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0.4, 0.1, 0.4, 0.55), Color(0.9, 0.3, 0.9, 1.0), 3))
 	else:
 		# Restore appropriate state
 		if minion and minion.can_attack():
@@ -79,8 +106,7 @@ func set_targeted(value: bool) -> void:
 func setup_as_minion(m: Minion) -> void:
 	minion = m
 	setup(m.data)
-	cost_label.text = str(m.data.cost)
-	_apply_cost_style(0)
+	_update_mana_dots(m.data.cost)
 	attack_label.text = str(m.current_attack)
 	health_label.text = str(m.current_health)
 	_apply_stat_colors(m)
@@ -90,6 +116,7 @@ func setup_as_minion(m: Minion) -> void:
 	update_piloted_token(m.is_piloted)
 	update_reinforce_token(m.has_ability(Abilities.REINFORCE))
 	_update_tribe_tag(m.abilities)
+	call_deferred("_fit_text")
 
 func _apply_stat_colors(m: Minion) -> void:
 	const BLUE := Color(0.45, 0.75, 1.0)
@@ -99,20 +126,25 @@ func _apply_stat_colors(m: Minion) -> void:
 	elif m.current_attack < m.data.attack:
 		attack_label.add_theme_color_override("font_color", RED)
 	else:
-		attack_label.remove_theme_color_override("font_color")
+		attack_label.add_theme_color_override("font_color", Color.WHITE)
 	if m.current_health < m.max_health:
 		health_label.add_theme_color_override("font_color", RED)
 	elif m.max_health > m.data.health:
 		health_label.add_theme_color_override("font_color", BLUE)
 	else:
-		health_label.remove_theme_color_override("font_color")
+		health_label.add_theme_color_override("font_color", Color.WHITE)
 
 func set_playable(value: bool) -> void:
 	modulate = Color.WHITE if value else Color(0.5, 0.5, 0.5, 0.8)
 
+func set_summoning_sick(value: bool) -> void:
+	if value:
+		var border = CARD_BORDER_COLORS[data.color]
+		card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0.18, 0.05, 0.28, 0.75), border, 2))
+
 func set_can_attack(value: bool) -> void:
 	if value:
-		var s = _make_stylebox(CARD_COLORS[data.color], Color(1.0, 0.85, 0.2), 3)
+		var s = _make_stylebox(Color(0, 0, 0, 0), Color(1.0, 0.85, 0.2), 3)
 		card_visual.add_theme_stylebox_override("panel", s)
 	else:
 		_apply_color_theme(data.color)
@@ -137,12 +169,12 @@ func animate_transform() -> void:
 
 	# Ring of red orbs that spiral inward by rotating + shrinking their container
 	var swirl := Node2D.new()
-	swirl.position = Vector2(55, 80)
+	swirl.position = Vector2(110, 160)
 	add_child(swirl)
 
 	const NUM_ORBS := 8
-	const RADIUS := 54.0
-	const ORB_SIZE := Vector2(8, 8)
+	const RADIUS := 108.0
+	const ORB_SIZE := Vector2(16, 16)
 	for i in NUM_ORBS:
 		var orb := Panel.new()
 		orb.size = ORB_SIZE
@@ -186,7 +218,7 @@ func return_to_hand() -> void:
 		_original_parent.add_child(self)
 		_original_parent.move_child(self, min(_original_index, _original_parent.get_child_count()))
 	position = Vector2.ZERO
-	scale = Vector2(0.7, 0.7)
+	scale = Vector2(0.5, 0.5)
 	_dragging = false
 
 func _input(event: InputEvent) -> void:
@@ -199,28 +231,36 @@ func _input(event: InputEvent) -> void:
 		dropped.emit(self)
 
 func _apply_silenced_style() -> void:
-	card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0.22, 0.22, 0.25), Color(0.45, 0.45, 0.50), 2))
+	card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0.22, 0.22, 0.25, 0.55), Color(0.45, 0.45, 0.50), 2))
 	name_label.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55))
 	description_label.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55))
 
-func _apply_cost_style(modifier: int) -> void:
-	if modifier > 0:
-		var s := StyleBoxFlat.new()
-		s.bg_color = Color(0.75, 0.10, 0.10)
-		s.set_corner_radius_all(4)
-		cost_badge.add_theme_stylebox_override("panel", s)
-	elif modifier < 0:
-		var s := StyleBoxFlat.new()
-		s.bg_color = Color(0.10, 0.35, 0.75)
-		s.set_corner_radius_all(4)
-		cost_badge.add_theme_stylebox_override("panel", s)
-	else:
-		cost_badge.remove_theme_stylebox_override("panel")
+func _update_mana_dots(cost: int) -> void:
+	for child in mana_dots_panel.get_children():
+		child.queue_free()
+	var n := clampi(cost, 0, 10)
+	if n == 0:
+		return
+	const PANEL_W := 134.0
+	const PANEL_H := 18.0
+	const DOT_SIZE := 10.0
+	const DOT_GAP := 2.0
+	var total_w := n * DOT_SIZE + (n - 1) * DOT_GAP
+	var start_x := (PANEL_W - total_w) / 2.0
+	var dot_y := (PANEL_H - DOT_SIZE) / 2.0
+	for i in n:
+		var dot := Panel.new()
+		dot.size = Vector2(DOT_SIZE, DOT_SIZE)
+		dot.position = Vector2(start_x + i * (DOT_SIZE + DOT_GAP), dot_y)
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color.WHITE
+		style.set_corner_radius_all(5)
+		dot.add_theme_stylebox_override("panel", style)
+		mana_dots_panel.add_child(dot)
 
 func _apply_color_theme(color: CardData.CardColor) -> void:
-	var bg = CARD_COLORS[color]
 	var border = CARD_BORDER_COLORS[color]
-	card_visual.add_theme_stylebox_override("panel", _make_stylebox(bg, border, 2))
+	card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0, 0, 0, 0), border, 2))
 
 func _get_corner_radius() -> int:
 	if minion != null and data != null and data.rarity == CardData.CardRarity.LEGENDARY:

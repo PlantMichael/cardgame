@@ -99,6 +99,15 @@ func _find_minion(player_id: String, instance_id: String) -> Minion:
 			return m
 	return null
 
+func _relay_log(text: String) -> void:
+	Net.relay({"type": "log", "text": text})
+
+func _relay_animate_attack(attacker_id: String, attacker_player_id: String, target_id: String) -> void:
+	Net.relay({"type": "animate_attack", "attacker_id": attacker_id, "attacker_player_id": attacker_player_id, "target_id": target_id})
+
+func _relay_animate_challenge(challenger_id: String, challenger_player_id: String, target_id: String) -> void:
+	Net.relay({"type": "animate_challenge", "challenger_id": challenger_id, "challenger_player_id": challenger_player_id, "target_id": target_id})
+
 # ── Host: action handlers ─────────────────────────────────────────────────
 
 func _host_on_play_card(card_data: CardData) -> void:
@@ -108,6 +117,7 @@ func _host_on_play_card(card_data: CardData) -> void:
 	if minion == null:
 		return
 	board.log_action("You played %s" % card_data.card_name)
+	_relay_log("Opponent played %s" % card_data.card_name)
 	await get_tree().process_frame
 	await get_tree().process_frame
 	board.refresh()
@@ -123,10 +133,13 @@ func _host_on_attack(attacker_id: String, target_type: String, target_id: String
 		var target := _find_minion(GUEST_ID, target_id)
 		if target:
 			board.log_action("Your %s attacked opponent's %s" % [attacker.data.card_name, target.data.card_name])
+			_relay_log("Opponent's %s attacked your %s" % [attacker.data.card_name, target.data.card_name])
 			game_state.attack(attacker, target)
 			await board.animate_creature_attack(attacker_id, HOST_ID, target_id)
+			_relay_animate_attack(attacker_id, HOST_ID, target_id)
 	elif target_type == "hero":
 		board.log_action("Your %s attacked the opponent's hero" % attacker.data.card_name)
+		_relay_log("Opponent's %s attacked your hero" % attacker.data.card_name)
 		game_state.attack(attacker, null, target_id)
 	board.refresh()
 	_send_state()
@@ -141,6 +154,7 @@ func _host_on_play_stratagem(card_data: CardData, target_minion: Minion, target_
 		board.refresh()
 		return
 	board.log_action("You played %s" % card_data.card_name)
+	_relay_log("Opponent played %s" % card_data.card_name)
 	await get_tree().process_frame
 	await get_tree().process_frame
 	board.refresh()
@@ -163,6 +177,7 @@ func _host_on_pilot(pilot_id: String, target_id: String) -> void:
 			hp_bonus = Abilities.get_pilot_health(ability)
 			break
 	board.log_action("Your %s piloted %s (+%d/+%d)" % [pilot.data.card_name, target.data.card_name, atk_bonus, hp_bonus])
+	_relay_log("Opponent's %s piloted %s (+%d/+%d)" % [pilot.data.card_name, target.data.card_name, atk_bonus, hp_bonus])
 	game_state.apply_pilot(pilot, target, game_state.player)
 	board.refresh()
 	_send_state()
@@ -203,6 +218,7 @@ func _host_run_guest_turn() -> void:
 			var minion := game_state.play_creature(GUEST_ID, card)
 			if minion:
 				board.log_action("Opponent played %s" % card.card_name)
+				_relay_log("You played %s" % card.card_name)
 				board.refresh()
 				_send_state()
 				await _host_process_pending()
@@ -218,10 +234,13 @@ func _host_run_guest_turn() -> void:
 				var target := _find_minion(HOST_ID, target_id)
 				if target:
 					board.log_action("Opponent's %s attacked your %s" % [attacker.data.card_name, target.data.card_name])
+					_relay_log("Your %s attacked opponent's %s" % [attacker.data.card_name, target.data.card_name])
 					game_state.attack(attacker, target)
 					await board.animate_creature_attack(attacker.instance_id, GUEST_ID, target_id)
+					_relay_animate_attack(attacker.instance_id, GUEST_ID, target_id)
 			elif target_type == "hero":
 				board.log_action("Opponent's %s attacked your hero" % attacker.data.card_name)
+				_relay_log("Your %s attacked opponent's hero" % attacker.data.card_name)
 				game_state.attack(attacker, null, target_id)
 			board.refresh()
 			_send_state()
@@ -242,6 +261,7 @@ func _host_run_guest_turn() -> void:
 			if not game_state.play_stratagem(GUEST_ID, card, target_minion, target_player_id):
 				continue
 			board.log_action("Opponent played %s" % card.card_name)
+			_relay_log("You played %s" % card.card_name)
 			board.refresh()
 			_send_state()
 			await _host_stratagem_followup_for_guest(card, target_minion, action)
@@ -281,14 +301,16 @@ func _host_announce_pending_draws() -> void:
 func _host_process_tank_shots() -> void:
 	while not game_state.pending_tank_shots.is_empty():
 		var owner_id: String = game_state.pending_tank_shots.pop_front()
-		var source := "Your Tank" if owner_id == HOST_ID else "Opponent's Tank"
+		var host_source := "Your Tank" if owner_id == HOST_ID else "Opponent's Tank"
+		var guest_source := "Opponent's Tank" if owner_id == HOST_ID else "Your Tank"
 		if owner_id == HOST_ID:
 			board.start_tank_shot_targeting()
 			var result = await board.tank_shot_resolved
 			var dmg_target: Minion = result[0]
 			var dmg_player_id: String = result[1]
 			if dmg_target != null:
-				board.log_action("%s dealt 1 damage to %s" % [source, dmg_target.data.card_name])
+				board.log_action("%s dealt 1 damage to %s" % [host_source, dmg_target.data.card_name])
+				_relay_log("%s dealt 1 damage to %s" % [guest_source, dmg_target.data.card_name])
 				game_state.apply_on_play_damage(dmg_target, 1)
 			elif dmg_player_id != "":
 				game_state._get_player_by_id(dmg_player_id).hero_health -= 1
@@ -302,7 +324,8 @@ func _host_process_tank_shots() -> void:
 			if tmid != "":
 				var t := _find_minion_anywhere(tmid)
 				if t:
-					board.log_action("%s dealt 1 damage to %s" % [source, t.data.card_name])
+					board.log_action("%s dealt 1 damage to %s" % [host_source, t.data.card_name])
+					_relay_log("%s dealt 1 damage to %s" % [guest_source, t.data.card_name])
 					game_state.apply_on_play_damage(t, 1)
 			elif tpid != "":
 				game_state._get_player_by_id(tpid).hero_health -= 1
@@ -363,6 +386,7 @@ func _host_process_nulls() -> void:
 			var target: Minion = await board.null_target_selected
 			if target != null and (target in game_state.player.board or target in game_state.opponent.board):
 				board.log_action("Your %s silenced %s" % [source_name, target.data.card_name])
+				_relay_log("Opponent's %s silenced %s" % [source_name, target.data.card_name])
 				game_state.apply_null(target)
 		else:
 			Net.relay({"type": "prompt_null"})
@@ -371,6 +395,7 @@ func _host_process_nulls() -> void:
 			var t := _find_minion_anywhere(str(resp.get("target_id", "")))
 			if t:
 				board.log_action("Opponent's %s silenced %s" % [source_name, t.data.card_name])
+				_relay_log("Your %s silenced %s" % [source_name, t.data.card_name])
 				game_state.apply_null(t)
 		board.refresh()
 		_send_state()
@@ -386,6 +411,7 @@ func _host_process_buff_friendly() -> void:
 			var target: Minion = await board.buff_friendly_target_selected
 			if target != null and target in game_state.player.board:
 				board.log_action("Your Moonchild gave %s +1 max health" % target.data.card_name)
+				_relay_log("Opponent's Moonchild gave %s +1 max health" % target.data.card_name)
 				game_state.apply_buff_friendly_health(target)
 		else:
 			Net.relay({"type": "prompt_buff_friendly"})
@@ -394,6 +420,7 @@ func _host_process_buff_friendly() -> void:
 			var t := _find_minion_anywhere(str(resp.get("target_id", "")))
 			if t and t in game_state.opponent.board:
 				board.log_action("Opponent's Moonchild gave %s +1 max health" % t.data.card_name)
+				_relay_log("Your Moonchild gave %s +1 max health" % t.data.card_name)
 				game_state.apply_buff_friendly_health(t)
 		board.refresh()
 		_send_state()
@@ -411,6 +438,7 @@ func _host_process_reinforce_damages() -> void:
 			var dmg_player_id: String = result[1]
 			if dmg_target != null:
 				board.log_action("Your reinforced %s dealt %d damage to %s" % [source, damage, dmg_target.data.card_name])
+				_relay_log("Opponent's reinforced %s dealt %d damage to %s" % [source, damage, dmg_target.data.card_name])
 				game_state.apply_on_play_damage(dmg_target, damage)
 			elif dmg_player_id != "":
 				game_state._get_player_by_id(dmg_player_id).hero_health -= damage
@@ -462,10 +490,12 @@ func _host_process_overwatch() -> void:
 			chosen_yeti = _find_minion(GUEST_ID, yid) if yid != "" else null
 			target = _find_minion_anywhere(tid) if tid != "" else null
 		if chosen_yeti != null and target != null:
-			board.log_action("Overwatch: %s's %s challenged %s" % [owner_id, chosen_yeti.data.card_name, target.data.card_name])
-			game_state.apply_challenge(chosen_yeti, target)
 			var owner_player_id = HOST_ID if owner_id == HOST_ID else GUEST_ID
+			board.log_action("Overwatch: %s's %s challenged %s" % [owner_id, chosen_yeti.data.card_name, target.data.card_name])
+			_relay_log("Overwatch: %s's %s challenged %s" % [owner_id, chosen_yeti.data.card_name, target.data.card_name])
+			game_state.apply_challenge(chosen_yeti, target)
 			await board.animate_creature_challenge(chosen_yeti.instance_id, owner_player_id, target.instance_id)
+			_relay_animate_challenge(chosen_yeti.instance_id, owner_player_id, target.instance_id)
 			board.refresh()
 			_send_state()
 			if game_state.current_phase == GameState.Phase.GAME_OVER:
@@ -510,8 +540,10 @@ func _host_run_on_play(minion: Minion) -> void:
 		var target: Minion = await board.challenge_target_selected
 		if target != null:
 			board.log_action("Your %s challenged opponent's %s" % [minion.data.card_name, target.data.card_name])
+			_relay_log("Opponent's %s challenged your %s" % [minion.data.card_name, target.data.card_name])
 			game_state.apply_challenge(minion, target)
 			await board.animate_creature_challenge(minion.instance_id, HOST_ID, target.instance_id)
+			_relay_animate_challenge(minion.instance_id, HOST_ID, target.instance_id)
 			board.refresh()
 			_send_state()
 			await _host_process_pending()
@@ -526,6 +558,7 @@ func _host_run_on_play(minion: Minion) -> void:
 				continue
 			game_state.apply_challenge(minion, enemy)
 			await board.animate_creature_challenge(minion.instance_id, HOST_ID, enemy.instance_id)
+			_relay_animate_challenge(minion.instance_id, HOST_ID, enemy.instance_id)
 			board.refresh()
 			_send_state()
 			await _host_process_pending()
@@ -538,6 +571,7 @@ func _host_run_on_play(minion: Minion) -> void:
 		if target != null:
 			game_state.apply_challenge(minion, target)
 			await board.animate_creature_challenge(minion.instance_id, HOST_ID, target.instance_id)
+			_relay_animate_challenge(minion.instance_id, HOST_ID, target.instance_id)
 			board.refresh()
 			_send_state()
 			if minion in game_state.player.board and target not in game_state.opponent.board:
@@ -581,6 +615,7 @@ func _host_run_guest_on_play(minion: Minion) -> void:
 		if target != null:
 			game_state.apply_challenge(minion, target)
 			await board.animate_creature_challenge(minion.instance_id, GUEST_ID, target.instance_id)
+			_relay_animate_challenge(minion.instance_id, GUEST_ID, target.instance_id)
 			board.refresh()
 			_send_state()
 			await _host_process_pending()
@@ -595,6 +630,7 @@ func _host_stratagem_followup(card_data: CardData, target_minion: Minion) -> voi
 			if target != null:
 				game_state.apply_challenge(target_minion, target)
 				await board.animate_creature_challenge(target_minion.instance_id, HOST_ID, target.instance_id)
+				_relay_animate_challenge(target_minion.instance_id, HOST_ID, target.instance_id)
 				if card_data.effect_value > 0 and target.is_dead() and target_minion in game_state.player.board:
 					target_minion.current_attack += card_data.effect_value
 					target_minion.current_health += card_data.effect_value
@@ -609,6 +645,7 @@ func _host_stratagem_followup(card_data: CardData, target_minion: Minion) -> voi
 			if target != null:
 				game_state.apply_challenge(target_minion, target)
 				await board.animate_creature_challenge(target_minion.instance_id, HOST_ID, target.instance_id)
+				_relay_animate_challenge(target_minion.instance_id, HOST_ID, target.instance_id)
 				board.refresh()
 				_send_state()
 	if card_data.effect == "blood_transfusion" and target_minion != null and not game_state.player.board.is_empty():
@@ -635,6 +672,8 @@ func _host_stratagem_followup_for_guest(card_data: CardData, target_minion: Mini
 			var t := _find_minion(HOST_ID, str(resp.get("target_id", "")))
 			if t != null:
 				game_state.apply_challenge(target_minion, t)
+				await board.animate_creature_challenge(target_minion.instance_id, GUEST_ID, t.instance_id)
+				_relay_animate_challenge(target_minion.instance_id, GUEST_ID, t.instance_id)
 				if card_data.effect_value > 0 and t.is_dead() and target_minion in game_state.opponent.board:
 					target_minion.current_attack += card_data.effect_value
 					target_minion.current_health += card_data.effect_value
@@ -690,36 +729,61 @@ func _guest_send_end_turn() -> void:
 
 func _run_guest_loop() -> void:
 	while true:
-		# Drain any queued prompts first.
-		await _guest_handle_prompts()
+		if not await _guest_drain_queue():
+			return
+		if Net._relay_queue.is_empty():
+			await Net._queue_updated
 
-		# Wait for any incoming relay message.
-		await Net._queue_updated
-		await _guest_handle_prompts()
+# Drains all pending relay messages in order: prompts → log → animation → state.
+# Returns false when the game is over so the outer loop can exit.
+func _guest_drain_queue() -> bool:
+	while true:
+		var prompt = _peek_prompt()
+		if prompt != null:
+			Net._relay_queue.erase(prompt)
+			await _guest_respond_to_prompt(prompt)
+			continue
 
-		# Check for state_update — apply and log turn change.
+		var log_msg = Net.pop_of_type("log")
+		if log_msg != null:
+			board.log_action(str(log_msg.get("text", "")))
+			continue
+
+		var anim = Net.pop_of_type("animate_attack")
+		if anim != null:
+			await board.animate_creature_attack(
+				str(anim.get("attacker_id", "")),
+				str(anim.get("attacker_player_id", "")),
+				str(anim.get("target_id", ""))
+			)
+			continue
+
+		var ch_anim = Net.pop_of_type("animate_challenge")
+		if ch_anim != null:
+			await board.animate_creature_challenge(
+				str(ch_anim.get("challenger_id", "")),
+				str(ch_anim.get("challenger_player_id", "")),
+				str(ch_anim.get("target_id", ""))
+			)
+			continue
+
 		var state_msg = Net.pop_of_type("state_update")
 		if state_msg != null:
 			var was_my_turn := game_state != null and game_state.is_local_player_turn()
 			_apply_state(state_msg["state"])
 			if game_state.current_phase == GameState.Phase.GAME_OVER:
 				board.show_game_over(game_state.winner_id == GUEST_ID)
-				return
+				return false
 			var is_my_turn_now := game_state.is_local_player_turn()
 			if not was_my_turn and is_my_turn_now:
 				await _guest_announce_pending_draws()
 				board.log_action("--- Your Turn %d ---" % game_state.turn_number)
 			elif was_my_turn and not is_my_turn_now:
 				board.log_action("--- Opponent Turn %d ---" % game_state.turn_number)
+			continue
 
-func _guest_handle_prompts() -> void:
-	# Check for any outstanding prompts queued before this function ran
-	while true:
-		var prompt = _peek_prompt()
-		if prompt == null:
-			return
-		Net._relay_queue.erase(prompt)
-		await _guest_respond_to_prompt(prompt)
+		break
+	return true
 
 func _peek_prompt() -> Variant:
 	for msg in Net._relay_queue:

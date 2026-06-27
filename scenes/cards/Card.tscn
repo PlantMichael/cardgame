@@ -1,91 +1,101 @@
-[gd_scene load_steps=3 format=3 uid="uid://dur40h3mbtdyp"]
+[gd_scene load_steps=4 format=3 uid="uid://dur40h3mbtdyp"]
 
 [ext_resource type="Script" path="res://scripts/cards/card.gd" id="1_ad7jv"]
+[ext_resource type="Texture2D" uid="uid://c4xuj2iet8uxk" path="res://assets/card_template.png" id="2_cardtex"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_mef5l"]
-size = Vector2(80, 120)
+size = Vector2(220, 320)
 
 [node name="Card" type="Area2D"]
-scale = Vector2(0.7, 0.7)
 script = ExtResource("1_ad7jv")
 
-[node name="CardVisual" type="PanelContainer" parent="."]
-custom_minimum_size = Vector2(80, 120)
-offset_right = 110.0
-offset_bottom = 160.0
+[node name="Background" type="TextureRect" parent="."]
+offset_right = 220.0
+offset_bottom = 320.0
+texture = ExtResource("2_cardtex")
+expand_mode = 1
 
-[node name="CardLayout" type="VBoxContainer" parent="CardVisual"]
-custom_minimum_size = Vector2(110, 160)
-layout_mode = 2
-theme_override_constants/separation = 4
+[node name="CardVisual" type="Panel" parent="."]
+offset_right = 220.0
+offset_bottom = 320.0
 
-[node name="TopRow" type="HBoxContainer" parent="CardVisual/CardLayout"]
-custom_minimum_size = Vector2(110, 24)
-layout_mode = 2
-theme_override_constants/separation = 4
-
-[node name="CostBadge" type="Panel" parent="CardVisual/CardLayout/TopRow"]
-custom_minimum_size = Vector2(24, 24)
-layout_mode = 2
-
-[node name="CostLabel" type="Label" parent="CardVisual/CardLayout/TopRow/CostBadge"]
-layout_mode = 0
-anchor_right = 1.0
-anchor_bottom = 1.0
-theme_override_font_sizes/font_size = 0
-text = "0"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="NameLabel" type="Label" parent="CardVisual/CardLayout/TopRow"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_font_sizes/font_size = 13
-text = "Card Name"
-clip_text = true
-
-[node name="ArtTexture" type="TextureRect" parent="CardVisual/CardLayout"]
-custom_minimum_size = Vector2(110, 60)
-layout_mode = 2
+[node name="ArtTexture" type="TextureRect" parent="."]
+offset_left = 37.0
+offset_top = 47.0
+offset_right = 183.0
+offset_bottom = 141.0
+expand_mode = 1
 stretch_mode = 6
 
-[node name="DescriptionLabel" type="Label" parent="CardVisual/CardLayout"]
-custom_minimum_size = Vector2(110, 30)
-layout_mode = 2
-theme_override_font_sizes/font_size = 11
+[node name="maxname" type="Panel" parent="."]
+offset_left = 35.0
+offset_top = 158.0
+offset_right = 189.0
+offset_bottom = 182.0
+
+[node name="NameLabel" type="Label" parent="."]
+offset_left = 35.0
+offset_top = 158.0
+offset_right = 189.0
+offset_bottom = 182.0
+theme_override_font_sizes/font_size = 18
+text = "Card Name"
+horizontal_alignment = 1
+clip_text = true
+
+[node name="DescriptionLabel" type="Label" parent="."]
+offset_left = 39.0
+offset_top = 197.0
+offset_right = 182.0
+offset_bottom = 258.0
+theme_override_font_sizes/font_size = 16
 text = "Description"
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="StatsRow" type="HBoxContainer" parent="CardVisual/CardLayout"]
-layout_mode = 2
+[node name="AttackLabel" type="Label" parent="."]
+offset_left = 38.0
+offset_top = 266.0
+offset_right = 100.0
+offset_bottom = 302.0
+theme_override_font_sizes/font_size = 22
+text = "0"
+horizontal_alignment = 1
+
+[node name="HealthLabel" type="Label" parent="."]
+offset_left = 122.0
+offset_top = 266.0
+offset_right = 180.0
+offset_bottom = 303.0
+theme_override_font_sizes/font_size = 22
+text = "0"
+horizontal_alignment = 1
+
+[node name="StatsRow" type="HBoxContainer" parent="."]
+offset_left = 35.0
+offset_top = 262.0
+offset_right = 187.0
+offset_bottom = 304.0
 theme_override_constants/separation = 4
 
-[node name="AttackBadge" type="Panel" parent="CardVisual/CardLayout/StatsRow"]
-custom_minimum_size = Vector2(28, 20)
-layout_mode = 2
-
-[node name="AttackLabel" type="Label" parent="CardVisual/CardLayout/StatsRow/AttackBadge"]
-layout_mode = 0
-anchor_right = 1.0
-anchor_bottom = 1.0
-theme_override_font_sizes/font_size = 13
-text = "0"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="HealthBadge" type="Panel" parent="CardVisual/CardLayout/StatsRow"]
-custom_minimum_size = Vector2(28, 20)
-layout_mode = 2
-
-[node name="HealthLabel" type="Label" parent="CardVisual/CardLayout/StatsRow/HealthBadge"]
-layout_mode = 0
-anchor_right = 1.0
-anchor_bottom = 1.0
-theme_override_font_sizes/font_size = 13
-text = "0"
-horizontal_alignment = 1
-vertical_alignment = 1
-
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(110, 160)
 shape = SubResource("RectangleShape2D_mef5l")
+
+[node name="maxdesc" type="Panel" parent="."]
+offset_left = 39.0
+offset_top = 197.0
+offset_right = 182.0
+offset_bottom = 258.0
+
+[node name="maxmana" type="Panel" parent="."]
+offset_left = 44.0
+offset_top = 15.0
+offset_right = 178.0
+offset_bottom = 33.0
+
+[node name="imagesize" type="Panel" parent="."]
+offset_left = 37.0
+offset_top = 47.0
+offset_right = 183.0
+offset_bottom = 141.0

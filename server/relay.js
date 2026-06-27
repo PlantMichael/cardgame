@@ -20,6 +20,9 @@ function lobbyList() {
 }
 
 wss.on('connection', (ws) => {
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
+
   ws.on('message', (raw) => {
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
@@ -81,6 +84,16 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => _handleDisconnect(ws));
 });
+
+// Ping every 30s to keep connections alive through Railway's proxy.
+// Terminates any client that didn't respond to the last ping (dead connection).
+setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) { ws.terminate(); return; }
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 30000);
 
 function _handleDisconnect(ws) {
   const info = clients.get(ws);

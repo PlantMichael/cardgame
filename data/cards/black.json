@@ -292,6 +292,7 @@
 			"rummage",
 			"stinkpile_passive"
 		],
+		"art": "res://assets/stinkpile.jpg",
 		"effect": "",
 		"effect_value": 0
 	},

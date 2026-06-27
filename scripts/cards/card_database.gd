@@ -53,6 +53,9 @@ func _load_file(path: String) -> void:
 			new_choices.append(str(c))
 		data.transform_choices = new_choices
 		data.is_token = card_dict.get("is_token", false)
+		var art_path = card_dict.get("art", "")
+		if not art_path.is_empty():
+			data.art = load(art_path)
 		cards[data.id] = data
 
 func get_card(id: String) -> CardData:
