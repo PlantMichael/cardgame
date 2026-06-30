@@ -26,6 +26,24 @@ func max_copies_for(card: CardData) -> int:
 
 # ── Deck builders ──────────────────────────────────────────────────────
 
+func build_random_faction_deck(faction_color: CardData.CardColor) -> Array[CardData]:
+	var pool: Array[CardData] = []
+	for card in CardDatabase.get_all_cards():
+		if card.is_token:
+			continue
+		if card.color != faction_color and card.color != CardData.CardColor.GENERIC:
+			continue
+		var copies := max_copies_for(card)
+		for _i in copies:
+			pool.append(card)
+	pool.shuffle()
+	var deck: Array[CardData] = []
+	for card in pool:
+		if deck.size() >= MAX_DECK_SIZE:
+			break
+		deck.append(card)
+	return deck
+
 func build_deck_from_ids(ids: Array[String]) -> Array[CardData]:
 	var deck: Array[CardData] = []
 	for id in ids:

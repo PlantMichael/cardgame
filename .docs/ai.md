@@ -17,7 +17,10 @@
 - Handles the `ON_PLAY_YETI_CHALLENGE` ability: directs a friendly Yeti to challenge after a trigger card is played
 - Handles the `PILOT` ability: after playing a Pilot, buffs the strongest eligible Mech
 - Handles on-play damage: targets the highest-attack enemy minion it can kill; otherwise targets the biggest threat
-- Filters Safeguard minions from all stratagem target picks
+- Filters Cloaked and Ambush minions from all stratagem target picks
+- Filters Ambush minions from attack candidates and CHALLENGE_ALL loops
+- Handles `ON_PLAY_DEVOUR_FRIENDLY`: sacrifices the lowest-value (attack+health) friendly minion
+- Handles `ON_PLAY_SWAP_FRIENDLY_HEALTH`: gives health to highest-attack minion, takes from lowest-value minion
 - Plays `buff_all_friendly_attack` stratagems (e.g. Commanding Shout) when it has creatures on board
 
 ## Extending AI

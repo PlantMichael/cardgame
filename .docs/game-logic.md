@@ -81,17 +81,20 @@ var pending_tank_shots: Array[String] = []
 var pending_nulls: Array[Dictionary] = []
 var pending_overwatch_challenges: Array[String] = []
 var pending_buff_friendly_health: Array[String] = []
+var pending_tank_specialist_buffs: Array[String] = []
 var pending_on_reinforce_damages: Array[Dictionary] = []
+var temp_shielded: Array[Dictionary] = []
+var growvin_granted: Array[Dictionary] = []
 ```
 
 Key methods:
 - `start_game(first_player_id)` — deals 3 cards each, begins first turn
 - `end_turn()` — swaps active player, calls `_begin_turn()`
 - `play_creature(acting_player_id, card)` → returns `Minion`
-- `play_stratagem(acting_player_id, card, target_minion, target_player_id)` → bool; returns false if target has Safeguard or player can't afford it
+- `play_stratagem(acting_player_id, card, target_minion, target_player_id)` → bool; returns false if target has Cloaked (enemy only) or Ambush (enemy only) or player can't afford it
 - `attack(attacker, target_minion, target_player_id)` — enforces taunt, resolves damage, removes dead minions
 - `apply_challenge(challenger: Minion, target: Minion)` — resolves mini-combat between two minions (used by CHALLENGE ability)
-- `apply_on_play_damage(target: Minion, damage: int)` — applies direct damage and checks win condition
+- `apply_on_play_damage(target: Minion, damage: int, source_player_id: String = "")` — applies direct damage (plus ENEMY_DAMAGE_AMP bonus if source_player_id provided) and checks win condition
 - `apply_pilot(pilot_minion, target_mech, pilot_owner)` — buffs mech with pilot stats, removes pilot from board; triggers `ON_PILOTED_GAIN_RUSH` if present
 - `apply_eject_pilot(target_mech, owner)` — reverses a pilot merge: restores mech stats, returns pilot card to board (or hand if board full); reusable from any card effect
 - `apply_null(target: Minion)` — clears all abilities from target and sets `is_nulled = true`
@@ -100,7 +103,9 @@ Key methods:
 - `apply_heal_buff(target: Minion, amount: int)` — gives target +amount max and current health; triggers Apothecary and health-threshold transform
 Key methods also include:
 Rummage methods:
-- `get_rummage_options(player_id, max_cost, type_filter)` → `Array[CardData]`; returns unique graveyard cards matching filters (`""`, `"creature"`, `"stratagem"`, `"mech"`); `max_cost = -1` means no cost filter
+- `get_rummage_options(player_id, max_cost, type_filter, allow_equal_cost: bool = false)` → `Array[CardData]`; returns unique graveyard cards matching filters (`""`, `"creature"`, `"stratagem"`, `"mech"`, `"creature_nonlegendary"`); `max_cost = -1` means no cost filter; `allow_equal_cost` makes the cost filter inclusive (≤ instead of <)
+- `apply_swap_friendly_health(minion_a, minion_b)` — swaps current_health between two minions, each capped at the other's max_health; removes dead minions afterward
+- `apply_devour_friendly(devourer, target, owner)` — removes target from board (added to graveyard), grants `ceil(target.current_health / 2)` to devourer's max and current health
 - `complete_rummage(player_id, card, play_it: bool = false, discount: bool = true)` — removes card from graveyard; if `play_it` is true (or Stinkpile is on board) and card is a creature with board space, places it directly; otherwise adds to hand with optional `-1 cost_modifier` (black rummage only — non-black fetch mechanics pass `discount: false`)
 
 Stratagem effects handled in `_apply_stratagem()`:
@@ -115,5 +120,7 @@ Stratagem effects handled in `_apply_stratagem()`:
 - `"sanguine"` — deals N damage to a target friendly creature; a second prompt selects another friendly to receive +N health
 - `"heal"` — restores N health to target minion (capped at max_health)
 - `"eject_pilot"` — reverses a pilot merge on a friendly piloted Mech; calls `apply_eject_pilot()`
+- `"eject_all_pilots"` — reverses all pilot merges on all friendly piloted Mechs
+- `"destroy_all_creatures"` — sets every minion's health to 0 on both boards, then removes them all
 - `"deal_damage_all_enemy"` — deals `effect_value` damage to every enemy minion (no target needed); e.g. Noxious Bombardment
 - `"force_challenge"` — prompts player to pick a friendly Yeti to immediately challenge a chosen enemy; if `effect_value > 0` and the target dies, the Yeti gains +`effect_value`/+`effect_value`; e.g. Icewhip

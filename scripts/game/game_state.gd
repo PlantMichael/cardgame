@@ -15,7 +15,10 @@ var pending_tank_shots: Array[String] = []
 var pending_nulls: Array[Dictionary] = []
 var pending_overwatch_challenges: Array[String] = []
 var pending_buff_friendly_health: Array[String] = []
+var pending_tank_specialist_buffs: Array[String] = []
 var pending_on_reinforce_damages: Array[Dictionary] = []
+var temp_shielded: Array[Dictionary] = []
+var growvin_granted: Array[Dictionary] = []
 var _opening_hand_dealt: bool = false
 
 func _init(local_player_id: String, opponent_player_id: String,
@@ -43,6 +46,8 @@ func _begin_turn() -> void:
 	active.reset_for_new_turn()
 
 func end_turn() -> void:
+	_expire_temp_shields_for(active_player_id)
+	_apply_rejuvenate(active_player_id)
 	if active_player_id == player.player_id:
 		active_player_id = opponent.player_id
 		current_phase = Phase.OPPONENT_TURN
@@ -61,6 +66,14 @@ func play_creature(acting_player_id: String, card: CardData) -> Minion:
 	var minion = Minion.new(card, acting_player_id)
 	acting.place_minion(minion)
 	Abilities.fire_on_play(minion, acting, self)
+	if minion.has_ability(Abilities.MECH) and minion in acting.board:
+		var has_growvin := false
+		for _gm in acting.board:
+			if _gm != minion and _gm.has_ability(Abilities.GROWVIN_AURA):
+				has_growvin = true
+				break
+		if has_growvin:
+			_apply_growvin_aura_to_mech(minion, acting_player_id)
 	return minion
 
 func apply_buff_friendly_health(target: Minion) -> void:
@@ -79,14 +92,24 @@ func apply_heal_buff(target: Minion, amount: int) -> void:
 	_try_apothecary_bonus(target.owner_id, target)
 	_try_health_transform(target)
 
+func apply_tank_specialist_buff(target: Minion) -> void:
+	target.current_attack += 1
+	target.current_health += 2
+	target.max_health += 2
+	_try_apothecary_bonus(target.owner_id, target)
+	_try_health_transform(target)
+
 func apply_null(target: Minion) -> void:
 	target.abilities.clear()
 	target.is_nulled = true
 
 func play_stratagem(acting_player_id: String, card: CardData,
 					target_minion: Minion = null, target_player_id: String = "") -> bool:
-	if target_minion != null and target_minion.has_ability(Abilities.SAFEGUARD) and card.effect != "eject_pilot":
-		return false
+	if target_minion != null and card.effect != "eject_pilot":
+		if target_minion.has_ability(Abilities.CLOAKED) and target_minion.owner_id != acting_player_id:
+			return false
+		if target_minion.has_ability(Abilities.AMBUSH) and target_minion.owner_id != acting_player_id:
+			return false
 	var acting = _get_player_by_id(acting_player_id)
 	if not acting.play_card_from_hand(card):
 		return false
@@ -103,24 +126,48 @@ func attack(attacker: Minion, target_minion: Minion = null,
 	var guardians = defending.get_guardian_minions()
 	if not guardians.is_empty() and target_minion not in guardians:
 		return
+	if target_minion != null and target_minion.has_ability(Abilities.AMBUSH):
+		return
 
 	attacker.has_attacked = true
 	attacker.transform_counter += 1
+	if attacker.has_ability(Abilities.AMBUSH):
+		attacker.abilities.erase(Abilities.AMBUSH)
+
+	var attacker_shield := _get_shield_value(attacker)
+	var attacker_amp := _get_enemy_damage_amp(attacker.owner_id)
 
 	if target_minion:
+		var target_shield := _get_shield_value(target_minion)
 		if not target_minion.has_ability(Abilities.COMBAT_IMMUNE):
-			target_minion.take_damage(attacker.current_attack)
+			target_minion.take_damage(maxi(0, attacker.current_attack + attacker_amp - target_shield))
+			if attacker.has_ability(Abilities.VOIDTOUCH):
+				target_minion.current_health = mini(target_minion.current_health, 0)
 		if not attacker.has_ability(Abilities.COMBAT_IMMUNE):
-			attacker.take_damage(target_minion.current_attack)
+			attacker.take_damage(maxi(0, target_minion.current_attack - attacker_shield))
 		Abilities.fire_on_attack(attacker, _get_player_by_id(attacker.owner_id), self)
 		Abilities.fire_on_defend(target_minion, _get_player_by_id(target_minion.owner_id), self)
 		_remove_dead_minions()
 		var acting = _get_player_by_id(attacker.owner_id)
 		if attacker in acting.board:
 			_try_transform(attacker, acting)
+		# Dual Strike: automatic second hit on same target
+		if attacker.has_ability(Abilities.DUAL_STRIKE) and attacker in acting.board and target_minion in defending.board:
+			if not target_minion.has_ability(Abilities.COMBAT_IMMUNE):
+				target_minion.take_damage(maxi(0, attacker.current_attack + attacker_amp - target_shield))
+				if attacker.has_ability(Abilities.VOIDTOUCH):
+					target_minion.current_health = mini(target_minion.current_health, 0)
+			if not attacker.has_ability(Abilities.COMBAT_IMMUNE):
+				attacker.take_damage(maxi(0, target_minion.current_attack - attacker_shield))
+			Abilities.fire_on_attack(attacker, acting, self)
+			Abilities.fire_on_defend(target_minion, defending, self)
+			_remove_dead_minions()
+			if attacker in acting.board:
+				_try_transform(attacker, acting)
 	elif target_player_id != "":
 		var target_player = _get_player_by_id(target_player_id)
-		target_player.hero_health -= attacker.current_attack
+		var hits := 2 if attacker.has_ability(Abilities.DUAL_STRIKE) else 1
+		target_player.hero_health -= attacker.current_attack * hits
 		Abilities.fire_on_attack(attacker, _get_player_by_id(attacker.owner_id), self)
 		_try_transform(attacker, _get_player_by_id(attacker.owner_id))
 
@@ -129,10 +176,15 @@ func attack(attacker: Minion, target_minion: Minion = null,
 func apply_challenge(challenger: Minion, target: Minion) -> void:
 	var was_yeti = challenger.has_ability(Abilities.YETI)
 	var owner_id = challenger.owner_id
+	var challenger_shield := _get_shield_value(challenger)
+	var target_shield := _get_shield_value(target)
+	var challenger_amp := _get_enemy_damage_amp(challenger.owner_id)
 	if not target.has_ability(Abilities.COMBAT_IMMUNE):
-		target.take_damage(challenger.current_attack)
+		target.take_damage(maxi(0, challenger.current_attack + challenger_amp - target_shield))
+		if challenger.has_ability(Abilities.VOIDTOUCH):
+			target.current_health = mini(target.current_health, 0)
 	if not challenger.has_ability(Abilities.COMBAT_IMMUNE):
-		challenger.take_damage(target.current_attack)
+		challenger.take_damage(maxi(0, target.current_attack - challenger_shield))
 	_remove_dead_minions()
 	var owner = _get_player_by_id(owner_id)
 	if was_yeti and challenger in owner.board:
@@ -143,10 +195,47 @@ func apply_challenge(challenger: Minion, target: Minion) -> void:
 				challenger.max_health += 1
 				_try_apothecary_bonus(owner_id, challenger)
 				break
+
+	if was_yeti:
+		var enemy := _get_player_by_id(_opponent_id(owner_id))
+		for m in owner.board.duplicate():
+			if not m.has_ability(Abilities.ON_YETI_CHALLENGE_ATTACK) or not m.can_attack():
+				continue
+			if target not in enemy.board or current_phase == Phase.GAME_OVER:
+				break
+			var m_shield := _get_shield_value(m)
+			var t_shield := _get_shield_value(target)
+			var m_amp := _get_enemy_damage_amp(owner_id)
+			if not target.has_ability(Abilities.COMBAT_IMMUNE):
+				target.take_damage(maxi(0, m.current_attack + m_amp - t_shield))
+				if m.has_ability(Abilities.VOIDTOUCH):
+					target.current_health = mini(target.current_health, 0)
+			if not m.has_ability(Abilities.COMBAT_IMMUNE):
+				m.take_damage(maxi(0, target.current_attack - m_shield))
+			m.has_attacked = true
+			Abilities.fire_on_attack(m, owner, self)
+			_remove_dead_minions()
+			if m in owner.board:
+				_try_transform(m, owner)
+
 	_check_win_condition()
 
-func apply_on_play_damage(target: Minion, damage: int) -> void:
-	target.take_damage(damage)
+func apply_swap_friendly_health(minion_a: Minion, minion_b: Minion) -> void:
+	var a_health := minion_a.current_health
+	minion_a.current_health = mini(minion_b.current_health, minion_a.max_health)
+	minion_b.current_health = mini(a_health, minion_b.max_health)
+	_remove_dead_minions()
+
+func apply_devour_friendly(devourer: Minion, target: Minion, owner: PlayerState) -> void:
+	var gain := ceili(target.current_health / 2.0)
+	owner.remove_minion(target)
+	owner.graveyard.append(target.data)
+	devourer.max_health += gain
+	devourer.current_health += gain
+
+func apply_on_play_damage(target: Minion, damage: int, source_player_id: String = "") -> void:
+	var amp := _get_enemy_damage_amp(source_player_id) if source_player_id != "" else 0
+	target.take_damage(damage + amp)
 	_remove_dead_minions()
 	_check_win_condition()
 
@@ -165,16 +254,16 @@ func apply_pilot(pilot_minion: Minion, target_mech: Minion, pilot_owner: PlayerS
 				if Abilities.RUSH not in target_mech.abilities:
 					target_mech.abilities.append(Abilities.RUSH)
 				target_mech.is_exhausted = false
-			if target_mech.has_ability(Abilities.ON_PILOTED_GAIN_SAFEGUARD):
-				if Abilities.SAFEGUARD not in target_mech.abilities:
-					target_mech.abilities.append(Abilities.SAFEGUARD)
+			if target_mech.has_ability(Abilities.ON_PILOTED_GAIN_CLOAKED):
+				if Abilities.CLOAKED not in target_mech.abilities:
+					target_mech.abilities.append(Abilities.CLOAKED)
 			if pilot_minion.has_ability(Abilities.PILOT_GIVES_RUSH):
 				if Abilities.RUSH not in target_mech.abilities:
 					target_mech.abilities.append(Abilities.RUSH)
 				target_mech.is_exhausted = false
-			if pilot_minion.has_ability(Abilities.PILOT_GIVES_SAFEGUARD):
-				if Abilities.SAFEGUARD not in target_mech.abilities:
-					target_mech.abilities.append(Abilities.SAFEGUARD)
+			if pilot_minion.has_ability(Abilities.PILOT_GIVES_CLOAKED):
+				if Abilities.CLOAKED not in target_mech.abilities:
+					target_mech.abilities.append(Abilities.CLOAKED)
 			if pilot_minion.has_ability(Abilities.PILOT_GIVES_GUARDIAN):
 				if Abilities.GUARDIAN not in target_mech.abilities:
 					target_mech.abilities.append(Abilities.GUARDIAN)
@@ -188,6 +277,12 @@ func apply_pilot(pilot_minion: Minion, target_mech: Minion, pilot_owner: PlayerS
 			break
 	pilot_owner.remove_minion(pilot_minion)
 	pilot_owner.graveyard.append(pilot_minion.data)
+	for m in pilot_owner.board:
+		if m.has_ability(Abilities.ON_FRIENDLY_PILOT_DRAW):
+			var drawn = pilot_owner.draw_card()
+			if drawn != null and pilot_owner.player_id == player.player_id:
+				pending_drawn_cards.append(drawn)
+			break
 
 func apply_eject_pilot(target_mech: Minion, owner: PlayerState) -> Minion:
 	if not target_mech.is_piloted or target_mech.piloted_by == null:
@@ -275,7 +370,8 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 	match card.effect:
 		"deal_damage":
 			if target_minion:
-				target_minion.take_damage(card.effect_value)
+				var amp := _get_enemy_damage_amp(acting_player_id) if acting_player_id != "" else 0
+				target_minion.take_damage(card.effect_value + amp)
 				_remove_dead_minions()
 			elif target_player_id != "":
 				var target = _get_player_by_id(target_player_id)
@@ -313,8 +409,9 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 		"deal_damage_all_enemy":
 			var acting := _get_player_by_id(acting_player_id)
 			var enemy := opponent if acting == player else player
+			var amp := _get_enemy_damage_amp(acting_player_id) if acting_player_id != "" else 0
 			for minion in enemy.board.duplicate():
-				minion.take_damage(card.effect_value)
+				minion.take_damage(card.effect_value + amp)
 			_remove_dead_minions()
 			_check_win_condition()
 		"buff_all_friendly_attack":
@@ -356,6 +453,18 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 			for minion in acting.board.duplicate():
 				if minion.is_piloted:
 					apply_eject_pilot(minion, acting)
+		"give_mech_shielded_temp":
+			if target_minion and target_minion.has_ability(Abilities.MECH):
+				var ability := Abilities.SHIELDED + "_" + str(card.effect_value)
+				for existing in target_minion.abilities.duplicate():
+					if Abilities.is_shielded(existing):
+						target_minion.abilities.erase(existing)
+				target_minion.abilities.append(ability)
+				temp_shielded.append({
+					"instance_id": target_minion.instance_id,
+					"ability": ability,
+					"expires_after": _opponent_id(acting_player_id)
+				})
 
 func _remove_dead_minions() -> void:
 	var any_removed := true
@@ -374,6 +483,10 @@ func _remove_dead_minions() -> void:
 						pending_drawn_cards.append_array(death_result["drawn"])
 					for _i in death_result["tank_shots"]:
 						pending_tank_shots.append(p.player_id)
+					if minion.data.tribe == "tank":
+						for watcher in p.board:
+							if watcher.has_ability(Abilities.ON_FRIENDLY_TANK_DEATH_BUFF_TANK):
+								pending_tank_specialist_buffs.append(p.player_id)
 
 func _check_win_condition() -> void:
 	if opponent.is_dead():
@@ -383,19 +496,25 @@ func _check_win_condition() -> void:
 		winner_id = opponent.player_id
 		current_phase = Phase.GAME_OVER
 
-func get_rummage_options(player_id: String, max_cost: int = -1, type_filter: String = "") -> Array[CardData]:
+func get_rummage_options(player_id: String, max_cost: int = -1, type_filter: String = "", allow_equal_cost: bool = false) -> Array[CardData]:
 	var p = _get_player_by_id(player_id)
 	var seen_ids: Array[String] = []
 	var options: Array[CardData] = []
 	for card in p.graveyard:
-		if max_cost >= 0 and card.cost >= max_cost:
-			continue
+		if max_cost >= 0:
+			if allow_equal_cost and card.cost > max_cost:
+				continue
+			elif not allow_equal_cost and card.cost >= max_cost:
+				continue
 		if type_filter == "creature" and card.card_type != CardData.CardType.CREATURE:
 			continue
 		if type_filter == "stratagem" and card.card_type != CardData.CardType.STRATAGEM:
 			continue
 		if type_filter == "mech" and Abilities.MECH not in card.abilities:
 			continue
+		if type_filter == "creature_nonlegendary":
+			if card.card_type != CardData.CardType.CREATURE or card.rarity == CardData.CardRarity.LEGENDARY:
+				continue
 		if card.id not in seen_ids:
 			seen_ids.append(card.id)
 			options.append(card)
@@ -441,6 +560,7 @@ func to_net_dict() -> Dictionary:
 		"pending_tank_shots": pending_tank_shots.duplicate(),
 		"pending_nulls": pending_nulls.duplicate(true),
 		"pending_buff_friendly_health": pending_buff_friendly_health.duplicate(),
+		"pending_tank_specialist_buffs": pending_tank_specialist_buffs.duplicate(),
 		"pending_on_reinforce_damages": pending_on_reinforce_damages.duplicate(true),
 		"pending_overwatch_challenges": pending_overwatch_challenges.duplicate(),
 		"pending_drawn_cards": pending_drawn_cards.map(func(c): return c.id),
@@ -467,6 +587,9 @@ static func from_net_dict(d: Dictionary, my_id: String) -> GameState:
 	gs.pending_buff_friendly_health.clear()
 	for b in d.get("pending_buff_friendly_health", []):
 		gs.pending_buff_friendly_health.append(str(b))
+	gs.pending_tank_specialist_buffs.clear()
+	for b in d.get("pending_tank_specialist_buffs", []):
+		gs.pending_tank_specialist_buffs.append(str(b))
 	gs.pending_on_reinforce_damages.clear()
 	for od in d.get("pending_on_reinforce_damages", []):
 		gs.pending_on_reinforce_damages.append(od)
@@ -520,6 +643,99 @@ func _try_mirror_transform(new_data: CardData, transforming: Minion, owner: Play
 		if m.has_ability(Abilities.RUSH):
 			m.is_exhausted = false
 		m.is_newly_transformed = true
+
+	if transforming in owner.board:
+		for m in owner.board:
+			if m != transforming and m.has_ability(Abilities.ON_FRIENDLY_TRANSFORM_GIVE_AMBUSH):
+				if not transforming.has_ability(Abilities.AMBUSH):
+					transforming.abilities.append(Abilities.AMBUSH)
+		for m in owner.board:
+			if m != transforming and m.has_ability(Abilities.ON_FRIENDLY_TRANSFORM_BUFF_SELF):
+				m.current_attack += 1
+				m.current_health += 1
+				m.max_health += 1
+				_try_apothecary_bonus(owner.player_id, m)
+
+func _apply_rejuvenate(player_id: String) -> void:
+	var owner := _get_player_by_id(player_id)
+	var broodtender_active := owner.board.any(func(m): return m.has_ability(Abilities.BROODTENDER_AURA))
+	for m in owner.board:
+		var regen := 0
+		for ab in m.abilities:
+			if Abilities.is_rejuvenate(ab):
+				regen = maxi(regen, Abilities.get_rejuvenate_value(ab))
+				break
+		if broodtender_active and m.has_ability(Abilities.MONSTROSITY):
+			regen = maxi(regen, 2)
+		if regen > 0:
+			var pre := m.current_health
+			m.current_health = mini(m.current_health + regen, m.max_health)
+			var gained := m.current_health - pre
+			if gained > 0:
+				_try_heal_to_draw(m, gained)
+				_try_apothecary_bonus(player_id, m)
+
+func _expire_temp_shields_for(ending_player_id: String) -> void:
+	var keep: Array[Dictionary] = []
+	for entry in temp_shielded:
+		if entry["expires_after"] == ending_player_id:
+			var iid: String = entry["instance_id"]
+			var ab: String = entry["ability"]
+			for p in [player, opponent]:
+				for m in p.board:
+					if m.instance_id == iid:
+						m.abilities.erase(ab)
+		else:
+			keep.append(entry)
+	temp_shielded = keep
+
+func _apply_growvin_aura_to_mech(mech: Minion, owner_id: String) -> void:
+	for ab in [Abilities.CLOAKED, "shielded_1", "rejuvenate_1"]:
+		if mech.has_ability(ab):
+			continue
+		if ab == "shielded_1" and _get_shield_value(mech) > 0:
+			continue
+		if ab == "rejuvenate_1":
+			var has_regen := false
+			for existing in mech.abilities:
+				if Abilities.is_rejuvenate(existing):
+					has_regen = true
+					break
+			if has_regen:
+				continue
+		mech.abilities.append(ab)
+		growvin_granted.append({"instance_id": mech.instance_id, "ability": ab, "owner_id": owner_id})
+
+func _remove_growvin_aura(owner_id: String) -> void:
+	for m in _get_player_by_id(owner_id).board:
+		if m.has_ability(Abilities.GROWVIN_AURA):
+			return
+	var keep: Array[Dictionary] = []
+	for entry in growvin_granted:
+		if entry["owner_id"] != owner_id:
+			keep.append(entry)
+			continue
+		var iid: String = entry["instance_id"]
+		var ab: String = entry["ability"]
+		for p in [player, opponent]:
+			for m in p.board:
+				if m.instance_id == iid:
+					m.abilities.erase(ab)
+	growvin_granted = keep
+
+func _get_enemy_damage_amp(source_player_id: String) -> int:
+	var total := 0
+	for m in _get_player_by_id(source_player_id).board:
+		for ability in m.abilities:
+			if Abilities.is_enemy_damage_amp(ability):
+				total += Abilities.get_enemy_damage_amp_value(ability)
+	return total
+
+func _get_shield_value(minion: Minion) -> int:
+	for ability in minion.abilities:
+		if Abilities.is_shielded(ability):
+			return Abilities.get_shield_value(ability)
+	return 0
 
 func _get_active_player() -> PlayerState:
 	return _get_player_by_id(active_player_id)

@@ -10,6 +10,8 @@ extends Node2D
 @onready var turn_label: Label = $CenterBar/TurnLabel
 @onready var mana_label: RichTextLabel = $CenterBar/ManaLabel
 var _mana_dots: Array[Panel] = []
+var _dot_style_filled: StyleBoxFlat
+var _dot_style_empty: StyleBoxFlat
 var _drag_tween: Tween = null
 var _flash_cost: int = 0
 var _flash_start: int = 0
@@ -27,6 +29,7 @@ const CardBackScene = preload("res://scenes/cards/CardBack.tscn")
 var game_state: GameState
 var selected_attacker: Card = null
 var _dragging_stratagem: bool = false
+var _dragging_card: bool = false
 var _hide_scheduled: bool = false
 var _challenge_mode: bool = false
 var _challenging_minion: Minion = null
@@ -37,9 +40,24 @@ var _yeti_select_mode: bool = false
 var _tank_shot_mode: bool = false
 var _null_mode: bool = false
 var _buff_friendly_mode: bool = false
+var _buff_friendly_exclude: Minion = null
+var _buff_friendly_tribe_filter: String = ""
 var _on_play_pilot_mode: bool = false
 var _player_deck_icon: Node2D
 var _deck_count_label: Label
+
+var is_online: bool = false
+var _pause_overlay: CanvasLayer = null
+var _game_over: bool = false
+
+var _keywords: Dictionary = {}
+var _keyword_vbox: VBoxContainer = null
+var _keyword_show_pending: bool = false
+var _keyword_pending_data: CardData = null
+var _keyword_current_card: CardData = null
+var _keyword_source_rect: Rect2 = Rect2()
+const _KEYWORD_W := 220.0
+const _KEYWORD_GAP := 10.0
 
 signal action_play_card(card_data: CardData)
 signal action_attack(attacker_instance_id: String, target_type: String, target_id: String)
@@ -47,6 +65,7 @@ signal action_play_stratagem(card_data: CardData, target_minion: Minion, target_
 signal action_pilot(pilot_instance_id: String, target_instance_id: String)
 signal end_turn_pressed
 signal decline_pressed
+signal restart_requested
 signal challenge_target_selected(target: Minion)
 signal on_play_damage_target_selected(target_minion: Minion, target_player_id: String)
 signal rummage_card_selected(card: CardData)
@@ -63,12 +82,17 @@ func _ready() -> void:
 	dot_container.add_theme_constant_override("separation", 3)
 	dot_container.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	mana_label.get_parent().add_child(dot_container)
-	var _dot_style_filled := StyleBoxFlat.new()
+	_dot_style_filled = StyleBoxFlat.new()
 	_dot_style_filled.bg_color = Color.WHITE
-	_dot_style_filled.set_corner_radius_all(6)
+	_dot_style_filled.set_corner_radius_all(8)
+	_dot_style_empty = StyleBoxFlat.new()
+	_dot_style_empty.draw_center = false
+	_dot_style_empty.set_corner_radius_all(8)
+	_dot_style_empty.border_color = Color.WHITE
+	_dot_style_empty.set_border_width_all(2)
 	for i in 10:
 		var dot := Panel.new()
-		dot.custom_minimum_size = Vector2(12, 12)
+		dot.custom_minimum_size = Vector2(16, 16)
 		dot.add_theme_stylebox_override("panel", _dot_style_filled)
 		dot_container.add_child(dot)
 		_mana_dots.append(dot)
@@ -76,9 +100,17 @@ func _ready() -> void:
 	_create_decline_button()
 	set_process_input(true)
 	preview_card.modulate = Color(1, 1, 1, 0)
+	card_preview_zone.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	card_preview_zone.size = Vector2(_PREVIEW_W, _PREVIEW_H)
 	_add_board_zone_backgrounds()
 	_create_player_deck_icon()
 	card_preview_zone.z_index = 1
+	_load_keywords()
+	_keyword_vbox = VBoxContainer.new()
+	_keyword_vbox.add_theme_constant_override("separation", 6)
+	_keyword_vbox.z_index = 2
+	_keyword_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_keyword_vbox)
 
 func _create_decline_button() -> void:
 	decline_button = Button.new()
@@ -97,7 +129,10 @@ func hide_decline_button() -> void:
 func start_challenge_targeting(challenger: Minion) -> void:
 	_challenge_mode = true
 	_challenging_minion = challenger
-	_highlight_board_minions(opponent_board_zone, true)
+	for wrapper in opponent_board_zone.get_children():
+		var card = _get_card_child(wrapper)
+		if card and not card.minion.has_ability(Abilities.AMBUSH):
+			card.set_targeted(true)
 	show_decline_button("Decline")
 
 func _end_challenge_mode(target: Minion) -> void:
@@ -179,13 +214,22 @@ func _end_null_mode(target: Minion) -> void:
 	hide_decline_button()
 	null_target_selected.emit(target)
 
-func start_buff_friendly_targeting() -> void:
+func start_buff_friendly_targeting(exclude: Minion = null, tribe_filter: String = "") -> void:
 	_buff_friendly_mode = true
-	_highlight_board_minions(player_board_zone, true)
+	_buff_friendly_exclude = exclude
+	_buff_friendly_tribe_filter = tribe_filter
+	for wrapper in player_board_zone.get_children():
+		var card = _get_card_child(wrapper)
+		if card and card.minion != exclude:
+			var tribe_ok: bool = tribe_filter.is_empty() or card.minion.data.tribe == tribe_filter
+			if tribe_ok:
+				card.set_targeted(true)
 	show_decline_button("Skip")
 
 func _end_buff_friendly_mode(target: Minion) -> void:
 	_buff_friendly_mode = false
+	_buff_friendly_exclude = null
+	_buff_friendly_tribe_filter = ""
 	_highlight_board_minions(player_board_zone, false)
 	hide_decline_button()
 	buff_friendly_target_selected.emit(target)
@@ -305,6 +349,14 @@ func refresh() -> void:
 # --- Input ---
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.keycode == KEY_ESCAPE and event.pressed:
+		if not _game_over:
+			if _pause_overlay != null:
+				_close_pause_menu()
+			else:
+				_show_pause_menu()
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventMouseMotion:
 		_update_hover(event.position)
 		return
@@ -328,6 +380,8 @@ func _input(event: InputEvent) -> void:
 										_highlight_stratagem_minions(opponent_board_zone, true)
 									elif _stratagem_needs_friendly_piloted_mech(card.data):
 										_highlight_piloted_mech_targets(true)
+									elif _stratagem_needs_friendly_mech(card.data):
+										_highlight_friendly_mech_targets(true)
 									elif _stratagem_needs_friendly_creature_only(card.data):
 										_highlight_stratagem_minions(player_board_zone, true)
 									else:
@@ -358,7 +412,9 @@ func _input(event: InputEvent) -> void:
 							_end_on_play_damage_mode(card.minion, "")
 							return
 						if _buff_friendly_mode:
-							_end_buff_friendly_mode(card.minion)
+							var tribe_ok: bool = _buff_friendly_tribe_filter.is_empty() or card.minion.data.tribe == _buff_friendly_tribe_filter
+							if card.minion != _buff_friendly_exclude and tribe_ok:
+								_end_buff_friendly_mode(card.minion)
 							return
 						_on_player_minion_clicked(card)
 						return
@@ -372,7 +428,8 @@ func _input(event: InputEvent) -> void:
 					var rect = wrapper.get_global_rect().grow(4)
 					if rect.has_point(event.position):
 						if _challenge_mode:
-							_end_challenge_mode(card.minion)
+							if not card.minion.has_ability(Abilities.AMBUSH):
+								_end_challenge_mode(card.minion)
 							return
 						if _on_play_damage_mode:
 							_end_on_play_damage_mode(card.minion, "")
@@ -429,16 +486,18 @@ func _highlight_board_zone(value: bool) -> void:
 # --- Hover preview ---
 
 func _update_hover(mouse_pos: Vector2) -> void:
+	if _dragging_card:
+		return
 	for wrapper in player_hand_zone.get_children():
 		var card = _get_card_child(wrapper)
 		if card and wrapper.get_global_rect().has_point(mouse_pos):
-			_show_card_preview(card.data)
+			_show_card_preview(card.data, null, wrapper.get_global_rect())
 			return
 	for zone in [player_board_zone, opponent_board_zone]:
 		for wrapper in zone.get_children():
 			var card = _get_card_child(wrapper)
 			if card and wrapper.get_global_rect().has_point(mouse_pos):
-				_show_card_preview(card.minion.data, card.minion)
+				_show_card_preview(card.minion.data, card.minion, wrapper.get_global_rect())
 				return
 	_hide_card_preview()
 
@@ -450,20 +509,134 @@ func _get_card_child(wrapper: Node) -> Card:
 
 # --- Drop handler ---
 
-func _show_card_preview(data: CardData, minion: Minion = null) -> void:
+const _PREVIEW_W := 330.0
+const _PREVIEW_H := 520.0
+const _PREVIEW_PAD := 14.0
+
+func _show_card_preview(data: CardData, minion: Minion = null, source_rect: Rect2 = Rect2()) -> void:
 	_hide_scheduled = false
+	if data != _keyword_current_card:
+		_keyword_show_pending = false
+		_clear_keyword_blocks()
+		_keyword_current_card = data
+		_keyword_source_rect = source_rect
+		_schedule_keyword_blocks(data)
 	if minion != null:
 		preview_card.setup_as_minion(minion)
 	else:
 		preview_card.setup(data)
+	if source_rect.size != Vector2.ZERO:
+		var vp: Vector2 = get_viewport_rect().size
+		var px: float = source_rect.position.x + source_rect.size.x + _PREVIEW_PAD
+		if px + _PREVIEW_W > vp.x:
+			px = source_rect.position.x - _PREVIEW_W - _PREVIEW_PAD
+		var py: float = source_rect.get_center().y - _PREVIEW_H * 0.5
+		py = clamp(py, 0.0, vp.y - _PREVIEW_H)
+		card_preview_zone.position = Vector2(px, py)
 	preview_card.modulate = Color(1, 1, 1, 1)
 
 func _hide_card_preview() -> void:
+	_keyword_show_pending = false
+	_keyword_current_card = null
+	_clear_keyword_blocks()
 	_hide_scheduled = true
 	await get_tree().create_timer(0.08).timeout
 	if _hide_scheduled:
 		preview_card.modulate = Color(1, 1, 1, 0)
 		_hide_scheduled = false
+
+func _load_keywords() -> void:
+	var file = FileAccess.open("res://data/keywords.json", FileAccess.READ)
+	if not file:
+		return
+	var result = JSON.parse_string(file.get_as_text())
+	file.close()
+	if result is Dictionary:
+		_keywords = result
+
+func _schedule_keyword_blocks(data: CardData) -> void:
+	_keyword_pending_data = data
+	_keyword_show_pending = true
+	await get_tree().create_timer(0.3).timeout
+	if not _keyword_show_pending:
+		return
+	_keyword_show_pending = false
+	_build_keyword_blocks()
+
+func _build_keyword_blocks() -> void:
+	_clear_keyword_blocks()
+	if _keyword_pending_data == null or _keywords.is_empty():
+		return
+	var seen: Array[String] = []
+	var entries: Array[Dictionary] = []
+	for ability in _keyword_pending_data.abilities:
+		if not Abilities.is_keyword_tooltip(ability):
+			continue
+		var lookup_key = Abilities.get_tooltip_key(ability)
+		if lookup_key in seen:
+			continue
+		if not _keywords.has(lookup_key) or (_keywords[lookup_key] as String).is_empty():
+			continue
+		seen.append(lookup_key)
+		entries.append({"key": lookup_key, "desc": _keywords[lookup_key], "color": Abilities.get_color(ability)})
+	var scan_queue: Array[String] = [_keyword_pending_data.description]
+	for entry in entries:
+		scan_queue.append(entry["desc"])
+	var i := 0
+	while i < scan_queue.size():
+		var text_lower = scan_queue[i].to_lower()
+		for kw_name in _keywords.keys():
+			if kw_name in seen:
+				continue
+			if (_keywords[kw_name] as String).is_empty():
+				continue
+			if kw_name.to_lower() in text_lower:
+				seen.append(kw_name)
+				scan_queue.append(_keywords[kw_name])
+				entries.append({"key": kw_name, "desc": _keywords[kw_name], "color": Abilities.get_color_for_display(kw_name)})
+		i += 1
+	for entry in entries:
+		_keyword_vbox.add_child(_make_keyword_block(entry["key"], entry["desc"], entry["color"]))
+	if _keyword_vbox.get_child_count() == 0:
+		return
+	var vp = get_viewport_rect().size
+	var bx = card_preview_zone.position.x + _PREVIEW_W + _KEYWORD_GAP
+	if bx + _KEYWORD_W > vp.x:
+		bx = card_preview_zone.position.x - _KEYWORD_W - _KEYWORD_GAP
+	var by = lerp(card_preview_zone.position.y, _keyword_source_rect.position.y, 0.5) if _keyword_source_rect.size != Vector2.ZERO else card_preview_zone.position.y
+	_keyword_vbox.position = Vector2(bx, by)
+
+func _clear_keyword_blocks() -> void:
+	for child in _keyword_vbox.get_children():
+		child.queue_free()
+
+func _make_keyword_block(kw_name: String, desc: String, accent: Color) -> PanelContainer:
+	var pc = PanelContainer.new()
+	pc.custom_minimum_size = Vector2(_KEYWORD_W, 0)
+	var s = StyleBoxFlat.new()
+	s.bg_color = Color(0.10, 0.10, 0.14, 0.95)
+	s.border_color = accent
+	s.set_border_width_all(2)
+	s.set_corner_radius_all(6)
+	s.content_margin_left = 8
+	s.content_margin_right = 8
+	s.content_margin_top = 6
+	s.content_margin_bottom = 6
+	pc.add_theme_stylebox_override("panel", s)
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 2)
+	var title = Label.new()
+	title.text = kw_name
+	title.add_theme_color_override("font_color", accent.lightened(0.3))
+	var body = Label.new()
+	body.text = desc
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_theme_font_size_override("font_size", 13)
+	body.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85))
+	vbox.add_child(title)
+	vbox.add_child(body)
+	pc.add_child(vbox)
+	return pc
 
 func _highlight_all_targets(value: bool) -> void:
 	_highlight_board_minions(player_board_zone, value)
@@ -485,7 +658,7 @@ func _highlight_stratagem_minions(zone: HBoxContainer, value: bool) -> void:
 			continue
 		var card = wrapper.get_child(0)
 		if card is Card:
-			if value and card.minion.has_ability(Abilities.SAFEGUARD):
+			if value and zone == opponent_board_zone and card.minion.has_ability(Abilities.CLOAKED):
 				continue
 			card.set_targeted(value)
 
@@ -501,9 +674,12 @@ func _highlight_hero(hero: Panel, value: bool) -> void:
 		hero.remove_theme_stylebox_override("panel")
 
 func _on_card_drag_started(card: Card) -> void:
+	_dragging_card = true
+	_hide_card_preview()
 	_stop_mana_flash()
-	_flash_start = game_state.player.current_mana
-	_flash_cost = mini(card.data.effective_cost(), _mana_dots.size() - _flash_start)
+	var available = game_state.player.max_mana - game_state.player.current_mana
+	_flash_cost = mini(card.data.effective_cost(), available)
+	_flash_start = available - _flash_cost
 	if _flash_cost <= 0:
 		return
 	_drag_tween = create_tween().set_loops()
@@ -524,6 +700,7 @@ func _stop_mana_flash() -> void:
 		dot.modulate.a = 1.0
 
 func _on_card_dropped(card: Card) -> void:
+	_dragging_card = false
 	_stop_mana_flash()
 	_highlight_board_zone(false)
 	_highlight_all_targets(false)
@@ -565,7 +742,7 @@ func _on_card_dropped(card: Card) -> void:
 				if target_card is Card:
 					var rect = wrapper.get_global_rect().grow(10)
 					if rect.has_point(mouse_pos):
-						if target_card.minion.has_ability(Abilities.SAFEGUARD) and not _stratagem_needs_friendly_piloted_mech(card.data):
+						if target_card.minion.has_ability(Abilities.CLOAKED) and zone == opponent_board_zone and not _stratagem_needs_friendly_piloted_mech(card.data) and not _stratagem_needs_friendly_mech(card.data):
 							continue
 						if _stratagem_needs_friendly_yeti(card.data):
 							if zone != player_board_zone or not target_card.minion.has_ability(Abilities.YETI):
@@ -575,6 +752,9 @@ func _on_card_dropped(card: Card) -> void:
 								continue
 						elif _stratagem_needs_friendly_piloted_mech(card.data):
 							if zone != player_board_zone or not target_card.minion.is_piloted:
+								continue
+						elif _stratagem_needs_friendly_mech(card.data):
+							if zone != player_board_zone or not target_card.minion.has_ability(Abilities.MECH):
 								continue
 						elif _stratagem_needs_friendly_creature_only(card.data):
 							if zone != player_board_zone:
@@ -697,11 +877,14 @@ func _refresh_ui() -> void:
 	var is_my_turn = game_state.is_local_player_turn()
 	end_turn_button.disabled = not is_my_turn
 	turn_label.text = "Turn %d" % game_state.turn_number
+	var available_mana = game_state.player.max_mana - game_state.player.current_mana
 	for i in _mana_dots.size():
 		var dot = _mana_dots[i]
 		if i < game_state.player.max_mana:
 			dot.show()
-			dot.modulate = Color.WHITE if i < game_state.player.current_mana else Color(0.25, 0.25, 0.25)
+			dot.modulate = Color.WHITE
+			var style := _dot_style_filled if i < available_mana else _dot_style_empty
+			dot.add_theme_stylebox_override("panel", style)
 		else:
 			dot.hide()
 	_deck_count_label.text = str(game_state.player.get_deck_size())
@@ -755,6 +938,8 @@ func _on_player_minion_clicked(card: Card) -> void:
 func _on_enemy_minion_clicked(card: Card) -> void:
 	if not selected_attacker or _on_play_pilot_mode:
 		return
+	if card.minion.has_ability(Abilities.AMBUSH):
+		return
 	# Taunt check
 	var taunts = game_state.opponent.get_guardian_minions()
 	if not taunts.is_empty() and card.minion not in taunts:
@@ -790,8 +975,8 @@ func _highlight_attack_targets(value: bool) -> void:
 		var card = wrapper.get_child(0)
 		if card is Card:
 			if value:
-				# If taunt exists only highlight taunts
-				if taunts.is_empty() or card.minion in taunts:
+				# If taunt exists only highlight taunts; never highlight ambush
+				if (taunts.is_empty() or card.minion in taunts) and not card.minion.has_ability(Abilities.AMBUSH):
 					card.set_targeted(true)
 			else:
 				card.set_targeted(false)
@@ -988,7 +1173,7 @@ func show_graveyard_picker(options: Array[CardData]) -> CardData:
 	var _selection_made := false
 	var current_row: HBoxContainer = null
 	var cards_in_row := 0
-	const MAX_PER_ROW := 10
+	const MAX_PER_ROW := 8
 
 	for card_data in options:
 		if current_row == null or cards_in_row >= MAX_PER_ROW:
@@ -998,12 +1183,12 @@ func show_graveyard_picker(options: Array[CardData]) -> CardData:
 			cards_container.add_child(current_row)
 			cards_in_row = 0
 		var wrapper = Button.new()
-		wrapper.custom_minimum_size = Vector2(100, 148)
+		wrapper.custom_minimum_size = Vector2(143, 208)
 		wrapper.flat = true
 		current_row.add_child(wrapper)
 		var card = CardScene.instantiate()
-		card.scale = Vector2(0.45, 0.45)
-		card.position = Vector2(4, 4)
+		card.scale = Vector2(0.65, 0.65)
+		card.position = Vector2(0, 0)
 		wrapper.add_child(card)
 		card.setup(card_data)
 		card.input_pickable = false
@@ -1068,7 +1253,7 @@ func _open_graveyard_viewer() -> void:
 		cards_container.add_theme_constant_override("separation", 8)
 		panel.add_child(cards_container)
 
-		const MAX_PER_ROW := 10
+		const MAX_PER_ROW := 8
 		var current_row: HBoxContainer = null
 		var cards_in_row := 0
 		for card_data in graveyard:
@@ -1079,11 +1264,11 @@ func _open_graveyard_viewer() -> void:
 				cards_container.add_child(current_row)
 				cards_in_row = 0
 			var wrapper := Control.new()
-			wrapper.custom_minimum_size = Vector2(100, 148)
+			wrapper.custom_minimum_size = Vector2(143, 208)
 			current_row.add_child(wrapper)
 			var card := CardScene.instantiate()
-			card.scale = Vector2(0.45, 0.45)
-			card.position = Vector2(4, 4)
+			card.scale = Vector2(0.65, 0.65)
+			card.position = Vector2(0, 0)
 			wrapper.add_child(card)
 			card.setup(card_data)
 			_ignore_control_input(card)
@@ -1128,12 +1313,12 @@ func show_transform_picker(options: Array[CardData]) -> CardData:
 
 	for card_data in options:
 		var wrapper = Button.new()
-		wrapper.custom_minimum_size = Vector2(100, 148)
+		wrapper.custom_minimum_size = Vector2(143, 208)
 		wrapper.flat = true
 		cards_row.add_child(wrapper)
 		var card = CardScene.instantiate()
-		card.scale = Vector2(0.45, 0.45)
-		card.position = Vector2(4, 4)
+		card.scale = Vector2(0.65, 0.65)
+		card.position = Vector2(0, 0)
 		wrapper.add_child(card)
 		card.setup(card_data)
 		card.input_pickable = false
@@ -1154,7 +1339,7 @@ func _stratagem_needs_target(data: CardData) -> bool:
 	return data.effect not in ["destroy_all_creatures", "deal_damage_all_creatures", "deal_damage_all_enemy", "buff_all_friendly_attack", "eject_all_pilots"]
 
 func _stratagem_needs_creature_target(data: CardData) -> bool:
-	return data.effect in ["give_ability", "buff_creature", "buff_health", "force_challenge", "poke_bear", "blood_transfusion", "sanguine", "heal", "eject_pilot"]
+	return data.effect in ["give_ability", "buff_creature", "buff_health", "force_challenge", "poke_bear", "blood_transfusion", "sanguine", "heal", "eject_pilot", "give_mech_shielded_temp"]
 
 func _stratagem_needs_friendly_yeti(data: CardData) -> bool:
 	return data.effect in ["force_challenge", "poke_bear"]
@@ -1167,6 +1352,17 @@ func _stratagem_needs_friendly_creature_only(data: CardData) -> bool:
 
 func _stratagem_needs_friendly_piloted_mech(data: CardData) -> bool:
 	return data.effect == "eject_pilot"
+
+func _stratagem_needs_friendly_mech(data: CardData) -> bool:
+	return data.effect == "give_mech_shielded_temp"
+
+func _highlight_friendly_mech_targets(value: bool) -> void:
+	for wrapper in player_board_zone.get_children():
+		if wrapper.get_child_count() == 0:
+			continue
+		var card = wrapper.get_child(0)
+		if card is Card and card.minion.has_ability(Abilities.MECH):
+			card.set_targeted(value)
 
 func _highlight_piloted_mech_targets(value: bool) -> void:
 	for wrapper in player_board_zone.get_children():
@@ -1182,7 +1378,87 @@ func _ignore_control_input(node: Node) -> void:
 	for child in node.get_children():
 		_ignore_control_input(child)
 
+func find_card_node(instance_id: String) -> Card:
+	for zone in [player_board_zone, opponent_board_zone]:
+		for wrapper in zone.get_children():
+			var card = _get_card_child(wrapper)
+			if card and card.minion and card.minion.instance_id == instance_id:
+				return card
+	return null
+
+func animate_laser_kill(from_global: Vector2, target_card: Card) -> void:
+	if not is_instance_valid(target_card):
+		return
+	var target_center: Vector2 = target_card.get_parent().get_global_rect().get_center()
+	var line := Line2D.new()
+	line.default_color = Color(1.0, 0.12, 0.12, 1.0)
+	line.width = 4.0
+	line.z_index = 200
+	line.add_point(to_local(from_global))
+	line.add_point(to_local(target_center))
+	add_child(line)
+	target_card.damage_flash()
+	var tween := create_tween()
+	tween.tween_interval(0.12)
+	tween.tween_property(line, "modulate:a", 0.0, 0.20)
+	await tween.finished
+	line.queue_free()
+
+func _show_pause_menu() -> void:
+	_pause_overlay = CanvasLayer.new()
+	_pause_overlay.layer = 20
+	add_child(_pause_overlay)
+
+	var bg := ColorRect.new()
+	bg.color = Color(0, 0, 0, 0.72)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	_pause_overlay.add_child(bg)
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	vbox.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	vbox.grow_vertical = Control.GROW_DIRECTION_BOTH
+	vbox.add_theme_constant_override("separation", 18)
+	_pause_overlay.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "PAUSED"
+	title.add_theme_font_size_override("font_size", 52)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(title)
+
+	var resume_btn := _pause_btn("Resume")
+	resume_btn.pressed.connect(_close_pause_menu)
+	vbox.add_child(resume_btn)
+
+	if not is_online:
+		var restart_btn := _pause_btn("Restart Battle")
+		restart_btn.pressed.connect(func():
+			_close_pause_menu()
+			restart_requested.emit()
+		)
+		vbox.add_child(restart_btn)
+
+	var quit_btn := _pause_btn("Quit to Menu")
+	quit_btn.pressed.connect(func(): get_tree().reload_current_scene())
+	vbox.add_child(quit_btn)
+
+func _close_pause_menu() -> void:
+	if _pause_overlay != null:
+		_pause_overlay.queue_free()
+		_pause_overlay = null
+
+func _pause_btn(label: String) -> Button:
+	var btn := Button.new()
+	btn.text = label
+	btn.custom_minimum_size = Vector2(240, 58)
+	btn.add_theme_font_size_override("font_size", 22)
+	return btn
+
 func show_game_over(won: bool) -> void:
+	_game_over = true
 	var layer = CanvasLayer.new()
 	add_child(layer)
 

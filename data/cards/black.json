@@ -22,7 +22,7 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "On play: Deal 2.",
+		"description": "On play: Deal 2 damage to anything.",
 		"attack": 1,
 		"health": 1,
 		"abilities": [
@@ -236,7 +236,7 @@
 		"abilities": [
 			"rummage",
 			"rummage",
-			"safeguard"
+			"cloaked"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -267,11 +267,30 @@
 		"card_type": "CREATURE",
 		"rarity": "EPIC",
 		"tribe": "",
-		"description": "Guardian",
+		"description": "Guardian. Rejuvenate 1",
 		"attack": 6,
-		"health": 7,
+		"health": 6,
 		"abilities": [
-			"guardian"
+			"guardian",
+			"rejuvenate_1"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_018",
+		"card_name": "Stinkherder",
+		"cost": 4,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "",
+		"description": "Rush. On death, return a non-legendary creature from your graveyard to your hand. Counts as rummaging.",
+		"attack": 3,
+		"health": 2,
+		"abilities": [
+			"rush",
+			"deathrattle_rummage_creature"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -294,6 +313,24 @@
 			"stinkpile_passive"
 		],
 		"art": "res://assets/stinkpile.jpg",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_019",
+		"card_name": "Clutterpunk, the Mad Defiler",
+		"cost": 5,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "LEGENDARY",
+		"tribe": "",
+		"description": "Cloaked. Creatures of an equal cost can be rummaged.",
+		"attack": 5,
+		"health": 5,
+		"abilities": [
+			"cloaked",
+			"rummage_equal_cost"
+		],
 		"effect": "",
 		"effect_value": 0
 	},

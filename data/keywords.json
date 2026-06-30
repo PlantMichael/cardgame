@@ -1,0 +1,17 @@
+{
+	"Guardian": "Must be targeted before other minions.",
+	"Rush": "Can attack the turn it's played.",
+	"Reinforce": "Revives to full health once.",
+	"Challenge": "Chooses a minion to attack as soon as it's played",
+	"Recon": "Draws a card on play.",
+	"Cloaked": "Cannot be targeted by spells.",
+	"Ethereal": "Immune to combat damage.",
+	"Rummage": "Select a card of lesser value in your graveyard, then return it to your hand. It costs one less.",
+	"Pilot": "Can click mechs to pilot. Add's X/X to the mech's stats.",
+	"Null": "Removes a minion's abilities.",
+	"Dual Strike": "Attacks twice. The second hit automatically targets the same enemy.",
+	"Voidtouch": "Any minion it deals damage to dies instantly.",
+	"Shielded": "Reduces incoming combat damage by X.",
+	"Ambush": "Cannot be targeted when played. Loses Ambush after it attacks.",
+	"Amplify": "While in play, all damage dealt to enemy creatures is increased by X."
+}

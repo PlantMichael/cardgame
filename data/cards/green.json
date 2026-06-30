@@ -1,5 +1,22 @@
 [
 	{
+		"id": "g_001",
+		"card_name": "Lone Operative",
+		"cost": 1,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Ambush",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"ambush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "g_002",
 		"card_name": "Cocky Commando",
 		"cost": 2,
@@ -153,6 +170,23 @@
 		"effect_value": 0
 	},
 	{
+		"id": "g_019",
+		"card_name": "Tank Specialist",
+		"cost": 4,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "When a friendly Tank dies, give another Tank +1/+2.",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"on_friendly_tank_death_buff_tank"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "g_004",
 		"card_name": "Bunker",
 		"cost": 5,
@@ -160,12 +194,12 @@
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "",
-		"description": "Guardian. Safeguard.",
+		"description": "Guardian. Cloaked.",
 		"attack": 3,
 		"health": 5,
 		"abilities": [
 			"guardian",
-			"safeguard"
+			"cloaked"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -232,8 +266,8 @@
 		"rarity": "RARE",
 		"tribe": "tank",
 		"description": "Reinforce. Deal 2 damage to any creature on play and when reinforced",
-		"attack": 4,
-		"health": 4,
+		"attack": 3,
+		"health": 3,
 		"abilities": [
 			"reinforce",
 			"on_play_damage_2",
@@ -255,6 +289,23 @@
 		"health": 5,
 		"abilities": [
 			"on_play_damage_8"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_018",
+		"card_name": "Stealth Jet",
+		"cost": 3,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "tank",
+		"description": "Whenever an enemy creature takes damage, it takes 1 more.",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"enemy_damage_amp_1"
 		],
 		"effect": "",
 		"effect_value": 0

@@ -116,7 +116,7 @@ func setup_as_minion(m: Minion) -> void:
 	health_label.text = str(m.current_health)
 	_apply_stat_colors(m)
 	if m.is_nulled:
-		description_label.text = "Silenced."
+		description_label.text = "Nulled."
 		_apply_silenced_style()
 	update_piloted_token(m.is_piloted)
 	update_reinforce_token(m.has_ability(Abilities.REINFORCE))

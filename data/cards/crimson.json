@@ -80,10 +80,11 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "wolf",
-		"description": "When this attacks, give a random creature you control +1 health.",
+		"description": "Rush. When this attacks, give a random creature you control +1 health.",
 		"attack": 2,
 		"health": 3,
 		"abilities": [
+			"rush",
 			"attack_buff_friendly_health"
 		],
 		"effect": "",
@@ -104,6 +105,24 @@
 			"mirror_transform"
 		],
 		"transform_into": "cr_004t",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_021",
+		"card_name": "Flesh Priest",
+		"cost": 3,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "When a friendly creature transforms, give it Ambush.",
+		"attack": 1,
+		"health": 3,
+		"abilities": [
+			"on_friendly_transform_give_ambush"
+		],
+		"transform_into": "",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -193,6 +212,23 @@
 		"effect_value": 0
 	},
 	{
+		"id": "cr_023",
+		"card_name": "Broodtender",
+		"cost": 5,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Friendly monstrosities have Rejuvenate 2",
+		"attack": 3,
+		"health": 4,
+		"abilities": [
+			"broodtender_aura"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "cr_012",
 		"card_name": "Coven Acolyte",
 		"cost": 5,
@@ -200,10 +236,12 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "",
-		"attack": 5,
+		"description": "When a friendly creature transforms, gain +1/+1",
+		"attack": 4,
 		"health": 5,
-		"abilities": [],
+		"abilities": [
+			"on_friendly_transform_buff_self"
+		],
 		"effect": "",
 		"effect_value": 0
 	},
@@ -250,7 +288,7 @@
 		"color": "CRIMSON",
 		"card_type": "CREATURE",
 		"rarity": "RARE",
-		"tribe": "",
+		"tribe": "monstrosity",
 		"description": "",
 		"attack": 8,
 		"health": 8,
@@ -271,6 +309,40 @@
 		"health": 3,
 		"abilities": [
 			"heal_to_draw"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_020",
+		"card_name": "Blood Merchant",
+		"cost": 3,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "On play: swap the healths of two friendly minions",
+		"attack": 1,
+		"health": 3,
+		"abilities": [
+			"on_play_swap_friendly_health"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_022",
+		"card_name": "Crypt Lurker",
+		"cost": 9,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "monstrosity",
+		"description": "On play: devour a friendly minion. Gain half it's health rounded up.",
+		"attack": 7,
+		"health": 7,
+		"abilities": [
+			"on_play_devour_friendly"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -327,7 +399,7 @@
 		"color": "CRIMSON",
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
-		"tribe": "wolf",
+		"tribe": "monstrosity",
 		"description": "Rush.",
 		"attack": 5,
 		"health": 4,
@@ -346,7 +418,7 @@
 		"color": "CRIMSON",
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
-		"tribe": "bat",
+		"tribe": "monstrosity",
 		"description": "Ethereal. (Immune to combat damage, can be targeted by stratagems.)",
 		"attack": 2,
 		"health": 1,
@@ -365,7 +437,7 @@
 		"color": "CRIMSON",
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
-		"tribe": "wolf",
+		"tribe": "monstrosity",
 		"description": "Rush.",
 		"attack": 4,
 		"health": 4,
@@ -384,12 +456,12 @@
 		"color": "CRIMSON",
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
-		"tribe": "wolf",
-		"description": "Safeguard.",
+		"tribe": "monstrosity",
+		"description": "Cloaked.",
 		"attack": 5,
 		"health": 4,
 		"abilities": [
-			"safeguard"
+			"cloaked"
 		],
 		"transform_into": "",
 		"is_token": true,
@@ -403,7 +475,7 @@
 		"color": "CRIMSON",
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
-		"tribe": "wolf",
+		"tribe": "monstrosity",
 		"description": "Rush",
 		"attack": 2,
 		"health": 1,
@@ -422,7 +494,7 @@
 		"color": "CRIMSON",
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
-		"tribe": "wolf",
+		"tribe": "monstrosity",
 		"description": "Guardian",
 		"attack": 1,
 		"health": 2,

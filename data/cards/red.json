@@ -73,11 +73,11 @@
 		"card_type": "CREATURE",
 		"rarity": "EPIC",
 		"tribe": "",
-		"description": "Safeguard.",
+		"description": "Cloaked.",
 		"attack": 6,
 		"health": 7,
 		"abilities": [
-			"safeguard"
+			"cloaked"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -122,11 +122,11 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "Safeguard",
+		"description": "Cloaked",
 		"attack": 2,
 		"health": 5,
 		"abilities": [
-			"safeguard"
+			"cloaked"
 		],
 		"effect": "",
 		"effect_value": 0

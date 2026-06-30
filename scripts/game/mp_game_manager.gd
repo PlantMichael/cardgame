@@ -14,6 +14,7 @@ var _is_host: bool
 
 func start_as_host(board_node: Board, player_deck: Array[CardData], opp_deck: Array[CardData]) -> void:
 	board = board_node
+	board.is_online = true
 	_my_id = HOST_ID
 	_opp_id = GUEST_ID
 	_is_host = true
@@ -48,6 +49,7 @@ func start_as_host(board_node: Board, player_deck: Array[CardData], opp_deck: Ar
 
 func start_as_guest(board_node: Board) -> void:
 	board = board_node
+	board.is_online = true
 	_my_id = GUEST_ID
 	_opp_id = HOST_ID
 	_is_host = false

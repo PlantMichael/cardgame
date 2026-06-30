@@ -14,6 +14,7 @@ The codebase has a clean split between **game logic** (pure GDScript classes, no
 | `scripts/cards/card_database.gd` | Loads JSON card files at startup (**Autoload: `CardDatabase`**) |
 | `scripts/game/game_manager.gd` | Orchestrates game flow, wires board signals to game_state (**Autoload: `GameManagerAutoload`**) |
 | `scripts/game/ai_controller.gd` | AI that plays cards and attacks each turn |
+| `scripts/game/sim_runner.gd` | Headless AI-vs-AI simulation runner; pure `RefCounted`, no Node/UI dependencies |
 | `scripts/game/deck_manager.gd` | Deck save/load, starter decks, faction metadata (**Autoload: `DeckManager`**) |
 | `scripts/ui/deck_builder_screen.gd` | Deck builder UI: hub, faction picker, collection editor |
 | `scripts/game/board.gd` | `Board` scene script; pure UI, emits signals upward to game_manager |
@@ -54,6 +55,7 @@ res://
     │   ├── game_manager.gd     (Autoload: "GameManager", glue)
     │   ├── deck_manager.gd     (Autoload: "DeckManager"; decks, factions)
     │   ├── ai_controller.gd    (AI turn logic)
+    │   ├── sim_runner.gd       (Headless AI-vs-AI sim; RefCounted)
     │   ├── card_preview.gd     (Hover preview panel, right side)
     │   ├── drop_zone.gd        (DropZone Control, creature drop target)
     │   └── main.gd             (Entry point, main menu, deck select)

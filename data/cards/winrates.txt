@@ -92,11 +92,11 @@ Orange
 
 - Veteran Pilot now has "Recon"
 - Panic Button is now 2 mana (was 4)
-- Panic Button can now be cast on mech's with Safeguard. 
-- Changed Nervous flyer "Pilot 0/3 Gives mech Safeguard"
+- Panic Button can now be cast on mech's with Cloaked. 
+- Changed Nervous flyer "Pilot 0/3 Gives mech Cloaked"
 - Changed F4lcon "When piloted, gain +1/+1
 - Changed Brash Captain "Pilot 3/1 Give mech Rush"
-- Changed Sterling "Safeguard"
+- Changed Sterling "Cloaked"
 - Changed Damen Captain "Pilot 4/3, Give guardian to mech."
 - Added Newt Nano, the Cunning 4 2/2 "Pilot 2/2. On play: pilot a mech for free."
 - Added Doomsday Protocol "Eject all friendly Pilots"
@@ -118,19 +118,13 @@ Black
 - Trash Tallyer now has Recon.
 
 
-
 Known technical and gameplay issues
 
+- Resolution is bad on browser. I tried every window stretch option and every one breaks the game except this one lol.
 - Orange suffers from lack of mechs sometimes.
 - Game will softlock on opponents turn in AI battles.
-- Guest is laggy, this is a server diff. 
+- Guest is laggy, this is a server issue. I need Cmunt funding. 
 
-Black
-
-- Trash Tallyer now has Recon.
-
-
-Shi to do:
 
 
 changes:
@@ -141,5 +135,3 @@ changes:
 
 Artillery strike 4 
 deal 2 damage to 3 random enemies
-
-

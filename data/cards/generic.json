@@ -92,5 +92,77 @@
 		"abilities": [],
 		"effect": "destroy_all_creatures",
 		"effect_value": 0
+	},
+	{
+		"id": "gen_007",
+		"card_name": "Twin Fang",
+		"cost": 3,
+		"color": "GENERIC",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Dualstrike",
+		"attack": 3,
+		"health": 2,
+		"abilities": [
+			"dual_strike"
+		],
+		"effect": "",
+		"effect_value": 0,
+		"in_starter": false
+	},
+	{
+		"id": "gen_008",
+		"card_name": "Void Stalker",
+		"cost": 3,
+		"color": "GENERIC",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Voidtouch",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"voidtouch"
+		],
+		"effect": "",
+		"effect_value": 0,
+		"in_starter": false
+	},
+	{
+		"id": "gen_009",
+		"card_name": "Plated Soldier",
+		"cost": 3,
+		"color": "GENERIC",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Shielded 2",
+		"attack": 2,
+		"health": 5,
+		"abilities": [
+			"shielded_2"
+		],
+		"effect": "",
+		"effect_value": 0,
+		"in_starter": false
+	},
+	{
+		"id": "gen_010",
+		"card_name": "Shadow Scout",
+		"cost": 3,
+		"color": "GENERIC",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Ambush",
+		"attack": 3,
+		"health": 2,
+		"abilities": [
+			"ambush"
+		],
+		"effect": "",
+		"effect_value": 0,
+		"in_starter": false
 	}
 ]

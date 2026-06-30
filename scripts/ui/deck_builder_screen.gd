@@ -3,15 +3,20 @@ extends Control
 
 signal back_pressed
 
-const CARD_W := 72
-const CARD_H := 100
-const STACK_OFFSET := 6
+const CardScene := preload("res://scenes/cards/Card.tscn")
+
+const COLL_CARD_SCALE := 0.5
 const COLL_W := 110
-const COLL_H := 170
+const COLL_H := 160
+const STACK_OFFSET := 6
+const DECK_W := 72
+const DECK_H := 100
 const DECK_BG  := Color(0.09, 0.07, 0.05)
 const SEARCH_BG := Color(0.11, 0.09, 0.07)
 const COLL_BG  := Color(0.07, 0.05, 0.04)
 const TOOLBAR_BG := Color(0.08, 0.06, 0.05)
+const PREVIEW_SCALE := 1.155
+const KEYWORD_W := 238.0
 
 # ── State ──────────────────────────────────────────────────────────────────
 var _faction_idx: int = -1
@@ -23,6 +28,9 @@ var _color_filter: int = 0  # 0 = all, 1 = faction only, 2 = generic only
 var _filter_btns: Array[Button] = []
 var _filter_box: HBoxContainer = null
 var _delete_btn: Button = null
+var _keywords: Dictionary = {}
+var _preview_card_node: Card = null
+var _hide_preview_scheduled: bool = false
 
 # ── Hub page ───────────────────────────────────────────────────────────────
 @onready var _hub_page: Control = $HubPage
@@ -40,7 +48,9 @@ var _delete_btn: Button = null
 @onready var _search_faction_lbl: Label = $EditorPage/TopSection/SearchStrip/HBoxContainer/FactionLabel
 @onready var _search_bar: LineEdit = $EditorPage/TopSection/SearchStrip/HBoxContainer/SearchBar
 @onready var _deck_content: HBoxContainer = $EditorPage/TopSection/DeckPanel/DeckScroll/DeckContent
-@onready var _coll_content: VBoxContainer = $EditorPage/CollectionPanel/CollScroll/CollContent
+@onready var _coll_content: VBoxContainer = $EditorPage/CollectionPanel/CollHBox/CollScroll/CollContent
+@onready var _preview_card_holder: Control = $EditorPage/CollectionPanel/CollHBox/PreviewSection/PreviewCardHolder
+@onready var _preview_keyword_vbox: VBoxContainer = $EditorPage/CollectionPanel/CollHBox/PreviewSection/PreviewKeywordScroll/PreviewKeywordVBox
 
 # ── Setup ──────────────────────────────────────────────────────────────────
 
@@ -49,6 +59,8 @@ func _ready() -> void:
 	_build_faction_buttons()
 	_setup_filter_box()
 	_setup_delete_button()
+	_load_keywords()
+	_setup_preview_card()
 
 	$HubPage/Toolbar/HBoxContainer/BackButton.pressed.connect(func(): back_pressed.emit())
 	$HubPage/Toolbar/HBoxContainer/NewDeckButton.pressed.connect(_show_faction_page)
@@ -67,6 +79,25 @@ func _ready() -> void:
 	)
 
 	_show_hub_page()
+
+func _load_keywords() -> void:
+	var file := FileAccess.open("res://data/keywords.json", FileAccess.READ)
+	if not file:
+		return
+	var result = JSON.parse_string(file.get_as_text())
+	file.close()
+	if result is Dictionary:
+		_keywords = result
+
+func _setup_preview_card() -> void:
+	_preview_card_node = CardScene.instantiate()
+	_preview_card_node.scale = Vector2(PREVIEW_SCALE, PREVIEW_SCALE)
+	_preview_card_node.position = Vector2(0, 0)
+	_preview_card_node.input_pickable = false
+	_preview_card_node.set_process_input(false)
+	_preview_card_holder.add_child(_preview_card_node)
+	_ignore_control_input(_preview_card_node)
+	_preview_card_node.modulate = Color(1, 1, 1, 0)
 
 func _setup_delete_button() -> void:
 	var hbox := $EditorPage/TopSection/EditorToolbar/HBoxContainer
@@ -121,17 +152,17 @@ func _build_faction_buttons() -> void:
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.add_theme_font_size_override("font_size", 18)
 
-		var ns := StyleBoxFlat.new()
-		ns.bg_color = sw.darkened(0.3); ns.set_corner_radius_all(10)
-		ns.border_width_bottom = 4; ns.border_color = sw.darkened(0.15)
-		btn.add_theme_stylebox_override("normal", ns)
-		var hs := StyleBoxFlat.new()
-		hs.bg_color = sw.lightened(0.1); hs.set_corner_radius_all(10)
-		hs.border_width_bottom = 4; hs.border_color = sw
-		btn.add_theme_stylebox_override("hover", hs)
-		var ps := StyleBoxFlat.new()
-		ps.bg_color = sw.darkened(0.2); ps.set_corner_radius_all(10)
-		btn.add_theme_stylebox_override("pressed", ps)
+		var bns := StyleBoxFlat.new()
+		bns.bg_color = sw.darkened(0.3); bns.set_corner_radius_all(10)
+		bns.border_width_bottom = 4; bns.border_color = sw.darkened(0.15)
+		btn.add_theme_stylebox_override("normal", bns)
+		var bhs := StyleBoxFlat.new()
+		bhs.bg_color = sw.lightened(0.1); bhs.set_corner_radius_all(10)
+		bhs.border_width_bottom = 4; bhs.border_color = sw
+		btn.add_theme_stylebox_override("hover", bhs)
+		var bps := StyleBoxFlat.new()
+		bps.bg_color = sw.darkened(0.2); bps.set_corner_radius_all(10)
+		btn.add_theme_stylebox_override("pressed", bps)
 
 		_faction_hbox.add_child(btn)
 		var idx := i
@@ -360,7 +391,7 @@ func _refresh_deck() -> void:
 
 func _deck_stack(card: CardData, count: int) -> Button:
 	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(CARD_W + STACK_OFFSET, CARD_H + STACK_OFFSET)
+	btn.custom_minimum_size = Vector2(DECK_W + STACK_OFFSET, DECK_H + STACK_OFFSET)
 
 	var trans := StyleBoxFlat.new(); trans.bg_color = Color(0, 0, 0, 0)
 	var hover_s := StyleBoxFlat.new()
@@ -389,7 +420,7 @@ func _deck_stack(card: CardData, count: int) -> Button:
 func _mini_card(card: CardData, is_back: bool) -> Panel:
 	var sw: Color = DeckManager.FACTION_SWATCHES[int(card.color)]
 	var panel := Panel.new()
-	panel.size = Vector2(CARD_W, CARD_H)
+	panel.size = Vector2(DECK_W, DECK_H)
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var s := StyleBoxFlat.new()
@@ -491,102 +522,151 @@ func _add_coll_section(title: String, cards: Array[CardData], counts: Dictionary
 	_coll_content.add_child(flow)
 
 	for card in cards:
-		flow.add_child(_coll_card(card, counts.get(card.id, 0), deck_full))
+		var result := _coll_card(card, counts.get(card.id, 0), deck_full)
+		var btn: Button = result["btn"]
+		var card_node: Card = result["card_node"]
+		flow.add_child(btn)
+		# btn is now in the scene tree — add card_node here so _ready() fires
+		btn.add_child(card_node)
+		card_node.setup(card)
+		_ignore_control_input(card_node)
+		if result["maxed"]:
+			card_node.modulate = Color(0.45, 0.45, 0.45, 0.85)
 
-func _coll_card(card: CardData, in_deck: int, deck_full: bool) -> Button:
-	var sw: Color = DeckManager.FACTION_SWATCHES[int(card.color)]
+func _coll_card(card: CardData, in_deck: int, deck_full: bool) -> Dictionary:
 	var max_copies := DeckManager.max_copies_for(card)
 	var maxed := in_deck >= max_copies or deck_full
 
 	var btn := Button.new()
 	btn.custom_minimum_size = Vector2(COLL_W, COLL_H)
 	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	btn.disabled = maxed
-	btn.tooltip_text = card.card_name
+	btn.clip_contents = true
 
-	var ns := StyleBoxFlat.new()
-	ns.bg_color = sw.darkened(0.5 if maxed else 0.3); ns.set_corner_radius_all(6)
-	ns.border_width_top = 2; ns.border_color = sw.darkened(0.3) if maxed else sw
-	btn.add_theme_stylebox_override("normal", ns)
-	var hs := StyleBoxFlat.new()
-	hs.bg_color = sw.darkened(0.1); hs.set_corner_radius_all(6)
-	hs.border_width_top = 2; hs.border_color = sw.lightened(0.2)
-	btn.add_theme_stylebox_override("hover", hs)
-	var ds := StyleBoxFlat.new()
-	ds.bg_color = sw.darkened(0.65); ds.set_corner_radius_all(6)
-	btn.add_theme_stylebox_override("disabled", ds)
+	var trans := StyleBoxFlat.new(); trans.bg_color = Color(0, 0, 0, 0)
+	var hover_s := StyleBoxFlat.new()
+	hover_s.bg_color = Color(1, 1, 1, 0.18); hover_s.set_corner_radius_all(4)
+	for state in ["normal", "pressed", "disabled", "focus"]:
+		btn.add_theme_stylebox_override(state, trans)
+	btn.add_theme_stylebox_override("hover", hover_s)
 
-	var vb := VBoxContainer.new()
-	vb.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vb.add_theme_constant_override("separation", 2)
-	btn.add_child(vb)
-
-	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 2)
-	vb.add_child(top)
-
-	var cost_lbl := Label.new()
-	cost_lbl.text = str(card.cost)
-	cost_lbl.add_theme_font_size_override("font_size", 16)
-	cost_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top.add_child(cost_lbl)
-
-	var sp := Control.new()
-	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sp.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top.add_child(sp)
+	var card_node: Card = CardScene.instantiate()
+	card_node.scale = Vector2(COLL_CARD_SCALE, COLL_CARD_SCALE)
+	card_node.position = Vector2(0, 0)
+	card_node.input_pickable = false
+	card_node.set_process_input(false)
+	# card_node is NOT added to btn here — _add_coll_section does it after
+	# flow.add_child(btn) so that btn is live in the tree first.
 
 	var badge := Label.new()
 	badge.text = "%d/%d" % [in_deck, max_copies]
-	badge.add_theme_font_size_override("font_size", 10)
+	badge.add_theme_font_size_override("font_size", 11)
 	badge.add_theme_color_override("font_color",
-		Color(0.95, 0.85, 0.3) if in_deck > 0 else Color(0.45, 0.45, 0.45))
+		Color(0.95, 0.85, 0.3) if in_deck > 0 else Color(0.4, 0.4, 0.4))
+	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	badge.position = Vector2(COLL_W - 38, COLL_H - 18)
+	badge.size = Vector2(34, 16)
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top.add_child(badge)
+	btn.add_child(badge)
 
-	var name_lbl := Label.new()
-	name_lbl.text = card.card_name
-	name_lbl.add_theme_font_size_override("font_size", 11)
-	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	name_lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vb.add_child(name_lbl)
-
-	var type_lbl := Label.new()
-	type_lbl.text = "Creature" if card.card_type == CardData.CardType.CREATURE else "Stratagem"
-	type_lbl.add_theme_font_size_override("font_size", 9)
-	type_lbl.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55))
-	type_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	type_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vb.add_child(type_lbl)
-
-	if not card.description.is_empty():
-		var desc_lbl := Label.new()
-		desc_lbl.text = card.description
-		desc_lbl.add_theme_font_size_override("font_size", 9)
-		desc_lbl.add_theme_color_override("font_color", Color(0.85, 0.80, 0.60))
-		desc_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		desc_lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		desc_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		vb.add_child(desc_lbl)
-
-	if card.card_type == CardData.CardType.CREATURE:
-		var stats := Label.new()
-		stats.text = "%d / %d" % [card.attack, card.health]
-		stats.add_theme_font_size_override("font_size", 12)
-		stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		stats.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		vb.add_child(stats)
+	btn.mouse_entered.connect(func(): _show_db_preview(card))
+	btn.mouse_exited.connect(func(): _hide_db_preview())
 
 	btn.pressed.connect(func():
-		if _deck_ids.size() < DeckManager.MAX_DECK_SIZE and _deck_ids.count(card.id) < DeckManager.max_copies_for(card):
+		if not maxed:
 			_deck_ids.append(card.id)
 			_refresh_deck()
 			_refresh_coll()
 	)
-	return btn
+	return {"btn": btn, "card_node": card_node, "maxed": maxed}
+
+# ── Card preview panel ─────────────────────────────────────────────────────
+
+func _show_db_preview(data: CardData) -> void:
+	_hide_preview_scheduled = false
+	if _preview_card_node:
+		_preview_card_node.setup(data)
+		_preview_card_node.modulate = Color(1, 1, 1, 1)
+	_build_preview_keyword_blocks(data)
+
+func _hide_db_preview() -> void:
+	_hide_preview_scheduled = true
+	await get_tree().create_timer(0.06).timeout
+	if _hide_preview_scheduled:
+		if _preview_card_node:
+			_preview_card_node.modulate = Color(1, 1, 1, 0)
+		_clear_preview_keyword_blocks()
+		_hide_preview_scheduled = false
+
+func _build_preview_keyword_blocks(data: CardData) -> void:
+	_clear_preview_keyword_blocks()
+	if _keywords.is_empty():
+		return
+	var seen: Array[String] = []
+	var entries: Array[Dictionary] = []
+	for ability in data.abilities:
+		if not Abilities.is_keyword_tooltip(ability):
+			continue
+		var lookup_key := Abilities.get_tooltip_key(ability)
+		if lookup_key in seen:
+			continue
+		if not _keywords.has(lookup_key) or (_keywords[lookup_key] as String).is_empty():
+			continue
+		seen.append(lookup_key)
+		entries.append({"key": lookup_key, "desc": _keywords[lookup_key], "color": Abilities.get_color(ability)})
+	var scan_queue: Array[String] = [data.description]
+	for entry in entries:
+		scan_queue.append(entry["desc"])
+	var i := 0
+	while i < scan_queue.size():
+		var text_lower := scan_queue[i].to_lower()
+		for kw_name in _keywords.keys():
+			if kw_name in seen:
+				continue
+			if (_keywords[kw_name] as String).is_empty():
+				continue
+			if kw_name.to_lower() in text_lower:
+				seen.append(kw_name)
+				scan_queue.append(_keywords[kw_name])
+				entries.append({"key": kw_name, "desc": _keywords[kw_name], "color": Abilities.get_color_for_display(kw_name)})
+		i += 1
+	for entry in entries:
+		_preview_keyword_vbox.add_child(_make_keyword_block(entry["key"], entry["desc"], entry["color"]))
+
+func _clear_preview_keyword_blocks() -> void:
+	for child in _preview_keyword_vbox.get_children():
+		child.queue_free()
+
+func _make_keyword_block(kw_name: String, desc: String, accent: Color) -> PanelContainer:
+	var pc := PanelContainer.new()
+	pc.custom_minimum_size = Vector2(KEYWORD_W, 0)
+	var s := StyleBoxFlat.new()
+	s.bg_color = Color(0.10, 0.10, 0.14, 0.95)
+	s.border_color = accent
+	s.set_border_width_all(2)
+	s.set_corner_radius_all(6)
+	s.content_margin_left = 8; s.content_margin_right = 8
+	s.content_margin_top = 6;  s.content_margin_bottom = 6
+	pc.add_theme_stylebox_override("panel", s)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 2)
+	var title := Label.new()
+	title.text = kw_name
+	title.add_theme_color_override("font_color", accent.lightened(0.3))
+	var body := Label.new()
+	body.text = desc
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_theme_font_size_override("font_size", 13)
+	body.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85))
+	vbox.add_child(title)
+	vbox.add_child(body)
+	pc.add_child(vbox)
+	return pc
+
+func _ignore_control_input(node: Node) -> void:
+	if node is Control:
+		(node as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for child in node.get_children():
+		_ignore_control_input(child)
 
 # ── Save / Delete ──────────────────────────────────────────────────────────
 

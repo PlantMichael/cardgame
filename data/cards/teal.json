@@ -34,6 +34,23 @@
 		"effect_value": 0
 	},
 	{
+		"id": "t_017",
+		"card_name": "Lost Yetiling",
+		"cost": 1,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "When a friendly Yeti challenges, attack the same target.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"on_yeti_challenge_attack"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "t_011",
 		"card_name": "Sledbearer",
 		"cost": 2,
@@ -58,12 +75,12 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "Recon. Safeguard",
+		"description": "Recon. Cloaked",
 		"attack": 2,
 		"health": 2,
 		"abilities": [
 			"recon",
-			"safeguard"
+			"cloaked"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -71,14 +88,14 @@
 	{
 		"id": "t_005",
 		"card_name": "Tundra Speeder",
-		"cost": 3,
+		"cost": 2,
 		"color": "TEAL",
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "Rush.",
 		"attack": 3,
-		"health": 2,
+		"health": 1,
 		"abilities": [
 			"rush"
 		],
@@ -87,7 +104,7 @@
 	},
 	{
 		"id": "t_001",
-		"card_name": "Yetiling",
+		"card_name": "Rallying Yetiling",
 		"cost": 4,
 		"color": "TEAL",
 		"card_type": "CREATURE",
@@ -131,7 +148,7 @@
 		"tribe": "",
 		"description": "Guardian. When a friendly yeti dies, gain +0/+2",
 		"attack": 3,
-		"health": 3,
+		"health": 2,
 		"abilities": [
 			"guardian",
 			"on_friendly_yeti_death_buff"
@@ -174,6 +191,24 @@
 		"effect_value": 0
 	},
 	{
+		"id": "t_018",
+		"card_name": "Gate yeti",
+		"cost": 5,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "yeti",
+		"description": "Challenge. Dualstrike.",
+		"attack": 5,
+		"health": 5,
+		"abilities": [
+			"challenge",
+			"dual_strike"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "t_004",
 		"card_name": "Inyuite Vanguard",
 		"cost": 5,
@@ -181,12 +216,12 @@
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "",
-		"description": "Guardian. Safeguard",
+		"description": "Guardian. Cloaked",
 		"attack": 4,
 		"health": 6,
 		"abilities": [
 			"guardian",
-			"safeguard"
+			"cloaked"
 		],
 		"effect": "",
 		"effect_value": 0
@@ -245,6 +280,23 @@
 		"effect_value": 0
 	},
 	{
+		"id": "t_019",
+		"card_name": "Serene Yeti",
+		"cost": 4,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "yeti",
+		"description": "Ambush",
+		"attack": 2,
+		"health": 4,
+		"abilities": [
+			"ambush"
+		],
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "t_016",
 		"card_name": "Mother Yeti",
 		"cost": 10,
@@ -271,7 +323,7 @@
 		"tribe": "yeti",
 		"description": "On play: Challenge every enemy creature from left to right",
 		"attack": 10,
-		"health": 10,
+		"health": 8,
 		"abilities": [
 			"challenge_all"
 		],

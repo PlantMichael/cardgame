@@ -255,12 +255,41 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 offset_top = 466.0
 
-[node name="CollScroll" type="ScrollContainer" parent="EditorPage/CollectionPanel"]
+[node name="CollHBox" type="HBoxContainer" parent="EditorPage/CollectionPanel"]
 layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="CollScroll" type="ScrollContainer" parent="EditorPage/CollectionPanel/CollHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
 horizontal_scroll_mode = 0
 vertical_scroll_mode = 1
 
-[node name="CollContent" type="VBoxContainer" parent="EditorPage/CollectionPanel/CollScroll"]
+[node name="CollContent" type="VBoxContainer" parent="EditorPage/CollectionPanel/CollHBox/CollScroll"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 10
+
+[node name="VSep" type="VSeparator" parent="EditorPage/CollectionPanel/CollHBox"]
+layout_mode = 2
+
+[node name="PreviewSection" type="VBoxContainer" parent="EditorPage/CollectionPanel/CollHBox"]
+custom_minimum_size = Vector2(254, 0)
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PreviewCardHolder" type="Control" parent="EditorPage/CollectionPanel/CollHBox/PreviewSection"]
+custom_minimum_size = Vector2(254, 370)
+layout_mode = 2
+clip_contents = true
+
+[node name="PreviewKeywordScroll" type="ScrollContainer" parent="EditorPage/CollectionPanel/CollHBox/PreviewSection"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 1
+
+[node name="PreviewKeywordVBox" type="VBoxContainer" parent="EditorPage/CollectionPanel/CollHBox/PreviewSection/PreviewKeywordScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
