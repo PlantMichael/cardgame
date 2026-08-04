@@ -13,6 +13,7 @@
 		"abilities": [
 			"on_yeti_challenge_buff"
 		],
+		"art": "res://assets/teal/iceologist.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -30,6 +31,7 @@
 		"abilities": [
 			"on_play_buff_if_yeti"
 		],
+		"art": "res://assets/teal/inyuiteinfantry.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -47,6 +49,7 @@
 		"abilities": [
 			"on_yeti_challenge_attack"
 		],
+		"art": "res://assets/teal/lostyetiling.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -64,6 +67,7 @@
 		"abilities": [
 			"challenge"
 		],
+		"art": "res://assets/teal/sledbearer.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -82,6 +86,7 @@
 			"recon",
 			"cloaked"
 		],
+		"art": "res://assets/teal/inyuitescout.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -99,6 +104,7 @@
 		"abilities": [
 			"rush"
 		],
+		"art": "res://assets/teal/tundraspeeder.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -117,7 +123,7 @@
 			"challenge",
 			"on_play_buff_friendly_yeti_attack"
 		],
-		"art": "res://assets/yetiling.jpg",
+		"art": "res://assets/teal/yetiling.jpg",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -135,6 +141,7 @@
 		"abilities": [
 			"deathrattle_draw_yeti"
 		],
+		"art": "res://assets/teal/yetirancher.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -153,6 +160,7 @@
 			"guardian",
 			"on_friendly_yeti_death_buff"
 		],
+		"art": "res://assets/teal/recoverysled.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -170,6 +178,7 @@
 		"abilities": [
 			"on_play_yeti_challenge"
 		],
+		"art": "res://assets/teal/yetipoker.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -187,6 +196,7 @@
 		"abilities": [
 			"on_yeti_death_challenge"
 		],
+		"art": "res://assets/teal/inyuiteoverwatch.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -205,6 +215,7 @@
 			"challenge",
 			"dual_strike"
 		],
+		"art": "res://assets/teal/gateyeti.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -223,6 +234,7 @@
 			"guardian",
 			"cloaked"
 		],
+		"art": "res://assets/teal/inyuitevanguard.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -241,6 +253,7 @@
 			"guardian",
 			"on_play_challenge_win_buff"
 		],
+		"art": "res://assets/teal/yetigrunt.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -259,6 +272,7 @@
 			"guardian",
 			"challenge"
 		],
+		"art": "res://assets/teal/frostyeti.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -276,6 +290,7 @@
 		"abilities": [
 			"guardian"
 		],
+		"art": "res://assets/teal/sereneyeti_t_006.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -293,6 +308,25 @@
 		"abilities": [
 			"ambush"
 		],
+		"art": "res://assets/teal/sereneyeti_t_019.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_020",
+		"card_name": "Iceskimmer",
+		"cost": 3,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "yeti",
+		"description": "Ambush",
+		"attack": 1,
+		"health": 3,
+		"abilities": [
+			"ambush"
+		],
+		"art": "res://assets/teal/sereneyeti_t_019.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -310,6 +344,7 @@
 		"abilities": [
 			"guardian"
 		],
+		"art": "res://assets/teal/motheryeti.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -327,6 +362,7 @@
 		"abilities": [
 			"challenge_all"
 		],
+		"art": "res://assets/teal/abominusprimalwraith.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -342,6 +378,7 @@
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
+		"art": "res://assets/teal/snowbank.png",
 		"effect": "buff_creature",
 		"effect_value": 2
 	},
@@ -357,6 +394,7 @@
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
+		"art": "res://assets/teal/icewhip.png",
 		"effect": "force_challenge",
 		"effect_value": 2
 	}

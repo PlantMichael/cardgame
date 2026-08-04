@@ -11,6 +11,7 @@
 		"attack": 2,
 		"health": 1,
 		"abilities": [],
+		"art": "res://assets/black/trashrunt.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -28,6 +29,7 @@
 		"abilities": [
 			"on_play_damage_2"
 		],
+		"art": "res://assets/black/slimelauncher.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -45,6 +47,7 @@
 		"abilities": [
 			"deathrattle_draw_card"
 		],
+		"art": "res://assets/black/scraphauler.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -62,6 +65,7 @@
 		"abilities": [
 			"on_play_rummage_buff"
 		],
+		"art": "res://assets/black/trashcollector.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -80,6 +84,7 @@
 			"rummage",
 			"rummage_on_death"
 		],
+		"art": "res://assets/black/garbageaddict.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -97,6 +102,7 @@
 		"abilities": [
 			"rush"
 		],
+		"art": "res://assets/black/junkwheel.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -115,6 +121,7 @@
 			"recon",
 			"rummage_draw"
 		],
+		"art": "res://assets/black/trashtallyer.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -132,6 +139,7 @@
 		"abilities": [
 			"guardian"
 		],
+		"art": "res://assets/black/lazyjunker.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -149,6 +157,7 @@
 		"abilities": [
 			"rummage_spell"
 		],
+		"art": "res://assets/black/psionicrummager.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -166,6 +175,7 @@
 		"abilities": [
 			"on_play_aoe_enemy_2"
 		],
+		"art": "res://assets/black/decayingjunkling.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -184,6 +194,7 @@
 			"guardian",
 			"rummage"
 		],
+		"art": "res://assets/black/dumpscummer.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -202,6 +213,7 @@
 			"guardian",
 			"rummage_and_play"
 		],
+		"art": "res://assets/black/greedyjunkling.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -219,6 +231,7 @@
 		"abilities": [
 			"guardian"
 		],
+		"art": "res://assets/black/junkblockade.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -238,6 +251,7 @@
 			"rummage",
 			"cloaked"
 		],
+		"art": "res://assets/black/debrishauler.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -256,6 +270,7 @@
 			"guardian",
 			"rummage_buff"
 		],
+		"art": "res://assets/black/filtheater.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -274,6 +289,7 @@
 			"guardian",
 			"rejuvenate_1"
 		],
+		"art": "res://assets/black/trashcolossus.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -292,6 +308,25 @@
 			"rush",
 			"deathrattle_rummage_creature"
 		],
+		"art": "res://assets/black/stinkherder.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_020",
+		"card_name": "Litter Critter",
+		"cost": 2,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "",
+		"description": "If this minion was rummaged, gain Void Touch",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"on_play_voidtouch_if_rummaged"
+		],
+		"art": "res://assets/black/stinkherder.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -305,14 +340,14 @@
 		"tribe": "",
 		"description": "When a card is rummaged, put it on the battlefield instead. On play: Rummage 3.",
 		"attack": 7,
-		"health": 7,
+		"health": 5,
 		"abilities": [
 			"rummage",
 			"rummage",
 			"rummage",
 			"stinkpile_passive"
 		],
-		"art": "res://assets/stinkpile.jpg",
+		"art": "res://assets/black/stinkpile.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -331,6 +366,7 @@
 			"cloaked",
 			"rummage_equal_cost"
 		],
+		"art": "res://assets/black/clutterpunk.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -348,6 +384,7 @@
 		"abilities": [
 			"rummage_on_death"
 		],
+		"art": "res://assets/black/trashpact.png",
 		"effect": "give_ability",
 		"effect_value": 0
 	},
@@ -365,6 +402,7 @@
 		"abilities": [
 			"rush"
 		],
+		"art": "res://assets/black/hotgarbage.png",
 		"effect": "give_ability",
 		"effect_value": 0
 	}

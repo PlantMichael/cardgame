@@ -74,7 +74,7 @@ func _play_cards(game_state: GameState, board: Board) -> void:
 								board.log_action("Opponent's %s won and gained +%d/+%d!" % [yeti.data.card_name, win_buff, win_buff])
 								board.refresh()
 				if card.effect == "blood_transfusion" and not game_state.opponent.board.is_empty():
-					var recipient = _pick_strongest(game_state.opponent.board.duplicate())
+					var recipient = _pick_health_buff_target(game_state.opponent.board.duplicate())
 					board.log_action("Opponent's Blood Transfusion gave %s +2 health" % recipient.data.card_name)
 					game_state.apply_heal_buff(recipient, 2)
 					board.refresh()
@@ -84,7 +84,7 @@ func _play_cards(game_state: GameState, board: Board) -> void:
 						if m != pick["minion"]:
 							candidates.append(m)
 					if not candidates.is_empty():
-						var recipient = _pick_strongest(candidates)
+						var recipient = _pick_health_buff_target(candidates)
 						board.log_action("Opponent's Sanguine gave %s +2 health" % recipient.data.card_name)
 						game_state.apply_heal_buff(recipient, 2)
 						board.refresh()
@@ -302,12 +302,15 @@ func _pick_stratagem_targets(card: CardData, game_state: GameState) -> Dictionar
 					result["ready"] = true
 					break
 		"heal":
-			var damaged: Array[Minion] = []
-			for m in opponent_targetable:
-				if m.current_health < m.max_health:
-					damaged.append(m)
-			if not damaged.is_empty():
-				result["minion"] = _pick_lowest_health(damaged)
+			if not opponent_targetable.is_empty():
+				var damaged: Array[Minion] = []
+				for m in opponent_targetable:
+					if m.current_health < m.max_health:
+						damaged.append(m)
+				if not damaged.is_empty():
+					result["minion"] = _pick_lowest_health(damaged)
+				else:
+					result["minion"] = _pick_health_buff_target(opponent_targetable)
 				result["ready"] = true
 		"eject_pilot":
 			var piloted: Array[Minion] = []
@@ -317,6 +320,11 @@ func _pick_stratagem_targets(card: CardData, game_state: GameState) -> Dictionar
 			if not piloted.is_empty():
 				result["minion"] = _pick_strongest(piloted)
 				result["ready"] = true
+		"eject_all_pilots":
+			for m in opponent_targetable:
+				if m.is_piloted:
+					result["ready"] = true
+					break
 		"give_mech_shielded_temp":
 			var mechs: Array[Minion] = []
 			for m in opponent_targetable:
@@ -390,7 +398,7 @@ func _attack_with_all(game_state: GameState, board: Board) -> void:
 
 		for attacker in attackers:
 			for target in candidates:
-				var score = _score_trade(attacker, target)
+				var score = _score_trade(attacker, target, game_state)
 				if score > best_score:
 					best_score = score
 					best_attacker = attacker
@@ -421,7 +429,7 @@ func _attack_with_all(game_state: GameState, board: Board) -> void:
 		made_attack = true
 
 # Score a trade: positive = worth doing, negative = avoid
-func _score_trade(attacker: Minion, target: Minion) -> int:
+func _score_trade(attacker: Minion, target: Minion, game_state: GameState) -> int:
 	if target.has_ability(Abilities.COMBAT_IMMUNE):
 		return -999
 
@@ -435,9 +443,10 @@ func _score_trade(attacker: Minion, target: Minion) -> int:
 		if Abilities.is_shielded(ab):
 			attacker_shield = Abilities.get_shield_value(ab)
 			break
+	var attacker_amp := game_state._get_enemy_damage_amp(attacker.owner_id)
 
 	var hits := 2 if attacker.has_ability(Abilities.DUAL_STRIKE) else 1
-	var damage_to_target := maxi(0, attacker.current_attack - target_shield) * hits
+	var damage_to_target := maxi(0, attacker.current_attack + attacker_amp - target_shield) * hits
 
 	var we_kill: bool
 	if attacker.has_ability(Abilities.VOIDTOUCH):
@@ -558,3 +567,27 @@ func _pick_strongest(minions: Array[Minion]) -> Minion:
 
 func _pick_lowest_health(minions: Array[Minion]) -> Minion:
 	return minions.reduce(func(a, b): return a if a.current_health < b.current_health else b)
+
+## Priority target for "give a friendly minion health" effects: a Heal-to-Draw
+## minion turns any health gain into a free card (always take it), then a
+## Transform-at-max-health minion closest to its threshold (push the payoff),
+## then fall back to protecting the weakest body on board.
+func _pick_health_buff_target(minions: Array[Minion]) -> Minion:
+	if minions.is_empty():
+		return null
+	for m in minions:
+		if m.has_ability(Abilities.HEAL_TO_DRAW):
+			return m
+	var best_transform: Minion = null
+	var best_gap := 999
+	for m in minions:
+		for ab in m.abilities:
+			if Abilities.is_transform_at_max_health(ab):
+				var gap: int = Abilities.get_transform_health_threshold(ab) - m.max_health
+				if gap >= 0 and gap < best_gap:
+					best_gap = gap
+					best_transform = m
+				break
+	if best_transform != null:
+		return best_transform
+	return _pick_lowest_health(minions)

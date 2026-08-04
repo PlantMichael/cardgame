@@ -1,13 +1,14 @@
-[gd_scene load_steps=4 format=3 uid="uid://ds1w661khk8c0"]
+[gd_scene load_steps=5 format=3 uid="uid://ds1w661khk8c0"]
 
 [ext_resource type="Script" path="res://scripts/game/board.gd" id="1_gn7yc"]
 [ext_resource type="Script" path="res://scripts/game/hero.gd" id="1_km1cx"]
 [ext_resource type="PackedScene" uid="uid://dur40h3mbtdyp" path="res://scenes/cards/Card.tscn" id="3_gyq52"]
+[ext_resource type="Texture2D" path="res://assets/battlefield.png" id="4_battlefield"]
 
 [node name="Board" type="Node2D"]
 script = ExtResource("1_gn7yc")
 
-[node name="Background" type="ColorRect" parent="."]
+[node name="Background" type="TextureRect" parent="."]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -15,7 +16,9 @@ offset_right = 1920.0
 offset_bottom = 1080.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.0872749, 0.113865, 0.146131, 1)
+texture = ExtResource("4_battlefield")
+expand_mode = 1
+stretch_mode = 6
 
 [node name="OpponentHandZone" type="HBoxContainer" parent="."]
 offset_left = 300.0
@@ -101,10 +104,11 @@ vertical_alignment = 1
 
 [node name="PlayerHandZone" type="HBoxContainer" parent="."]
 offset_left = 300.0
-offset_top = 900.0
+offset_top = 805.0
 offset_right = 1620.0
 offset_bottom = 1065.0
-theme_override_constants/separation = 8
+theme_override_constants/separation = 12
+alignment = 1
 
 [node name="CombatLogPanel" type="PanelContainer" parent="."]
 offset_left = 39.0

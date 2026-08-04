@@ -5,7 +5,7 @@ extends Area2D
 @onready var name_label: Label = $NameLabel
 @onready var mana_dots_panel: Panel = $maxmana
 @onready var image_size_panel: Panel = $imagesize
-@onready var description_label: Label = $DescriptionLabel
+@onready var description_label: RichTextLabel = $DescriptionLabel
 @onready var attack_label: Label = $AttackLabel
 @onready var health_label: Label = $HealthLabel
 @onready var art_texture: TextureRect = $ArtTexture
@@ -14,7 +14,14 @@ extends Area2D
 
 const CARD_TEMPLATES = {
 	CardData.CardColor.GREEN: preload("res://assets/greencard.png"),
+	CardData.CardColor.BLACK: preload("res://assets/blackcard.png"),
 }
+
+const CARD_FONT := preload("res://assets/fonts/Orbitron.ttf")
+
+const HAND_SCALE := Vector2(0.75, 0.75)
+const HAND_DRAG_OFFSET := Vector2(82.5, 120.0)
+const TOKEN_GAP := 6.0
 
 var data: CardData = null
 var minion: Minion = null
@@ -27,6 +34,10 @@ var _original_index: int
 var _is_highlighted_as_target: bool = false
 var _pilot_token: Panel = null
 var _reinforce_token: Panel = null
+var _mana_dots_end_x: float = 0.0
+var _description_plain_text: String = ""
+var _keyword_regex: RegEx = null
+var _keyword_colors: Dictionary = {}
 
 signal clicked(card: Card)
 signal dropped(card: Card)
@@ -53,6 +64,60 @@ func _ready() -> void:
 	mana_dots_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	image_size_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 
+## Wraps any keyword (Guardian, Rush, Rummage, ...) found in a card's
+## description with the same color used for that keyword's ability badge.
+func _highlight_keywords(description: String) -> String:
+	_ensure_keyword_data()
+	if _keyword_regex == null:
+		return description
+	var matches := _keyword_regex.search_all(description)
+	if matches.is_empty():
+		return description
+	var result := ""
+	var last_end := 0
+	for m in matches:
+		var start: int = m.get_start()
+		var end: int = m.get_end()
+		var word: String = m.get_string()
+		var color: Color = _keyword_colors.get(word.to_lower(), Color.WHITE)
+		result += description.substr(last_end, start - last_end)
+		result += "[color=#%s]%s[/color]" % [color.to_html(false), word]
+		last_end = end
+	result += description.substr(last_end)
+	return result
+
+func _ensure_keyword_data() -> void:
+	if _keyword_regex != null:
+		return
+	var words: Array[String] = []
+	for ability in Abilities.KEYWORD_TOOLTIPS:
+		var w: String = Abilities.get_display(ability)
+		if w.is_empty():
+			continue
+		var key := w.to_lower()
+		if not _keyword_colors.has(key):
+			_keyword_colors[key] = Abilities.get_color(ability)
+			words.append(w)
+	if words.is_empty():
+		return
+	# Longest phrase first so e.g. "Challenge All" matches whole, not as
+	# "Challenge" + leftover "All".
+	words.sort_custom(func(a, b): return a.length() > b.length())
+	var escaped: Array[String] = []
+	for w in words:
+		escaped.append(_escape_regex(w))
+	var re := RegEx.new()
+	var err := re.compile("(?i)\\b(" + "|".join(escaped) + ")\\b")
+	if err == OK:
+		_keyword_regex = re
+
+func _escape_regex(text: String) -> String:
+	var special := ["\\", ".", "*", "+", "?", "(", ")", "[", "]", "{", "}", "|", "^", "$"]
+	var result := text
+	for ch in special:
+		result = result.replace(ch, "\\" + ch)
+	return result
+
 func _fit_label_to_width(label: Label, max_font: int) -> void:
 	var font := label.get_theme_font("font")
 	for size in range(max_font, 7, -1):
@@ -60,32 +125,35 @@ func _fit_label_to_width(label: Label, max_font: int) -> void:
 		if font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x <= label.size.x:
 			return
 
-func _fit_label_to_height(label: Label, max_font: int) -> void:
-	var font := label.get_theme_font("font")
-	var line_spacing := label.get_theme_constant("line_spacing")
+## description_label holds BBCode (color tags around keywords), so sizing must
+## be measured against the plain text, not the tagged text.
+func _fit_description_to_height(plain_text: String, max_font: int) -> void:
+	var font := description_label.get_theme_font("normal_font")
+	var line_spacing := description_label.get_theme_constant("line_separation")
 	for size in range(max_font, 6, -1):
-		label.add_theme_font_size_override("font_size", size)
-		var sz := font.get_multiline_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, label.size.x, size)
+		description_label.add_theme_font_size_override("normal_font_size", size)
+		var sz := font.get_multiline_string_size(plain_text, HORIZONTAL_ALIGNMENT_LEFT, description_label.size.x, size)
 		var fh := font.get_height(size)
 		var line_count := ceili(sz.y / fh) if fh > 0 else 1
-		if sz.y + line_spacing * maxi(0, line_count - 1) <= label.size.y:
+		if sz.y + line_spacing * maxi(0, line_count - 1) <= description_label.size.y:
 			return
 
 func _fit_text() -> void:
 	_fit_label_to_width(name_label, 18)
-	_fit_label_to_height(description_label, 16)
+	_fit_description_to_height(_description_plain_text, 16)
 
 func setup(card_data: CardData) -> void:
 	data = card_data
 	name_label.text = card_data.card_name
 	_update_mana_dots(card_data.effective_cost())
-	description_label.text = card_data.description
+	_description_plain_text = card_data.description
+	description_label.text = "[center]" + _highlight_keywords(card_data.description) + "[/center]"
 	var is_creature = card_data.card_type == CardData.CardType.CREATURE
 	attack_label.visible = is_creature
 	health_label.visible = is_creature
 	stats_row.visible = is_creature
 	name_label.add_theme_color_override("font_color", Color.WHITE)
-	description_label.add_theme_color_override("font_color", Color.WHITE)
+	description_label.add_theme_color_override("default_color", Color.WHITE)
 	if is_creature:
 		attack_label.text = str(card_data.attack)
 		health_label.text = str(card_data.health)
@@ -94,7 +162,6 @@ func setup(card_data: CardData) -> void:
 	update_piloted_token(false)
 	art_texture.texture = card_data.art
 	_apply_color_theme(card_data.color)
-	_update_tribe_tag(card_data.abilities)
 	call_deferred("_fit_text")
 
 func set_targeted(value: bool) -> void:
@@ -116,11 +183,11 @@ func setup_as_minion(m: Minion) -> void:
 	health_label.text = str(m.current_health)
 	_apply_stat_colors(m)
 	if m.is_nulled:
-		description_label.text = "Nulled."
+		_description_plain_text = "Nulled."
+		description_label.text = "[center]Nulled.[/center]"
 		_apply_silenced_style()
 	update_piloted_token(m.is_piloted)
 	update_reinforce_token(m.has_ability(Abilities.REINFORCE))
-	_update_tribe_tag(m.abilities)
 	call_deferred("_fit_text")
 
 func _apply_stat_colors(m: Minion) -> void:
@@ -210,7 +277,7 @@ func start_drag() -> void:
 	var viewport = get_viewport()
 	_original_parent.remove_child(self)
 	viewport.add_child(self)
-	global_position = get_viewport().get_mouse_position() - Vector2(55, 80)
+	global_position = get_viewport().get_mouse_position() - HAND_DRAG_OFFSET
 
 
 func return_to_hand() -> void:
@@ -224,14 +291,14 @@ func return_to_hand() -> void:
 		_original_parent.add_child(self)
 		_original_parent.move_child(self, min(_original_index, _original_parent.get_child_count()))
 	position = Vector2.ZERO
-	scale = Vector2(0.5, 0.5)
+	scale = HAND_SCALE
 	_dragging = false
 
 func _input(event: InputEvent) -> void:
 	if not _dragging:
 		return
 	if event is InputEventMouseMotion:
-		global_position = get_viewport().get_mouse_position() - Vector2(55, 80)
+		global_position = get_viewport().get_mouse_position() - HAND_DRAG_OFFSET
 	elif event is InputEventMouseButton and not event.pressed:
 		_dragging = false
 		dropped.emit(self)
@@ -239,21 +306,20 @@ func _input(event: InputEvent) -> void:
 func _apply_silenced_style() -> void:
 	card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0.22, 0.22, 0.25, 0.55), Color(0.45, 0.45, 0.50), 2))
 	name_label.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55))
-	description_label.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55))
+	description_label.add_theme_color_override("default_color", Color(0.55, 0.55, 0.55))
 
 func _update_mana_dots(cost: int) -> void:
 	for child in mana_dots_panel.get_children():
 		child.queue_free()
 	var n := clampi(cost, 0, 10)
-	if n == 0:
-		return
 	const PANEL_W := 134.0
 	const PANEL_H := 18.0
 	const DOT_SIZE := 10.0
 	const DOT_GAP := 2.0
-	var total_w := n * DOT_SIZE + (n - 1) * DOT_GAP
+	var total_w := 0.0 if n == 0 else n * DOT_SIZE + (n - 1) * DOT_GAP
 	var start_x := (PANEL_W - total_w) / 2.0
 	var dot_y := (PANEL_H - DOT_SIZE) / 2.0
+	_mana_dots_end_x = mana_dots_panel.position.x + start_x + total_w
 	for i in n:
 		var dot := Panel.new()
 		dot.size = Vector2(DOT_SIZE, DOT_SIZE)
@@ -270,8 +336,6 @@ func _apply_color_theme(color: CardData.CardColor) -> void:
 	background.texture = CARD_TEMPLATES.get(color, preload("res://assets/card_template.png"))
 
 func _get_corner_radius() -> int:
-	if minion != null and data != null and data.rarity == CardData.CardRarity.LEGENDARY:
-		return 55
 	return 6
 
 func _make_stylebox(bg: Color, border: Color, border_width: int) -> StyleBoxFlat:
@@ -298,9 +362,10 @@ func update_piloted_token(piloted: bool) -> void:
 	style.border_color = Color(1.0, 0.85, 0.5)
 	style.set_border_width_all(1)
 	panel.add_theme_stylebox_override("panel", style)
-	panel.position = Vector2(94, 20)
+	panel.position = Vector2(_mana_dots_end_x + TOKEN_GAP, 14)
 	var label := Label.new()
 	label.text = "P"
+	label.add_theme_font_override("font", CARD_FONT)
 	label.add_theme_font_size_override("font_size", 9)
 	label.add_theme_color_override("font_color", Color.WHITE)
 	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -326,9 +391,10 @@ func update_reinforce_token(reinforced: bool) -> void:
 	style.border_color = Color(0.5, 1.0, 0.6)
 	style.set_border_width_all(1)
 	panel.add_theme_stylebox_override("panel", style)
-	panel.position = Vector2(94, 40)
+	panel.position = Vector2(_mana_dots_end_x + TOKEN_GAP, 32)
 	var label := Label.new()
 	label.text = "R"
+	label.add_theme_font_override("font", CARD_FONT)
 	label.add_theme_font_size_override("font_size", 9)
 	label.add_theme_color_override("font_color", Color.WHITE)
 	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -337,34 +403,3 @@ func update_reinforce_token(reinforced: bool) -> void:
 	panel.add_child(label)
 	add_child(panel)
 	_reinforce_token = panel
-
-func _update_tribe_tag(abilities_list: Array[String]) -> void:
-	for child in stats_row.get_children():
-		if child.has_meta("is_tribe"):
-			stats_row.remove_child(child)
-			child.queue_free()
-
-	var tribe_ability := ""
-	for ability in abilities_list:
-		if Abilities.is_tribe(ability):
-			tribe_ability = ability
-			break
-	if tribe_ability.is_empty():
-		return
-
-	var spacer := Control.new()
-	spacer.set_meta("is_tribe", true)
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	stats_row.add_child(spacer)
-
-	var label := Label.new()
-	label.set_meta("is_tribe", true)
-	label.text = Abilities.get_display(tribe_ability).to_upper()
-	label.add_theme_font_size_override("font_size", 8)
-	label.add_theme_color_override("font_color", Color.WHITE)
-	var bg := StyleBoxFlat.new()
-	bg.bg_color = Abilities.get_color(tribe_ability)
-	bg.set_corner_radius_all(3)
-	bg.set_content_margin_all(2)
-	label.add_theme_stylebox_override("normal", bg)
-	stats_row.add_child(label)

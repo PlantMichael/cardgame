@@ -396,10 +396,7 @@ func _process_pending_buff_friendly_health() -> void:
 				game_state.apply_buff_friendly_health(target)
 				board.refresh()
 		else:
-			var best: Minion = p.board[0]
-			for m in p.board:
-				if m.current_health > best.current_health:
-					best = m
+			var best: Minion = ai_controller._pick_health_buff_target(p.board.duplicate())
 			board.log_action("Opponent's Moonchild gave %s +1 max health" % best.data.card_name)
 			game_state.apply_buff_friendly_health(best)
 			board.refresh()

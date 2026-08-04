@@ -2,6 +2,7 @@ extends Node
 
 const BoardScene = preload("res://scenes/game/Board.tscn")
 const DeckBuilderScene = preload("res://scenes/ui/DeckBuilderScreen.tscn")
+const WallpaperTexture = preload("res://assets/wallapepr.png")
 
 var _canvas: CanvasLayer
 var _player_deck_ids: Array[String] = []
@@ -10,6 +11,7 @@ var _opponent_deck_ids: Array[String] = []
 # Simulation state
 var _sim_running: bool = false
 var _sim_runner: SimRunner = null
+var _sim_deck_mode: SimRunner.DeckMode = SimRunner.DeckMode.RANDOM
 var _sim_stat_labels: Dictionary = {}
 var _sim_totals_lbl: Label = null
 var _sim_gps_timer: float = 0.0
@@ -29,8 +31,10 @@ func _ready() -> void:
 	_canvas = CanvasLayer.new()
 	add_child(_canvas)
 
-	var bg := ColorRect.new()
-	bg.color = Color(0.07, 0.08, 0.12)
+	var bg := TextureRect.new()
+	bg.texture = WallpaperTexture
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_canvas.add_child(bg)
 
@@ -90,39 +94,116 @@ func _menu_btn(label: String) -> Button:
 
 func _on_multiplayer_pressed() -> void:
 	_clear_screen()
-	_show_name_entry()
+	if Auth.is_logged_in:
+		_mp_name = Auth.username
+		_with_connection(_show_lobby_browser)
+		return
+	if Auth.has_saved_session():
+		_show_reconnecting_screen()
+		return
+	_show_auth_screen(false)
 
-func _show_name_entry() -> void:
+# Ensures the relay connection is open before running on_ready, connecting first if needed.
+# If the connection doesn't open within CONNECT_TIMEOUT_SEC, on_timeout runs instead (if given).
+const CONNECT_TIMEOUT_SEC := 8.0
+
+func _with_connection(on_ready: Callable, on_timeout: Callable = Callable()) -> void:
+	if Net._connected:
+		on_ready.call()
+		return
+	var fired := false
+	Net.connected_to_server.connect(func():
+		fired = true
+		on_ready.call()
+	, CONNECT_ONE_SHOT)
+	Net.connect_to_relay()
+	if on_timeout.is_valid():
+		get_tree().create_timer(CONNECT_TIMEOUT_SEC).timeout.connect(func():
+			if not fired:
+				on_timeout.call()
+		)
+
+func _show_reconnecting_screen() -> void:
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_canvas.add_child(center)
 
 	var vbox := VBoxContainer.new()
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	vbox.add_theme_constant_override("separation", 16)
+	vbox.add_theme_constant_override("separation", 18)
+	center.add_child(vbox)
+
+	var lbl := Label.new()
+	lbl.text = "Reconnecting..."
+	lbl.add_theme_font_size_override("font_size", 22)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(lbl)
+
+	_with_connection(func():
+		Auth.login_result.connect(_on_resume_session_result, CONNECT_ONE_SHOT)
+		Auth.try_resume_session()
+	, func():
+		lbl.text = "Couldn't reach the server. Check your connection and try again."
+		var retry_btn := _menu_btn("RETRY")
+		retry_btn.pressed.connect(func():
+			_clear_screen()
+			_show_reconnecting_screen()
+		)
+		vbox.add_child(retry_btn)
+	)
+
+func _on_resume_session_result(success: bool, _message: String) -> void:
+	_clear_screen()
+	if success:
+		_mp_name = Auth.username
+		_show_lobby_browser()
+	else:
+		_show_auth_screen(false)
+
+func _show_auth_screen(is_register: bool) -> void:
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_canvas.add_child(center)
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 14)
 	center.add_child(vbox)
 
 	var title := Label.new()
-	title.text = "Enter Your Name"
+	title.text = "Create Account" if is_register else "Log In"
 	title.add_theme_font_size_override("font_size", 32)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
 
-	var name_edit := LineEdit.new()
-	name_edit.custom_minimum_size = Vector2(300, 48)
-	name_edit.add_theme_font_size_override("font_size", 20)
-	name_edit.placeholder_text = "Your name..."
-	name_edit.text = _mp_name
-	vbox.add_child(name_edit)
+	var username_edit := LineEdit.new()
+	username_edit.custom_minimum_size = Vector2(300, 48)
+	username_edit.add_theme_font_size_override("font_size", 20)
+	username_edit.placeholder_text = "Username"
+	username_edit.text = _mp_name
+	vbox.add_child(username_edit)
+
+	var password_edit := LineEdit.new()
+	password_edit.custom_minimum_size = Vector2(300, 48)
+	password_edit.add_theme_font_size_override("font_size", 20)
+	password_edit.placeholder_text = "Password"
+	password_edit.secret = true
+	vbox.add_child(password_edit)
 
 	var status_lbl := Label.new()
 	status_lbl.add_theme_font_size_override("font_size", 14)
 	status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	status_lbl.add_theme_color_override("font_color", Color(0.9, 0.4, 0.4))
 	vbox.add_child(status_lbl)
 
-	var confirm_btn := _menu_btn("CONNECT")
-	confirm_btn.custom_minimum_size = Vector2(300, 56)
-	vbox.add_child(confirm_btn)
+	var submit_btn := _menu_btn("REGISTER" if is_register else "LOG IN")
+	submit_btn.custom_minimum_size = Vector2(300, 56)
+	vbox.add_child(submit_btn)
+
+	var toggle_btn := Button.new()
+	toggle_btn.text = "Already have an account? Log in" if is_register else "New here? Create an account"
+	toggle_btn.add_theme_font_size_override("font_size", 14)
+	vbox.add_child(toggle_btn)
 
 	var back_btn := Button.new()
 	back_btn.text = "Back"
@@ -135,27 +216,40 @@ func _show_name_entry() -> void:
 		_show_main_menu()
 	)
 
-	confirm_btn.pressed.connect(func():
-		var n := name_edit.text.strip_edges()
-		if n.is_empty():
-			status_lbl.text = "Please enter a name."
+	toggle_btn.pressed.connect(func():
+		_mp_name = username_edit.text
+		_clear_screen()
+		_show_auth_screen(not is_register)
+	)
+
+	submit_btn.pressed.connect(func():
+		var uname := username_edit.text.strip_edges()
+		var pw := password_edit.text
+		if uname.is_empty() or pw.is_empty():
+			status_lbl.text = "Enter a username and password."
 			return
-		_mp_name = n
+		submit_btn.disabled = true
 		status_lbl.text = "Connecting..."
-		confirm_btn.disabled = true
-		if Net._connected:
-			_clear_screen()
-			_show_lobby_browser()
-		else:
-			Net.connected_to_server.connect(func():
-				_clear_screen()
-				_show_lobby_browser()
-			, CONNECT_ONE_SHOT)
-			Net.error_received.connect(func(msg: String):
-				status_lbl.text = "Error: " + msg
-				confirm_btn.disabled = false
-			, CONNECT_ONE_SHOT)
-			Net.connect_to_relay()
+		_with_connection(func():
+			status_lbl.text = "Registering..." if is_register else "Logging in..."
+			var handler := func(success: bool, message: String):
+				if success:
+					_clear_screen()
+					_mp_name = Auth.username
+					_show_lobby_browser()
+				else:
+					submit_btn.disabled = false
+					status_lbl.text = message
+			if is_register:
+				Auth.register_result.connect(handler, CONNECT_ONE_SHOT)
+				Auth.register(uname, pw)
+			else:
+				Auth.login_result.connect(handler, CONNECT_ONE_SHOT)
+				Auth.login(uname, pw)
+		, func():
+			submit_btn.disabled = false
+			status_lbl.text = "Couldn't reach the server. Check your connection and try again."
+		)
 	)
 
 func _show_lobby_browser() -> void:
@@ -165,7 +259,7 @@ func _show_lobby_browser() -> void:
 	_canvas.add_child(root)
 
 	# Header
-	var bar := _make_header_bar("Multiplayer Lobbies", func():
+	var bar := _make_header_bar("Multiplayer Lobbies  —  " + Auth.username, func():
 		_clear_screen()
 		_show_main_menu()
 	)
@@ -214,6 +308,17 @@ func _show_lobby_browser() -> void:
 	host_btn.custom_minimum_size = Vector2(180, 44)
 	host_btn.add_theme_font_size_override("font_size", 18)
 	bottom.add_child(host_btn)
+
+	var logout_btn := Button.new()
+	logout_btn.text = "Log Out"
+	logout_btn.custom_minimum_size = Vector2(140, 44)
+	logout_btn.add_theme_font_size_override("font_size", 18)
+	bottom.add_child(logout_btn)
+	logout_btn.pressed.connect(func():
+		Auth.logout()
+		_clear_screen()
+		_show_main_menu()
+	)
 
 	var _populate_list = func(lobbies_data: Array):
 		for c in list_container.get_children():
@@ -411,8 +516,10 @@ func _on_opponent_left() -> void:
 			child.queue_free()
 	_canvas = CanvasLayer.new()
 	add_child(_canvas)
-	var bg := ColorRect.new()
-	bg.color = Color(0.07, 0.08, 0.12)
+	var bg := TextureRect.new()
+	bg.texture = WallpaperTexture
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_canvas.add_child(bg)
 	_show_main_menu()
@@ -489,7 +596,7 @@ func _show_opponent_select() -> void:
 
 		btn.text = label
 		btn.pressed.connect(func():
-			var opp_deck := DeckManager.build_random_faction_deck(faction_color)
+			var opp_deck := DeckManager.build_archetype_deck(faction_color)
 			var opp_ids: Array[String] = []
 			for c in opp_deck:
 				opp_ids.append(c.id)
@@ -658,7 +765,7 @@ func _on_simulation_pressed() -> void:
 
 func _show_simulation_screen() -> void:
 	_sim_running = false
-	_sim_runner = SimRunner.new()
+	_sim_runner = SimRunner.new(_sim_deck_mode)
 	_sim_stat_labels = {}
 	_sim_card_grid = null
 	_sim_gps_timer = 0.0
@@ -697,11 +804,28 @@ func _show_simulation_screen() -> void:
 	left_center.add_child(left_vbox)
 
 	var desc := Label.new()
-	desc.text = "AIs play random decks from\ndifferent factions each game."
+	desc.text = ("AIs play archetype-built decks from\ndifferent factions each game."
+		if _sim_deck_mode == SimRunner.DeckMode.ARCHETYPE
+		else "AIs play random decks from\ndifferent factions each game.")
 	desc.add_theme_font_size_override("font_size", 13)
 	desc.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
 	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	left_vbox.add_child(desc)
+
+	var mode_btn := _menu_btn(
+		"Deck mode: ARCHETYPE (tap for RANDOM)"
+		if _sim_deck_mode == SimRunner.DeckMode.ARCHETYPE
+		else "Deck mode: RANDOM (tap for ARCHETYPE)")
+	mode_btn.custom_minimum_size = Vector2(360, 44)
+	mode_btn.add_theme_font_size_override("font_size", 13)
+	mode_btn.pressed.connect(func():
+		_sim_deck_mode = (SimRunner.DeckMode.RANDOM
+			if _sim_deck_mode == SimRunner.DeckMode.ARCHETYPE
+			else SimRunner.DeckMode.ARCHETYPE)
+		_clear_screen()
+		_show_simulation_screen()
+	)
+	left_vbox.add_child(mode_btn)
 
 	var table := GridContainer.new()
 	table.columns = 4

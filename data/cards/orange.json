@@ -13,6 +13,7 @@
 		"abilities": [
 			"rush"
 		],
+		"art": "res://assets/orange/scraprummager.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -28,6 +29,7 @@
 		"attack": 2,
 		"health": 1,
 		"abilities": [],
+		"art": "res://assets/orange/sweeper.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -43,6 +45,7 @@
 		"attack": 1,
 		"health": 2,
 		"abilities": [],
+		"art": "res://assets/orange/duster.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -60,6 +63,7 @@
 		"abilities": [
 			"rush"
 		],
+		"art": "res://assets/orange/mechspotlighter.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -77,6 +81,7 @@
 		"abilities": [
 			"pilot_2_2"
 		],
+		"art": "res://assets/orange/juniorpilot.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -95,6 +100,7 @@
 			"pilot_1_3",
 			"pilot_gives_cloaked"
 		],
+		"art": "res://assets/orange/nervousflyer.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -112,6 +118,7 @@
 		"abilities": [
 			"on_piloted_stat_boost"
 		],
+		"art": "res://assets/orange/f4lcon.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -129,6 +136,7 @@
 		"abilities": [
 			"on_friendly_pilot_draw"
 		],
+		"art": "res://assets/orange/aircontrol.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -147,6 +155,7 @@
 			"guardian",
 			"rummage_mech_on_death"
 		],
+		"art": "res://assets/orange/gundariengineer.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -164,6 +173,7 @@
 		"abilities": [
 			"rush"
 		],
+		"art": "res://assets/orange/oddwiredmech.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -182,6 +192,7 @@
 			"pilot_4_1",
 			"pilot_gives_rush"
 		],
+		"art": "res://assets/orange/brashcaptain.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -199,6 +210,7 @@
 		"abilities": [
 			"cloaked"
 		],
+		"art": "res://assets/orange/st4rling.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -217,6 +229,7 @@
 			"pilot_3_4",
 			"recon"
 		],
+		"art": "res://assets/orange/veteranpilot.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -234,6 +247,7 @@
 		"abilities": [
 			"guardian"
 		],
+		"art": "res://assets/orange/0sprey.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -251,6 +265,7 @@
 		"abilities": [
 			"guardian"
 		],
+		"art": "res://assets/orange/kestrel.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -269,6 +284,7 @@
 			"pilot_4_3",
 			"pilot_gives_guardian"
 		],
+		"art": "res://assets/orange/damencaptain.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -289,6 +305,7 @@
 			"eject_pilot_on_death",
 			"on_piloted_gain_rush"
 		],
+		"art": "res://assets/orange/qu3tzalcoatltheserpent.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -307,6 +324,7 @@
 			"pilot_2_2",
 			"on_play_pilot_mech"
 		],
+		"art": "res://assets/orange/newtnanothecunning.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -324,6 +342,7 @@
 		"abilities": [
 			"growvin_aura"
 		],
+		"art": "res://assets/orange/growvinthearchitect.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -341,6 +360,7 @@
 		"abilities": [
 			"rush"
 		],
+		"art": "res://assets/orange/c4ladrius.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -359,6 +379,7 @@
 			"mech",
 			"on_friendly_mech_death_buff"
 		],
+		"art": "res://assets/orange/griff1n.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -376,6 +397,7 @@
 		"abilities": [
 			"dual_strike"
 		],
+		"art": "res://assets/orange/jabbot.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -391,6 +413,7 @@
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
+		"art": "res://assets/orange/nanotech.png",
 		"effect": "buff_creature",
 		"effect_value": 2
 	},
@@ -406,6 +429,7 @@
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
+		"art": "res://assets/orange/panicbutton.png",
 		"effect": "eject_pilot",
 		"effect_value": 0
 	},
@@ -421,6 +445,7 @@
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
+		"art": "res://assets/orange/doomsdayprotocol.png",
 		"effect": "eject_all_pilots",
 		"effect_value": 0
 	},
@@ -436,6 +461,7 @@
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
+		"art": "res://assets/orange/carbonmesh.png",
 		"effect": "give_mech_shielded_temp",
 		"effect_value": 3
 	}

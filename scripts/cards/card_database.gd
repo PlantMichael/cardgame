@@ -54,7 +54,7 @@ func _load_file(path: String) -> void:
 		data.transform_choices = new_choices
 		data.is_token = card_dict.get("is_token", false)
 		var art_path = card_dict.get("art", "")
-		if not art_path.is_empty():
+		if not art_path.is_empty() and ResourceLoader.exists(art_path):
 			data.art = load(art_path)
 		cards[data.id] = data
 

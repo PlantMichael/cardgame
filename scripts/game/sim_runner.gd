@@ -3,6 +3,14 @@ extends RefCounted
 
 const FACTION_KEYS: Array[String] = ["GREEN", "CRIMSON", "BLACK", "ORANGE", "TEAL"]
 
+## RANDOM matches the historical balance-testing behavior (raw card power,
+## unaffected by deck-construction quality). ARCHETYPE uses DeckManager's
+## archetype-aware builder, so it also captures how much win rate is being
+## lost to bad deck construction vs. the cards themselves.
+enum DeckMode { RANDOM, ARCHETYPE }
+
+var deck_mode: DeckMode = DeckMode.RANDOM
+
 var stats: Dictionary = {}
 var total_games: int = 0
 var card_wins: Dictionary = {}    # card_id -> int
@@ -11,13 +19,19 @@ var card_kills: Dictionary = {}   # card_id -> int
 var card_damage: Dictionary = {}  # card_id -> int
 var card_plays: Dictionary = {}   # card_id -> int
 
-func _init() -> void:
+func _init(mode: DeckMode = DeckMode.RANDOM) -> void:
+	deck_mode = mode
 	for key in FACTION_KEYS:
 		stats[key] = {"wins": 0, "losses": 0}
 
 func run_batch(count: int) -> void:
 	for _i in count:
 		_run_one_game()
+
+func _build_deck(color: CardData.CardColor) -> Array[CardData]:
+	if deck_mode == DeckMode.ARCHETYPE:
+		return DeckManager.build_archetype_deck(color)
+	return DeckManager.build_random_faction_deck(color)
 
 # ── Game runner ─────────────────────────────────────────────────────────────
 
@@ -29,8 +43,8 @@ func _run_one_game() -> void:
 	var color_a := _key_to_color(key_a)
 	var color_b := _key_to_color(key_b)
 
-	var deck_a := _force_copies(DeckManager.build_random_faction_deck(color_a), "gen_str_003", 2)
-	var deck_b := _force_copies(DeckManager.build_random_faction_deck(color_b), "gen_str_003", 2)
+	var deck_a := _force_copies(_build_deck(color_a), "gen_str_003", 2)
+	var deck_b := _force_copies(_build_deck(color_b), "gen_str_003", 2)
 	if deck_a.is_empty() or deck_b.is_empty():
 		return
 
@@ -168,7 +182,7 @@ func _resolve_pending(gs: GameState) -> void:
 			var pid: String = gs.pending_buff_friendly_health.pop_front()
 			var p_state: PlayerState = gs.player if pid == gs.player.player_id else gs.opponent
 			if not p_state.board.is_empty():
-				gs.apply_buff_friendly_health(p_state.board[randi() % p_state.board.size()])
+				gs.apply_buff_friendly_health(_pick_health_buff_target(p_state.board))
 
 		while not gs.pending_tank_specialist_buffs.is_empty():
 			changed = true
@@ -530,7 +544,14 @@ func _pick_stratagem(card: CardData, gs: GameState, acting_id: String) -> Dictio
 				result["ready"] = true
 		"heal":
 			if not friendly_tgts.is_empty():
-				result["minion"] = friendly_tgts[randi() % friendly_tgts.size()]
+				var damaged: Array[Minion] = []
+				for m in friendly_tgts:
+					if m.current_health < m.max_health:
+						damaged.append(m)
+				if not damaged.is_empty():
+					result["minion"] = _pick_lowest_health(damaged)
+				else:
+					result["minion"] = _pick_health_buff_target(friendly_tgts)
 				result["ready"] = true
 		"force_challenge", "poke_bear":
 			for m in friendly.board:
@@ -559,7 +580,7 @@ func _handle_stratagem_secondary(card: CardData, target: Minion, gs: GameState, 
 	var enemy: PlayerState = gs.opponent if acting_id == gs.player.player_id else gs.player
 
 	if card.effect == "blood_transfusion" and not friendly.board.is_empty():
-		gs.apply_heal_buff(friendly.board[randi() % friendly.board.size()], card.effect_value)
+		gs.apply_heal_buff(_pick_health_buff_target(friendly.board), card.effect_value)
 
 	if card.effect == "sanguine" and target != null:
 		var others: Array[Minion] = []
@@ -567,7 +588,7 @@ func _handle_stratagem_secondary(card: CardData, target: Minion, gs: GameState, 
 			if m != target:
 				others.append(m)
 		if not others.is_empty():
-			gs.apply_heal_buff(others[randi() % others.size()], card.effect_value)
+			gs.apply_heal_buff(_pick_health_buff_target(others), card.effect_value)
 
 	if card.effect in ["force_challenge", "poke_bear"] and target != null:
 		var yeti: Minion = target
@@ -609,6 +630,36 @@ func _face_score(enemy_hp: int, my_board: int, their_board: int) -> int:
 	if my_board > their_board + 1:
 		s += 6
 	return s
+
+func _pick_lowest_health(minions: Array[Minion]) -> Minion:
+	var lowest := minions[0]
+	for m in minions:
+		if m.current_health < lowest.current_health:
+			lowest = m
+	return lowest
+
+## Mirrors AIController._pick_health_buff_target: Heal-to-Draw minions always
+## take priority (free card), then Transform-at-max-health minions closest to
+## their threshold, then fall back to the weakest body on board.
+func _pick_health_buff_target(minions: Array[Minion]) -> Minion:
+	if minions.is_empty():
+		return null
+	for m in minions:
+		if m.has_ability(Abilities.HEAL_TO_DRAW):
+			return m
+	var best_transform: Minion = null
+	var best_gap := 999
+	for m in minions:
+		for ab in m.abilities:
+			if Abilities.is_transform_at_max_health(ab):
+				var gap: int = Abilities.get_transform_health_threshold(ab) - m.max_health
+				if gap >= 0 and gap < best_gap:
+					best_gap = gap
+					best_transform = m
+				break
+	if best_transform != null:
+		return best_transform
+	return _pick_lowest_health(minions)
 
 func _pick_removal(minions: Array[Minion], damage: int) -> Minion:
 	var best_kill: Minion = null

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bwp8hexerhh5v"
-path="res://.godot/imported/yetiling.jpg-21d67670b10fc5104dafe4662e46b9cc.ctex"
+uid="uid://dtu6y6e5epqn7"
+path="res://.godot/imported/blackcard.png-00916320de3e117b64a14d30f702c5cb.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/yetiling.jpg"
-dest_files=["res://.godot/imported/yetiling.jpg-21d67670b10fc5104dafe4662e46b9cc.ctex"]
+source_file="res://assets/blackcard.png"
+dest_files=["res://.godot/imported/blackcard.png-00916320de3e117b64a14d30f702c5cb.ctex"]
 
 [params]
 

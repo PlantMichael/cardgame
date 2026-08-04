@@ -13,6 +13,7 @@
 		"abilities": [
 			"on_play_buff_friendly_health"
 		],
+		"art": "res://assets/crimson/moonchild.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -34,6 +35,7 @@
 			"cr_005t",
 			"cr_007t"
 		],
+		"art": "res://assets/crimson/fletchling.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -45,13 +47,14 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "Transform when health reaches 5.",
+		"description": "Transform when health reaches 4.",
 		"attack": 2,
 		"health": 3,
 		"abilities": [
-			"transform_at_max_health_5"
+			"transform_at_max_health_4"
 		],
 		"transform_into": "cr_001t",
+		"art": "res://assets/crimson/havenguard.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -69,6 +72,7 @@
 		"abilities": [
 			"rush"
 		],
+		"art": "res://assets/crimson/sanguinebat.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -87,6 +91,7 @@
 			"rush",
 			"attack_buff_friendly_health"
 		],
+		"art": "res://assets/crimson/covenhound.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -105,6 +110,7 @@
 			"mirror_transform"
 		],
 		"transform_into": "cr_004t",
+		"art": "res://assets/crimson/ghoulhunter.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -117,12 +123,13 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "When a friendly creature transforms, give it Ambush.",
-		"attack": 1,
+		"attack": 3,
 		"health": 3,
 		"abilities": [
 			"on_friendly_transform_give_ambush"
 		],
 		"transform_into": "",
+		"art": "res://assets/crimson/fleshpriest.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -140,6 +147,7 @@
 		"abilities": [
 			"apothecary"
 		],
+		"art": "res://assets/crimson/apothecary.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -157,6 +165,7 @@
 		"abilities": [
 			"guardian"
 		],
+		"art": "res://assets/crimson/cryptsavage.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -172,6 +181,7 @@
 		"attack": 5,
 		"health": 4,
 		"abilities": [],
+		"art": "res://assets/crimson/batcolony.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -193,6 +203,7 @@
 			"cr_002t",
 			"cr_003t"
 		],
+		"art": "res://assets/crimson/cryptking.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -208,6 +219,7 @@
 		"attack": 3,
 		"health": 5,
 		"abilities": [],
+		"art": "res://assets/crimson/moonlightdevotee.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -225,6 +237,7 @@
 		"abilities": [
 			"broodtender_aura"
 		],
+		"art": "res://assets/crimson/broodtender.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -242,6 +255,7 @@
 		"abilities": [
 			"on_friendly_transform_buff_self"
 		],
+		"art": "res://assets/crimson/covenacolyte.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -260,6 +274,7 @@
 			"deathrattle_aoe_transform"
 		],
 		"transform_into": "cr_004t",
+		"art": "res://assets/crimson/cryptgangrel.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -278,6 +293,7 @@
 			"guardian",
 			"when_attacked_buff_friendly"
 		],
+		"art": "res://assets/crimson/eldersire.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -293,6 +309,7 @@
 		"attack": 8,
 		"health": 8,
 		"abilities": [],
+		"art": "res://assets/crimson/fleshraker.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -310,13 +327,14 @@
 		"abilities": [
 			"heal_to_draw"
 		],
+		"art": "res://assets/crimson/delosthecryptpriest.png",
 		"effect": "",
 		"effect_value": 0
 	},
 	{
 		"id": "cr_020",
 		"card_name": "Blood Merchant",
-		"cost": 3,
+		"cost": 2,
 		"color": "CRIMSON",
 		"card_type": "CREATURE",
 		"rarity": "RARE",
@@ -327,6 +345,7 @@
 		"abilities": [
 			"on_play_swap_friendly_health"
 		],
+		"art": "res://assets/crimson/bloodmerchant.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -344,6 +363,25 @@
 		"abilities": [
 			"on_play_devour_friendly"
 		],
+		"art": "res://assets/crimson/cryptlurker.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_024",
+		"card_name": "Coven Supplier",
+		"cost": 4,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "On play: give all friendly minions +0/+1",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"on_play_buff_all_friendly_health"
+		],
+		"art": "res://assets/crimson/cryptlurker.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -359,6 +397,7 @@
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
+		"art": "res://assets/crimson/bloodtransfusion.png",
 		"effect": "blood_transfusion",
 		"effect_value": 2
 	},
@@ -374,6 +413,7 @@
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
+		"art": "res://assets/crimson/drain.png",
 		"effect": "sanguine",
 		"effect_value": 2
 	},
@@ -389,6 +429,7 @@
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
+		"art": "res://assets/crimson/moonhowl.png",
 		"effect": "heal",
 		"effect_value": 3
 	},
@@ -408,6 +449,7 @@
 		],
 		"transform_into": "",
 		"is_token": true,
+		"art": "res://assets/crimson/hungeringwolf.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -427,6 +469,7 @@
 		],
 		"transform_into": "",
 		"is_token": true,
+		"art": "res://assets/crimson/royalbat.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -446,6 +489,7 @@
 		],
 		"transform_into": "",
 		"is_token": true,
+		"art": "res://assets/crimson/festeringwolf.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -465,6 +509,7 @@
 		],
 		"transform_into": "",
 		"is_token": true,
+		"art": "res://assets/crimson/fleshripper.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -484,6 +529,7 @@
 		],
 		"transform_into": "",
 		"is_token": true,
+		"art": "res://assets/crimson/slippybat.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -503,6 +549,7 @@
 		],
 		"transform_into": "",
 		"is_token": true,
+		"art": "res://assets/crimson/wardinggargoyle.png",
 		"effect": "",
 		"effect_value": 0
 	}

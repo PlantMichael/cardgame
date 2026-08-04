@@ -111,6 +111,8 @@ const DEFINITIONS: Dictionary = {
 	ON_PLAY_DEVOUR_FRIENDLY:         { "display": "On Play:",        "color": Color(0.55, 0.10, 0.20) },
 	DEATHRATTLE_RUMMAGE_CREATURE:    { "display": "On Death:",       "color": Color(0.45, 0.10, 0.30) },
 	RUMMAGE_EQUAL_COST:              { "display": "Equal Rummage",   "color": Color(0.30, 0.15, 0.45) },
+	ON_PLAY_BUFF_ALL_FRIENDLY_HEALTH: { "display": "On Play:",       "color": Color(0.70, 0.25, 0.45) },
+	ON_PLAY_VOIDTOUCH_IF_RUMMAGED:    { "display": "On Play:",       "color": Color(0.45, 0.10, 0.65) },
 }
 
 const ON_PLAY_DAMAGE             = "on_play_damage"
@@ -143,6 +145,8 @@ const ON_PLAY_SWAP_FRIENDLY_HEALTH   = "on_play_swap_friendly_health"
 const ON_PLAY_DEVOUR_FRIENDLY        = "on_play_devour_friendly"
 const DEATHRATTLE_RUMMAGE_CREATURE   = "deathrattle_rummage_creature"
 const RUMMAGE_EQUAL_COST             = "rummage_equal_cost"
+const ON_PLAY_BUFF_ALL_FRIENDLY_HEALTH  = "on_play_buff_all_friendly_health"
+const ON_PLAY_VOIDTOUCH_IF_RUMMAGED     = "on_play_voidtouch_if_rummaged"
 
 const TRIBES: Array = [YETI, MECH, TANK, SPRITE, MONSTROSITY]
 
@@ -371,6 +375,15 @@ func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 				for m in owner.board:
 					if m != minion and m.has_ability(MECH):
 						gs._apply_growvin_aura_to_mech(m, owner.player_id)
+			ON_PLAY_BUFF_ALL_FRIENDLY_HEALTH:
+				for m in owner.board:
+					m.current_health += 1
+					m.max_health += 1
+				for m in owner.board.duplicate():
+					gs._try_apothecary_bonus(owner.player_id, m)
+			ON_PLAY_VOIDTOUCH_IF_RUMMAGED:
+				if minion.data.rummage_count > 0 and not minion.has_ability(VOIDTOUCH):
+					minion.abilities.append(VOIDTOUCH)
 	for ability in minion.abilities:
 		if is_on_play_aoe_enemy(ability):
 			var damage = get_on_play_aoe_enemy_value(ability)

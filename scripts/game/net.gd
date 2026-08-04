@@ -15,6 +15,9 @@ signal joined_lobby(lobby_id: String, host_name: String)
 signal player_joined(guest_name: String)
 signal opponent_left
 signal error_received(message: String)
+signal register_result(success: bool, message: String, profile: Dictionary)
+signal login_result(success: bool, message: String, profile: Dictionary)
+signal logged_out
 signal _queue_updated
 
 func connect_to_relay() -> void:
@@ -55,6 +58,14 @@ func _handle_incoming(msg: Dictionary) -> void:
 			opponent_left.emit()
 		"error":
 			error_received.emit(str(msg.get("message", "")))
+		"register_result":
+			var success := bool(msg.get("success", false))
+			register_result.emit(success, str(msg.get("message", "")), _profile_from(msg) if success else {})
+		"login_result":
+			var success := bool(msg.get("success", false))
+			login_result.emit(success, str(msg.get("message", "")), _profile_from(msg) if success else {})
+		"logged_out":
+			logged_out.emit()
 		"relay":
 			var payload = msg.get("payload", {})
 			var from_role = str(msg.get("from_role", ""))
@@ -77,6 +88,27 @@ func join_lobby(lobby_id: String, guest_name: String) -> void:
 
 func relay(payload: Dictionary) -> void:
 	send({"type": "relay", "payload": payload})
+
+func register(username: String, password: String) -> void:
+	send({"type": "register", "username": username, "password": password})
+
+func login(username: String, password: String) -> void:
+	send({"type": "login", "username": username, "password": password})
+
+func resume_session(token: String) -> void:
+	send({"type": "resume_session", "token": token})
+
+func logout(token: String) -> void:
+	send({"type": "logout", "token": token})
+
+func _profile_from(msg: Dictionary) -> Dictionary:
+	return {
+		"token": str(msg.get("token", "")),
+		"username": str(msg.get("username", "")),
+		"wins": int(msg.get("wins", 0)),
+		"losses": int(msg.get("losses", 0)),
+		"rating": int(msg.get("rating", 0)),
+	}
 
 # Pops first message of a given type from the queue, or null if not found.
 func pop_of_type(t: String) -> Variant:

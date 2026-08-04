@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bs6ejkaw1r0px"
-path="res://.godot/imported/stinkpile.jpg-0ce001e5371522b72bfd7bc01da246f5.ctex"
+uid="uid://d37n3g0wuxlt"
+path="res://.godot/imported/wallapepr.png-709bc11ce8bdbcb611cf43779abde2f1.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/stinkpile.jpg"
-dest_files=["res://.godot/imported/stinkpile.jpg-0ce001e5371522b72bfd7bc01da246f5.ctex"]
+source_file="res://assets/wallapepr.png"
+dest_files=["res://.godot/imported/wallapepr.png-709bc11ce8bdbcb611cf43779abde2f1.ctex"]
 
 [params]
 

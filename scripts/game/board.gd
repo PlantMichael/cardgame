@@ -102,6 +102,7 @@ func _ready() -> void:
 	preview_card.modulate = Color(1, 1, 1, 0)
 	card_preview_zone.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	card_preview_zone.size = Vector2(_PREVIEW_W, _PREVIEW_H)
+	_ignore_control_input(card_preview_zone)
 	_add_board_zone_backgrounds()
 	_create_player_deck_icon()
 	card_preview_zone.z_index = 1
@@ -801,14 +802,27 @@ func _refresh_hand() -> void:
 		c.hide()
 		c.queue_free()
 
+	# Hearthstone-style squish: cards keep comfortable spacing until the hand
+	# would overflow the zone, then overlap progressively to keep fitting.
+	var hand_count := game_state.player.hand.size()
+	var wrapper_size := Vector2(168, 243)
+	var base_separation := 12.0
+	var zone_width := 1320.0
+	var separation := base_separation
+	if hand_count > 1:
+		var natural_width: float = hand_count * wrapper_size.x + (hand_count - 1) * base_separation
+		if natural_width > zone_width:
+			separation = maxf((zone_width - hand_count * wrapper_size.x) / (hand_count - 1), -110.0)
+	player_hand_zone.add_theme_constant_override("separation", int(round(separation)))
+
 	for card_data in game_state.player.hand:
 		var card = CardScene.instantiate()
 		var wrapper = Button.new()
-		wrapper.custom_minimum_size = Vector2(112, 162)
+		wrapper.custom_minimum_size = wrapper_size
 		wrapper.flat = true
 		player_hand_zone.add_child(wrapper)
 		wrapper.add_child(card)
-		card.scale = Vector2(0.5, 0.5)
+		card.scale = Card.HAND_SCALE
 		card.is_in_hand = true
 		card.dropped.connect(_on_card_dropped)
 		card.drag_started.connect(_on_card_drag_started)

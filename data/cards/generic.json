@@ -13,6 +13,7 @@
 		"abilities": [
 			"recon"
 		],
+		"art": "res://assets/generic/mortifiedscout.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -30,6 +31,7 @@
 		"abilities": [
 			"null"
 		],
+		"art": "res://assets/generic/lostjunkling.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -45,6 +47,7 @@
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
+		"art": "res://assets/generic/orbitalstrike.png",
 		"effect": "deal_damage",
 		"effect_value": 3
 	},
@@ -60,6 +63,7 @@
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
+		"art": "res://assets/generic/noxiousbombardment.png",
 		"effect": "deal_damage_all_enemy",
 		"effect_value": 2
 	},
@@ -75,6 +79,7 @@
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
+		"art": "res://assets/generic/laserbarrage.png",
 		"effect": "deal_damage",
 		"effect_value": 5
 	},
@@ -90,6 +95,7 @@
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
+		"art": "res://assets/generic/blackhole.png",
 		"effect": "destroy_all_creatures",
 		"effect_value": 0
 	},
@@ -107,6 +113,7 @@
 		"abilities": [
 			"dual_strike"
 		],
+		"art": "res://assets/generic/twinfang.png",
 		"effect": "",
 		"effect_value": 0,
 		"in_starter": false
@@ -125,6 +132,7 @@
 		"abilities": [
 			"voidtouch"
 		],
+		"art": "res://assets/generic/voidstalker.png",
 		"effect": "",
 		"effect_value": 0,
 		"in_starter": false
@@ -137,12 +145,13 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "Shielded 2",
+		"description": "Shielded 1",
 		"attack": 2,
-		"health": 5,
+		"health": 4,
 		"abilities": [
-			"shielded_2"
+			"shielded_1"
 		],
+		"art": "res://assets/generic/platedsoldier.png",
 		"effect": "",
 		"effect_value": 0,
 		"in_starter": false
@@ -161,6 +170,7 @@
 		"abilities": [
 			"ambush"
 		],
+		"art": "res://assets/generic/shadowscout.png",
 		"effect": "",
 		"effect_value": 0,
 		"in_starter": false
