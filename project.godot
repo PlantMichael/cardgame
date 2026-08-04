@@ -22,6 +22,7 @@ DeckManager="*res://scripts/game/deck_manager.gd"
 GameManagerAutoload="*res://scripts/game/game_manager.gd"
 Abilities="*res://scripts/game/abilities.gd"
 Net="*res://scripts/game/net.gd"
+Auth="*res://scripts/game/auth.gd"
 
 [display]
 
