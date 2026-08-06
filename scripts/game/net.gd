@@ -142,7 +142,8 @@ func _rank_fields_from(msg: Dictionary) -> Dictionary:
 		"rank_bracket": int(msg.get("rank_bracket", 0)),
 		"rank_in_legend": bool(msg.get("rank_in_legend", false)),
 		"rank_legend_rating": int(msg.get("rank_legend_rating", 0)),
-		"rank_floor": int(msg.get("rank_floor", 0)),
+		"rank_lp": int(msg.get("rank_lp", 0)),
+		"ranked_win_streak": int(msg.get("ranked_win_streak", 0)),
 		"ranked_wins": int(msg.get("ranked_wins", 0)),
 		"ranked_losses": int(msg.get("ranked_losses", 0)),
 	}

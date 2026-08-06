@@ -43,7 +43,9 @@ async function initDb() {
     ALTER TABLE players ADD COLUMN IF NOT EXISTS rank_bracket INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE players ADD COLUMN IF NOT EXISTS rank_in_legend BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE players ADD COLUMN IF NOT EXISTS rank_legend_rating INTEGER NOT NULL DEFAULT 0;
-    ALTER TABLE players ADD COLUMN IF NOT EXISTS rank_floor INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS rank_lp INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS ranked_win_streak INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE players DROP COLUMN IF EXISTS rank_floor;
     ALTER TABLE players ADD COLUMN IF NOT EXISTS ranked_wins INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE players ADD COLUMN IF NOT EXISTS ranked_losses INTEGER NOT NULL DEFAULT 0;
   `);
@@ -57,59 +59,82 @@ async function initDb() {
 }
 
 // --- Ranked ladder (mirrors scripts/game/ranked_progress.gd's display math;
-// keep BRACKET_COUNT/LEGEND_RATING_STEP in sync with that file) -----------
+// keep BRACKET_COUNT/LP constants in sync with that file) ------------------
 
-const RANK_SUB_RANKS_PER_TIER = 3; // III, II, I
 const RANK_BRACKET_COUNT = 21; // 7 named tiers x 3 sub-ranks (Orbital III .. Cosmic I)
 const RANK_LEGEND_RATING_STEP = 25;
+const LEGEND_TIER_SPAN = 1000; // rating span of the Superluminal (lowest legend) band
 
-// Bracket index of the "III" sub-rank (the floor point) of whichever named
-// tier `bracket` falls in, e.g. tierFloor(4) -> 3 (Lunar III), tierFloor(6)
-// -> 6 (Planetary III). Mirrors the tier math in ranked_progress.gd's
-// get_display_string.
-function tierFloor(bracket) {
-  return Math.floor(bracket / RANK_SUB_RANKS_PER_TIER) * RANK_SUB_RANKS_PER_TIER;
-}
+// LP economy for the bracketed ladder (Orbital III .. Cosmic I). A win/loss
+// never demotes a bracket here — a loss just floors LP at 0 — so there's no
+// tier-floor protection to track any more (that only mattered when losses
+// could drop you back a bracket).
+const RANK_LP_PER_BRACKET = 100;
+const RANK_LP_WIN_BASE = 34;
+const RANK_LP_WIN_STREAK = 45; // 3rd win-in-a-row and every win after, until a loss
+const RANK_LP_WIN_STREAK_THRESHOLD = 3;
+const RANK_LP_LOSS = 20;
 
 // Pure function: given the player's current rank row and whether they just
 // won, returns the next rank state. Kept server-side and authoritative (the
 // client only ever sends a boolean `won`) so the persisted ladder position
 // can't just be dictated by the client.
 //
-// `rank_floor` is a Hearthstone-style safety net: once a player has reached
-// the "III" sub-rank of a named tier, a later loss can never drop them back
-// into the previous tier, even if they'd climbed further and lost several
-// times since. It only ever increases (updated on every win), never resets
-// on a loss.
+// Legend (Superluminal/Celestial/Universal) keeps its own separate
+// continuous-rating system, unaffected by the LP economy above, *except*:
+// a loss that would push legend rating below 0 while still in the lowest
+// band (Superluminal) demotes the player out of Legend entirely, back to
+// Cosmic I — landing LP carries the negative overflow the same way bracket
+// promotion/demotion does, floored at 0.
 function nextRankState(player, won) {
   let bracket = player.rank_bracket;
   let inLegend = player.rank_in_legend;
   let legendRating = player.rank_legend_rating;
-  let floor = player.rank_floor;
+  let lp = player.rank_lp;
+  let winStreak = player.ranked_win_streak;
   let rankedWins = player.ranked_wins;
   let rankedLosses = player.ranked_losses;
   if (won) {
     rankedWins += 1;
+    winStreak += 1;
     if (inLegend) {
       legendRating += RANK_LEGEND_RATING_STEP;
-    } else if (bracket >= RANK_BRACKET_COUNT - 1) {
-      inLegend = true;
-      legendRating = 0;
     } else {
-      bracket += 1;
-      floor = Math.max(floor, tierFloor(bracket));
+      const gain = winStreak >= RANK_LP_WIN_STREAK_THRESHOLD ? RANK_LP_WIN_STREAK : RANK_LP_WIN_BASE;
+      lp += gain;
+      if (lp >= RANK_LP_PER_BRACKET) {
+        const overflow = lp - RANK_LP_PER_BRACKET;
+        if (bracket >= RANK_BRACKET_COUNT - 1) {
+          inLegend = true;
+          legendRating = overflow;
+          lp = 0;
+        } else {
+          bracket += 1;
+          lp = overflow;
+        }
+      }
     }
   } else {
     rankedLosses += 1;
+    winStreak = 0;
     if (inLegend) {
-      legendRating = Math.max(0, legendRating - RANK_LEGEND_RATING_STEP);
+      const next = legendRating - RANK_LEGEND_RATING_STEP;
+      if (next < 0 && legendRating < LEGEND_TIER_SPAN) {
+        // Demoted out of Legend back to Cosmic I, carrying the overflow.
+        inLegend = false;
+        bracket = RANK_BRACKET_COUNT - 1;
+        lp = Math.max(0, RANK_LP_PER_BRACKET + next);
+      } else {
+        legendRating = Math.max(0, next);
+      }
     } else {
-      bracket = Math.max(floor, bracket - 1);
+      lp = Math.max(0, lp - RANK_LP_LOSS);
     }
   }
   return {
     rank_bracket: bracket, rank_in_legend: inLegend, rank_legend_rating: legendRating,
-    rank_floor: floor, ranked_wins: rankedWins, ranked_losses: rankedLosses,
+    rank_lp: lp, ranked_win_streak: winStreak,
+    ranked_wins: rankedWins, ranked_losses: rankedLosses,
   };
 }
 
@@ -165,7 +190,8 @@ function profileOf(row) {
   return {
     username: row.username, wins: row.wins, losses: row.losses, rating: row.rating,
     rank_bracket: row.rank_bracket, rank_in_legend: row.rank_in_legend,
-    rank_legend_rating: row.rank_legend_rating, rank_floor: row.rank_floor,
+    rank_legend_rating: row.rank_legend_rating, rank_lp: row.rank_lp,
+    ranked_win_streak: row.ranked_win_streak,
     ranked_wins: row.ranked_wins, ranked_losses: row.ranked_losses,
   };
 }
@@ -291,7 +317,8 @@ async function main() {
             const inserted = await pool.query(
               `INSERT INTO players (username, password_hash, salt) VALUES ($1, $2, $3)
                RETURNING username, wins, losses, rating,
-                         rank_bracket, rank_in_legend, rank_legend_rating, rank_floor, ranked_wins, ranked_losses`,
+                         rank_bracket, rank_in_legend, rank_legend_rating, rank_lp, ranked_win_streak,
+                         ranked_wins, ranked_losses`,
               [username, hash, salt]
             );
             const player = inserted.rows[0];
@@ -333,7 +360,7 @@ async function main() {
           try {
             const result = await pool.query(
               `SELECT p.username, p.wins, p.losses, p.rating,
-                      p.rank_bracket, p.rank_in_legend, p.rank_legend_rating, p.rank_floor,
+                      p.rank_bracket, p.rank_in_legend, p.rank_legend_rating, p.rank_lp, p.ranked_win_streak,
                       p.ranked_wins, p.ranked_losses
                FROM sessions s JOIN players p ON p.id = s.player_id WHERE s.token = $1`,
               [token]
@@ -362,8 +389,8 @@ async function main() {
             ? msg.opponent_rating : null;
           try {
             const result = await pool.query(
-              `SELECT p.id, p.rating, p.rank_bracket, p.rank_in_legend, p.rank_legend_rating, p.rank_floor,
-                      p.ranked_wins, p.ranked_losses
+              `SELECT p.id, p.rating, p.rank_bracket, p.rank_in_legend, p.rank_legend_rating, p.rank_lp,
+                      p.ranked_win_streak, p.ranked_wins, p.ranked_losses
                FROM sessions s JOIN players p ON p.id = s.player_id WHERE s.token = $1`,
               [token]
             );
@@ -376,11 +403,11 @@ async function main() {
             next.rating = opponentRating !== null ? nextElo(player.rating, opponentRating, won) : player.rating;
             await pool.query(
               `UPDATE players
-               SET rank_bracket = $1, rank_in_legend = $2, rank_legend_rating = $3, rank_floor = $4,
-                   ranked_wins = $5, ranked_losses = $6, rating = $7
-               WHERE id = $8`,
-              [next.rank_bracket, next.rank_in_legend, next.rank_legend_rating, next.rank_floor,
-               next.ranked_wins, next.ranked_losses, next.rating, player.id]
+               SET rank_bracket = $1, rank_in_legend = $2, rank_legend_rating = $3, rank_lp = $4,
+                   ranked_win_streak = $5, ranked_wins = $6, ranked_losses = $7, rating = $8
+               WHERE id = $9`,
+              [next.rank_bracket, next.rank_in_legend, next.rank_legend_rating, next.rank_lp,
+               next.ranked_win_streak, next.ranked_wins, next.ranked_losses, next.rating, player.id]
             );
             sendTo(ws, { type: 'ranked_result_ack', success: true, ...next });
           } catch (err) {

@@ -2,8 +2,8 @@ class_name RankedProgress
 extends RefCounted
 
 ## Pure display/derivation math for the ranked ladder. The ladder state
-## itself (bracket_index/in_legend/legend_rating/rank_floor/wins/losses)
-## lives on the player's account, authoritative on the server (see
+## itself (bracket_index/in_legend/legend_rating/rank_lp/win_streak/wins/
+## losses) lives on the player's account, authoritative on the server (see
 ## Auth.rank_* and Auth.report_ranked_result(), and server/relay.js's
 ## nextRankState()) — this class holds no state of its own and isn't an
 ## autoload.
@@ -11,18 +11,17 @@ extends RefCounted
 ## The ladder has two regimes:
 ##  - Bracketed tiers (Orbital -> Cosmic): 7 named tiers x 3 sub-ranks each
 ##    (III lowest -> I highest within a tier), 21 discrete brackets total.
-##    A win advances one bracket, a loss drops one bracket — except a loss
-##    can never drop the player below their rank_floor, computed server-side
-##    in relay.js's nextRankState()/tierFloor() (see get_floor_display_string
-##    below for the client-side display of that value): once you've reached
-##    the "III" sub-rank of a tier, that tier is locked in, Hearthstone-style.
+##    Progress within a bracket is an LP bar (0-100, see LP_PER_BRACKET): a
+##    win adds LP_WIN_BASE, or LP_WIN_STREAK once 3+ wins in a row (see
+##    LP_WIN_STREAK_THRESHOLD); hitting 100 promotes to the next bracket,
+##    carrying the overflow. A loss subtracts LP_LOSS, floored at 0 — losses
+##    never demote a bracket here.
 ##  - Legend-style tiers (Superluminal, Celestial, Universal): reached once
 ##    Cosmic I is beaten. From here progress is a single continuous rating
 ##    (like Hearthstone's Legend rank) that goes up on a win and down on a
-##    loss, but never demotes back into the bracketed ladder — matches
-##    Hearthstone Legend never dropping back to ranked. The three tier names
-##    are just readable bands over that rating, with Universal (highest)
-##    having no ceiling.
+##    loss. A loss that would push rating below 0 while still in the lowest
+##    band (Superluminal) demotes back out to Cosmic I, landing LP carrying
+##    the negative overflow the same way bracket promotion does.
 
 const TIER_NAMES := ["Orbital", "Lunar", "Planetary", "Solar", "Nebular", "Galactic", "Cosmic"]
 const SUB_RANKS := ["III", "II", "I"]  # III lowest, I highest within a tier
@@ -30,6 +29,14 @@ const BRACKET_COUNT := 21  # TIER_NAMES.size() * SUB_RANKS.size()
 
 const LEGEND_TIER_NAMES := ["Superluminal", "Celestial", "Universal"]
 const LEGEND_TIER_SPAN := 1000  # rating points per legend tier name; Universal has no cap
+
+## LP economy for the bracketed ladder — keep in sync with relay.js's
+## RANK_LP_* constants, which are authoritative.
+const LP_PER_BRACKET := 100
+const LP_WIN_BASE := 34
+const LP_WIN_STREAK := 45  # 3rd win-in-a-row and every win after, until a loss
+const LP_WIN_STREAK_THRESHOLD := 3
+const LP_LOSS := 20
 
 const MIN_AI_LEVEL := 1
 const MAX_AI_LEVEL := 10
@@ -44,7 +51,8 @@ static func get_ai_level(bracket_index: int, in_legend: bool) -> int:
 	var span := BRACKET_COUNT - 1
 	return clampi(MIN_AI_LEVEL + (bracket_index * (MAX_AI_LEVEL - MIN_AI_LEVEL)) / span, MIN_AI_LEVEL, MAX_AI_LEVEL)
 
-## e.g. "Orbital III", "Cosmic I", or "Superluminal (1240)".
+## e.g. "Orbital III", "Cosmic I", or "Superluminal (1240)". Doesn't include
+## LP — see get_lp_string for the "62 / 100 LP" progress readout.
 static func get_display_string(bracket_index: int, in_legend: bool, legend_rating: int) -> String:
 	if in_legend:
 		return "%s (%d)" % [_legend_tier_name(legend_rating), legend_rating]
@@ -52,13 +60,12 @@ static func get_display_string(bracket_index: int, in_legend: bool, legend_ratin
 	var sub := bracket_index % SUB_RANKS.size()
 	return "%s %s" % [TIER_NAMES[tier], SUB_RANKS[sub]]
 
-## Human-readable name for the tier a rank_floor value protects, e.g.
-## "Lunar III". Returns "" when floor is 0 (Orbital III grants no real
-## protection, since that's the bottom of the whole ladder).
-static func get_floor_display_string(floor_index: int) -> String:
-	if floor_index <= 0:
+## e.g. "62 / 100 LP". Empty once in Legend, which has no LP bar (see
+## get_display_string's legend rating readout instead).
+static func get_lp_string(in_legend: bool, lp: int) -> String:
+	if in_legend:
 		return ""
-	return get_display_string(floor_index, false, 0)
+	return "%d / %d LP" % [lp, LP_PER_BRACKET]
 
 static func _legend_tier_name(rating: int) -> String:
 	var idx := rating / LEGEND_TIER_SPAN

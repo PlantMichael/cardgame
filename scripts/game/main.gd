@@ -757,20 +757,34 @@ func _show_ranked_start() -> void:
 	level_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(level_lbl)
 
+	var lp_str := RankedProgress.get_lp_string(Auth.rank_in_legend, Auth.rank_lp)
+	if not lp_str.is_empty():
+		var lp_lbl := Label.new()
+		lp_lbl.text = lp_str
+		lp_lbl.add_theme_font_size_override("font_size", 16)
+		lp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		vbox.add_child(lp_lbl)
+
+		var lp_bar := ProgressBar.new()
+		lp_bar.custom_minimum_size = Vector2(240, 14)
+		lp_bar.max_value = RankedProgress.LP_PER_BRACKET
+		lp_bar.value = Auth.rank_lp
+		lp_bar.show_percentage = false
+		vbox.add_child(lp_bar)
+
 	var record_lbl := Label.new()
 	record_lbl.text = "%d W - %d L" % [Auth.ranked_wins, Auth.ranked_losses]
 	record_lbl.add_theme_font_size_override("font_size", 18)
 	record_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(record_lbl)
 
-	var floor_str := RankedProgress.get_floor_display_string(Auth.rank_floor)
-	if not floor_str.is_empty():
-		var floor_lbl := Label.new()
-		floor_lbl.text = "Floor: %s" % floor_str
-		floor_lbl.add_theme_font_size_override("font_size", 14)
-		floor_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		floor_lbl.modulate = Color(0.7, 0.7, 0.7)
-		vbox.add_child(floor_lbl)
+	if Auth.ranked_win_streak >= RankedProgress.LP_WIN_STREAK_THRESHOLD:
+		var streak_lbl := Label.new()
+		streak_lbl.text = "%d win streak — bonus LP active!" % Auth.ranked_win_streak
+		streak_lbl.add_theme_font_size_override("font_size", 14)
+		streak_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		streak_lbl.add_theme_color_override("font_color", Color(0.95, 0.75, 0.25))
+		vbox.add_child(streak_lbl)
 
 	var gap := Control.new()
 	gap.custom_minimum_size = Vector2(0, 20)

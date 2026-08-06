@@ -22,7 +22,8 @@ var is_logged_in: bool = false
 var rank_bracket: int = 0
 var rank_in_legend: bool = false
 var rank_legend_rating: int = 0
-var rank_floor: int = 0
+var rank_lp: int = 0
+var ranked_win_streak: int = 0
 var ranked_wins: int = 0
 var ranked_losses: int = 0
 
@@ -53,7 +54,8 @@ func _on_ranked_result_received(success: bool, profile: Dictionary) -> void:
 	rank_bracket = int(profile.get("rank_bracket", rank_bracket))
 	rank_in_legend = bool(profile.get("rank_in_legend", rank_in_legend))
 	rank_legend_rating = int(profile.get("rank_legend_rating", rank_legend_rating))
-	rank_floor = int(profile.get("rank_floor", rank_floor))
+	rank_lp = int(profile.get("rank_lp", rank_lp))
+	ranked_win_streak = int(profile.get("ranked_win_streak", ranked_win_streak))
 	ranked_wins = int(profile.get("ranked_wins", ranked_wins))
 	ranked_losses = int(profile.get("ranked_losses", ranked_losses))
 
@@ -93,7 +95,8 @@ func _apply_profile(profile: Dictionary) -> void:
 	rank_bracket = int(profile.get("rank_bracket", 0))
 	rank_in_legend = bool(profile.get("rank_in_legend", false))
 	rank_legend_rating = int(profile.get("rank_legend_rating", 0))
-	rank_floor = int(profile.get("rank_floor", 0))
+	rank_lp = int(profile.get("rank_lp", 0))
+	ranked_win_streak = int(profile.get("ranked_win_streak", 0))
 	ranked_wins = int(profile.get("ranked_wins", 0))
 	ranked_losses = int(profile.get("ranked_losses", 0))
 	is_logged_in = true
@@ -109,7 +112,8 @@ func _clear_session() -> void:
 	rank_bracket = 0
 	rank_in_legend = false
 	rank_legend_rating = 0
-	rank_floor = 0
+	rank_lp = 0
+	ranked_win_streak = 0
 	ranked_wins = 0
 	ranked_losses = 0
 	is_logged_in = false
