@@ -70,6 +70,7 @@ signal action_pilot(pilot_instance_id: String, target_instance_id: String)
 signal end_turn_pressed
 signal decline_pressed
 signal restart_requested
+signal ranked_requeue_requested
 signal challenge_target_selected(target: Minion)
 signal on_play_damage_target_selected(target_minion: Minion, target_player_id: String)
 signal rummage_card_selected(card: CardData)
@@ -1570,16 +1571,33 @@ func show_game_over(won: bool, is_ranked: bool = false, old_bracket: int = 0,
 		vbox.add_child(rank_lbl)
 		_connect_ranked_result_display(rank_lbl, won, old_bracket, old_in_legend, old_legend_rating)
 
-	var btn = Button.new()
-	btn.text = "Play Again"
-	btn.custom_minimum_size = Vector2(160, 48)
-	btn.pressed.connect(func():
-		if is_online:
-			get_tree().reload_current_scene()
-		else:
-			restart_requested.emit()
-	)
-	vbox.add_child(btn)
+		var btn_row := HBoxContainer.new()
+		btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		btn_row.add_theme_constant_override("separation", 16)
+		vbox.add_child(btn_row)
+
+		var queue_btn := Button.new()
+		queue_btn.text = "Queue"
+		queue_btn.custom_minimum_size = Vector2(160, 48)
+		queue_btn.pressed.connect(func(): ranked_requeue_requested.emit())
+		btn_row.add_child(queue_btn)
+
+		var quit_btn := Button.new()
+		quit_btn.text = "Quit"
+		quit_btn.custom_minimum_size = Vector2(160, 48)
+		quit_btn.pressed.connect(func(): get_tree().reload_current_scene())
+		btn_row.add_child(quit_btn)
+	else:
+		var btn = Button.new()
+		btn.text = "Play Again"
+		btn.custom_minimum_size = Vector2(160, 48)
+		btn.pressed.connect(func():
+			if is_online:
+				get_tree().reload_current_scene()
+			else:
+				restart_requested.emit()
+		)
+		vbox.add_child(btn)
 
 ## Fills in `rank_lbl` once the server acks the ranked result Auth already
 ## sent in _handle_game_over — shows the old -> new tier/rating so a rank
@@ -1595,6 +1613,18 @@ func _connect_ranked_result_display(rank_lbl: Label, won: bool, old_bracket: int
 			return
 		var old_str := RankedProgress.get_display_string(old_bracket, old_in_legend, old_legend_rating)
 		var new_str := RankedProgress.get_display_string(Auth.rank_bracket, Auth.rank_in_legend, Auth.rank_legend_rating)
-		rank_lbl.text = new_str if old_str == new_str else "%s -> %s" % [old_str, new_str]
+		var tier_str := new_str if old_str == new_str else "%s -> %s" % [old_str, new_str]
+		# LP delta is only meaningful for the bracketed ladder (Legend uses a
+		# continuous rating instead) — skip it if either side of this result
+		# was in Legend, since the tier_str transition already covers that.
+		if not old_in_legend and not Auth.rank_in_legend:
+			var lp_delta: int
+			if won:
+				lp_delta = RankedProgress.LP_WIN_STREAK if Auth.ranked_win_streak >= RankedProgress.LP_WIN_STREAK_THRESHOLD else RankedProgress.LP_WIN_BASE
+			else:
+				lp_delta = -RankedProgress.LP_LOSS
+			rank_lbl.text = "%s  (%s%d LP)" % [tier_str, "+" if lp_delta >= 0 else "", lp_delta]
+		else:
+			rank_lbl.text = tier_str
 		rank_lbl.modulate = Color(0.4, 0.9, 0.4) if won else Color(0.9, 0.4, 0.4)
 	, CONNECT_ONE_SHOT)

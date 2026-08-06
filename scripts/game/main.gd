@@ -56,15 +56,7 @@ func _ready() -> void:
 		_run_sim_test_cli()
 		return
 
-	_canvas = CanvasLayer.new()
-	add_child(_canvas)
-
-	var bg := TextureRect.new()
-	bg.texture = WallpaperTexture
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_canvas.add_child(bg)
+	_create_canvas()
 
 	Net.opponent_left.connect(_on_opponent_left)
 	if OS.has_feature("editor"):
@@ -74,6 +66,21 @@ func _ready() -> void:
 		_show_main_menu()
 	else:
 		_require_login_then(_show_main_menu, false)
+
+## Rebuilds `_canvas` (freed whenever a game starts, see _start_game/
+## _start_ranked_pvp_match) so menu-style screens have somewhere to attach
+## again — used at startup and whenever a ranked game-over screen requeues
+## straight back into matchmaking instead of going through the full menu.
+func _create_canvas() -> void:
+	_canvas = CanvasLayer.new()
+	add_child(_canvas)
+
+	var bg := TextureRect.new()
+	bg.texture = WallpaperTexture
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_canvas.add_child(bg)
 
 func _clear_screen() -> void:
 	for i in range(_canvas.get_child_count() - 1, 0, -1):
@@ -905,6 +912,7 @@ func _start_ranked_pvp_match(role: String, opponent_name: String, opponent_ratin
 		_canvas.queue_free()
 		var board := BoardScene.instantiate()
 		add_child(board)
+		_connect_ranked_requeue(board)
 		_mp_manager = MpGameManager.new()
 		board.add_child(_mp_manager)
 		_mp_manager.start_as_guest(board, opponent_name, true, opponent_rating)
@@ -919,6 +927,7 @@ func _await_ranked_guest_deck_and_start(opponent_name: String, opponent_rating: 
 	_canvas.queue_free()
 	var board := BoardScene.instantiate()
 	add_child(board)
+	_connect_ranked_requeue(board)
 	_mp_manager = MpGameManager.new()
 	board.add_child(_mp_manager)
 	_mp_manager.start_as_host(board, pd, od, opponent_name, true, opponent_rating)
@@ -1600,17 +1609,24 @@ func _start_game(player_ids: Array[String], opp_ids: Array[String], ai_level: in
 	add_child(board)
 	if not opponent_name.is_empty():
 		board.set_opponent_name(opponent_name)
-	board.restart_requested.connect(func():
-		board.queue_free()
-		if ranked:
-			# Re-roll the opponent and re-fetch the current AI level rather than
-			# reusing what was captured at match start — a ranked win/loss just
-			# moved the ladder, and Play Again should reflect that, not replay
-			# the exact same matchup.
-			var next_ai_level := RankedProgress.get_ai_level(Auth.rank_bracket, Auth.rank_in_legend)
-			_start_game(_player_deck_ids, _random_ranked_opponent_ids(), next_ai_level, true,
-						RankedProgress.random_bot_name())
-		else:
+	if ranked:
+		_connect_ranked_requeue(board)
+	else:
+		board.restart_requested.connect(func():
+			board.queue_free()
 			_start_game(_player_deck_ids, _opponent_deck_ids, ai_level, ranked)
-	, CONNECT_ONE_SHOT)
+		, CONNECT_ONE_SHOT)
 	GameManagerAutoload.start_local_game(board, pd, od, ai_level, ranked)
+
+## Wires up the "Queue" button on a ranked game-over screen (see
+## board.gd's show_game_over) to drop the finished board and jump straight
+## back into ranked matchmaking — same as pressing START MATCH from the
+## Ranked menu, so a requeue can find a human opponent again instead of
+## just replaying the same AI.
+func _connect_ranked_requeue(board: Board) -> void:
+	board.ranked_requeue_requested.connect(func():
+		board.queue_free()
+		_create_canvas()
+		_begin_ranked_search()
+	, CONNECT_ONE_SHOT)
+
