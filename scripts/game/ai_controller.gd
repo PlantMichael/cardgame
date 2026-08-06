@@ -3,107 +3,98 @@ extends Node
 
 const THINK_DELAY = 0.6
 
+## 1 (weakest) - 10 (strongest). Read once per decision in take_turn(); see
+## MCTSEngine.AI_LEVEL_CONFIG for what each level actually changes.
+var ai_level: int = 5
+
+## Repeatedly asks MCTSEngine for the single best next atomic action against
+## the real game_state, applies it (with the same logging/animation glue the
+## old one-ply AI used), and stops when the search recommends ending the turn.
 func take_turn(game_state: GameState, board: Board) -> void:
-	await _play_cards(game_state, board)
-	await _attack_phase(game_state, board)
+	for _i in 60:  # safety cap; a real turn never needs anywhere near this many actions
+		if game_state.current_phase == GameState.Phase.GAME_OVER:
+			return
+		var engine := MCTSEngine.new(game_state.opponent.player_id, ai_level)
+		var action: Dictionary = await engine.choose_action(game_state)
+		if action["type"] == "end_turn":
+			return
+		await _apply_action(action, game_state, board)
+		if game_state.current_phase == GameState.Phase.GAME_OVER:
+			return
+
+func _apply_action(action: Dictionary, game_state: GameState, board: Board) -> void:
+	match action["type"]:
+		"play_creature":
+			await _play_creature_action(action["card"], game_state, board)
+		"play_stratagem":
+			await _play_stratagem_action(action["card"], action.get("minion"), action.get("player_id", ""), game_state, board)
+		"attack":
+			await _attack_action(action["attacker"], action.get("target"), action.get("target_player_id", ""), game_state, board)
 
 # --- Card playing ---
 
-func _play_cards(game_state: GameState, board: Board) -> void:
-	var played = true
-	while played:
-		played = false
-		var hand = game_state.opponent.hand.duplicate()
-		hand.sort_custom(func(a: CardData, b: CardData) -> bool:
-			# Rush creatures that can kill a guardian go first
-			if not game_state.player.get_guardian_minions().is_empty():
-				var a_rush = _can_rush_kill_guardian(a, game_state)
-				var b_rush = _can_rush_kill_guardian(b, game_state)
-				if a_rush != b_rush:
-					return a_rush
-			# Deprioritize pilots that have no mech target yet so mechs play first
-			var a_blocked := _is_pilot_without_target(a, game_state)
-			var b_blocked := _is_pilot_without_target(b, game_state)
-			if a_blocked != b_blocked:
-				return not a_blocked
-			return a.cost > b.cost
-		)
-		for card in hand:
-			if not game_state.opponent.can_play_card(card):
-				continue
-			if card.card_type == CardData.CardType.CREATURE:
-				if game_state.opponent.board.size() < PlayerState.MAX_BOARD_SIZE:
-					await get_tree().create_timer(THINK_DELAY).timeout
-					var new_minion = game_state.play_creature(game_state.opponent.player_id, card)
-					board.log_action("Opponent played %s" % card.card_name)
-					board.refresh()
-					if new_minion:
-						await _handle_on_play_effects(new_minion, game_state, board)
-					played = true
-					break
-			elif card.card_type == CardData.CardType.STRATAGEM:
-				var pick = _pick_stratagem_targets(card, game_state)
-				if not pick["ready"]:
-					continue
-				await get_tree().create_timer(THINK_DELAY).timeout
-				game_state.play_stratagem(game_state.opponent.player_id, card, pick["minion"], pick["player_id"])
-				board.log_action("Opponent played %s" % card.card_name)
-				if pick["minion"] != null:
-					var _as_died: bool = pick["minion"] not in game_state.player.board and pick["minion"] not in game_state.opponent.board
-					if _as_died:
-						var _as_tgt: Card = board.find_card_node(pick["minion"].instance_id)
-						if _as_tgt != null:
-							var _as_from: Vector2 = _as_tgt.get_parent().get_global_rect().get_center() + Vector2(0, -600)
-							await board.animate_laser_kill(_as_from, _as_tgt)
-				board.refresh()
-				if card.effect in ["force_challenge", "poke_bear"] and pick["minion"] != null:
-					var yeti: Minion = pick["minion"]
-					if yeti in game_state.opponent.board and yeti.has_ability(Abilities.YETI) and not game_state.player.board.is_empty():
-						var challenge_target = _pick_challenge_target(game_state.player.board.duplicate(), yeti)
-						if challenge_target != null:
-							await get_tree().create_timer(THINK_DELAY).timeout
-							board.log_action("Opponent's %s challenged your %s" % [yeti.data.card_name, challenge_target.data.card_name])
-							game_state.apply_challenge(yeti, challenge_target)
-							await board.animate_creature_challenge(yeti.instance_id, game_state.opponent.player_id, challenge_target.instance_id)
-							board.refresh()
-							if card.effect == "force_challenge" and card.effect_value > 0 and challenge_target.is_dead() and yeti in game_state.opponent.board:
-								var win_buff: int = card.effect_value
-								yeti.current_attack += win_buff
-								yeti.current_health += win_buff
-								yeti.max_health += win_buff
-								board.log_action("Opponent's %s won and gained +%d/+%d!" % [yeti.data.card_name, win_buff, win_buff])
-								board.refresh()
-				if card.effect == "blood_transfusion" and not game_state.opponent.board.is_empty():
-					var recipient = _pick_health_buff_target(game_state.opponent.board.duplicate())
-					board.log_action("Opponent's Blood Transfusion gave %s +2 health" % recipient.data.card_name)
-					game_state.apply_heal_buff(recipient, 2)
-					board.refresh()
-				if card.effect == "sanguine" and not game_state.opponent.board.is_empty():
-					var candidates: Array[Minion] = []
-					for m in game_state.opponent.board:
-						if m != pick["minion"]:
-							candidates.append(m)
-					if not candidates.is_empty():
-						var recipient = _pick_health_buff_target(candidates)
-						board.log_action("Opponent's Sanguine gave %s +2 health" % recipient.data.card_name)
-						game_state.apply_heal_buff(recipient, 2)
-						board.refresh()
-				played = true
-				break
+func _play_creature_action(card: CardData, game_state: GameState, board: Board) -> void:
+	await get_tree().create_timer(THINK_DELAY).timeout
+	var new_minion = game_state.play_creature(game_state.opponent.player_id, card)
+	board.log_action("Opponent played %s" % card.card_name)
+	board.refresh()
+	if new_minion:
+		await _handle_on_play_effects(new_minion, game_state, board)
 
-func _can_rush_kill_guardian(card: CardData, game_state: GameState) -> bool:
-	if card.card_type != CardData.CardType.CREATURE or Abilities.RUSH not in card.abilities:
-		return false
-	for g in game_state.player.get_guardian_minions():
-		if card.attack >= g.current_health:
-			return true
-	return false
+func _play_stratagem_action(card: CardData, minion: Minion, target_player_id: String, game_state: GameState, board: Board) -> void:
+	await get_tree().create_timer(THINK_DELAY).timeout
+	if not game_state.play_stratagem(game_state.opponent.player_id, card, minion, target_player_id):
+		return
+	board.log_action("Opponent played %s" % card.card_name)
+	if minion != null:
+		var _died: bool = minion not in game_state.player.board and minion not in game_state.opponent.board
+		if _died:
+			var _tgt: Card = board.find_card_node(minion.instance_id)
+			if _tgt != null:
+				var _from: Vector2 = _tgt.get_parent().get_global_rect().get_center() + Vector2(0, -600)
+				await board.animate_laser_kill(_from, _tgt)
+	board.refresh()
+
+	if card.effect in ["force_challenge", "poke_bear"] and minion != null:
+		var yeti: Minion = minion
+		if yeti in game_state.opponent.board and yeti.has_ability(Abilities.YETI) and not game_state.player.board.is_empty():
+			var challenge_target = AIHeuristics.pick_challenge_target(game_state.player.board.duplicate(), yeti)
+			if challenge_target != null:
+				await get_tree().create_timer(THINK_DELAY).timeout
+				board.log_action("Opponent's %s challenged your %s" % [yeti.data.card_name, challenge_target.data.card_name])
+				game_state.apply_challenge(yeti, challenge_target)
+				await board.animate_creature_challenge(yeti.instance_id, game_state.opponent.player_id, challenge_target.instance_id)
+				board.refresh()
+				if card.effect == "force_challenge" and card.effect_value > 0 and challenge_target.is_dead() and yeti in game_state.opponent.board:
+					var win_buff: int = card.effect_value
+					yeti.current_attack += win_buff
+					yeti.current_health += win_buff
+					yeti.max_health += win_buff
+					board.log_action("Opponent's %s won and gained +%d/+%d!" % [yeti.data.card_name, win_buff, win_buff])
+					board.refresh()
+
+	if card.effect == "blood_transfusion" and not game_state.opponent.board.is_empty():
+		var recipient = AIHeuristics.pick_health_buff_target(game_state.opponent.board.duplicate())
+		board.log_action("Opponent's Blood Transfusion gave %s +2 health" % recipient.data.card_name)
+		game_state.apply_heal_buff(recipient, 2)
+		board.refresh()
+
+	if card.effect == "sanguine" and not game_state.opponent.board.is_empty():
+		var candidates: Array[Minion] = []
+		for m in game_state.opponent.board:
+			if m != minion:
+				candidates.append(m)
+		if not candidates.is_empty():
+			var recipient = AIHeuristics.pick_health_buff_target(candidates)
+			board.log_action("Opponent's Sanguine gave %s +2 health" % recipient.data.card_name)
+			game_state.apply_heal_buff(recipient, 2)
+			board.refresh()
 
 func _handle_on_play_effects(new_minion: Minion, game_state: GameState, board: Board) -> void:
 	for ability in new_minion.abilities:
 		if Abilities.is_on_play_damage(ability):
 			var damage = Abilities.get_on_play_damage_value(ability)
-			var target = _pick_best_removal_target(game_state.player.board, damage)
+			var target = AIHeuristics.pick_best_removal_target(game_state.player.board, damage)
 			if target != null:
 				board.log_action("Opponent's %s dealt %d damage to your %s" % [new_minion.data.card_name, damage, target.data.card_name])
 				game_state.apply_on_play_damage(target, damage, new_minion.owner_id)
@@ -121,7 +112,7 @@ func _handle_on_play_effects(new_minion: Minion, game_state: GameState, board: B
 			break
 
 	if new_minion.has_ability(Abilities.CHALLENGE) and not game_state.player.board.is_empty():
-		var target = _pick_challenge_target(game_state.player.board, new_minion)
+		var target = AIHeuristics.pick_challenge_target(game_state.player.board, new_minion)
 		if target != null:
 			board.log_action("Opponent's %s challenged your %s" % [new_minion.data.card_name, target.data.card_name])
 			game_state.apply_challenge(new_minion, target)
@@ -142,7 +133,7 @@ func _handle_on_play_effects(new_minion: Minion, game_state: GameState, board: B
 				return
 
 	if new_minion.has_ability(Abilities.ON_PLAY_CHALLENGE_WIN_BUFF) and not game_state.player.board.is_empty():
-		var target = _pick_challenge_target(game_state.player.board, new_minion)
+		var target = AIHeuristics.pick_challenge_target(game_state.player.board, new_minion)
 		if target != null:
 			board.log_action("Opponent's %s challenged your %s" % [new_minion.data.card_name, target.data.card_name])
 			game_state.apply_challenge(new_minion, target)
@@ -162,7 +153,7 @@ func _handle_on_play_effects(new_minion: Minion, game_state: GameState, board: B
 				friendly_yeti = m
 				break
 		if friendly_yeti != null:
-			var target = _pick_challenge_target(game_state.player.board, friendly_yeti)
+			var target = AIHeuristics.pick_challenge_target(game_state.player.board, friendly_yeti)
 			if target != null:
 				board.log_action("Opponent's %s challenged your %s" % [friendly_yeti.data.card_name, target.data.card_name])
 				game_state.apply_challenge(friendly_yeti, target)
@@ -191,7 +182,7 @@ func _handle_on_play_effects(new_minion: Minion, game_state: GameState, board: B
 				if m != new_minion and m.has_ability(Abilities.MECH) and not m.is_piloted:
 					mechs.append(m)
 			if not mechs.is_empty():
-				var mech_target = _pick_best_pilot_target(mechs, new_minion)
+				var mech_target = AIHeuristics.pick_best_pilot_target(mechs, new_minion)
 				await get_tree().create_timer(THINK_DELAY).timeout
 				board.log_action("Opponent's %s piloted %s" % [new_minion.data.card_name, mech_target.data.card_name])
 				game_state.apply_pilot(new_minion, mech_target, game_state.opponent)
@@ -230,364 +221,27 @@ func _handle_on_play_effects(new_minion: Minion, game_state: GameState, board: B
 				game_state.apply_swap_friendly_health(recipient, donor)
 				board.refresh()
 
-func _pick_stratagem_targets(card: CardData, game_state: GameState) -> Dictionary:
-	var result = {"ready": false, "minion": null, "player_id": ""}
-	var player_targetable: Array[Minion] = []
-	for m in game_state.player.board:
-		if not m.has_ability(Abilities.CLOAKED) and not m.has_ability(Abilities.AMBUSH):
-			player_targetable.append(m)
-	var opponent_targetable: Array[Minion] = []
-	for m in game_state.opponent.board:
-		opponent_targetable.append(m)
-	match card.effect:
-		"deal_damage":
-			var no_guardians = game_state.player.get_guardian_minions().is_empty()
-			if no_guardians and card.effect_value >= game_state.player.hero_health:
-				result["player_id"] = game_state.player.player_id
-				result["ready"] = true
-			elif not player_targetable.is_empty():
-				result["minion"] = _pick_best_removal_target(player_targetable, card.effect_value)
-				result["ready"] = true
-			elif no_guardians:
-				result["player_id"] = game_state.player.player_id
-				result["ready"] = true
-		"buff_creature":
-			if not opponent_targetable.is_empty():
-				result["minion"] = _pick_strongest(opponent_targetable)
-				result["ready"] = true
-		"buff_health":
-			if not opponent_targetable.is_empty():
-				result["minion"] = _pick_lowest_health(opponent_targetable)
-				result["ready"] = true
-		"give_ability":
-			if not opponent_targetable.is_empty():
-				result["minion"] = _pick_strongest(opponent_targetable)
-				result["ready"] = true
-		"destroy_all_creatures":
-			var player_power := 0
-			for m in game_state.player.board:
-				player_power += m.current_attack + m.current_health
-			var opp_power := 0
-			for m in game_state.opponent.board:
-				opp_power += m.current_attack + m.current_health
-			result["ready"] = not game_state.player.board.is_empty() and player_power >= opp_power
-		"deal_damage_all_creatures":
-			result["ready"] = not game_state.player.board.is_empty()
-		"deal_damage_all_enemy":
-			result["ready"] = not game_state.player.board.is_empty()
-		"buff_all_friendly_attack":
-			result["ready"] = not game_state.opponent.board.is_empty()
-		"blood_transfusion":
-			if not player_targetable.is_empty():
-				result["minion"] = _pick_best_removal_target(player_targetable, 2)
-				result["ready"] = true
-		"sanguine":
-			var sources: Array[Minion] = []
-			for m in opponent_targetable:
-				if m.current_health > 2:
-					sources.append(m)
-			if sources.size() >= 2 or (sources.size() == 1 and opponent_targetable.size() >= 2):
-				result["minion"] = _pick_strongest(sources)
-				result["ready"] = true
-		"force_challenge":
-			for m in game_state.opponent.board:
-				if m.has_ability(Abilities.YETI) and not game_state.player.board.is_empty():
-					result["minion"] = m
-					result["ready"] = true
-					break
-		"poke_bear":
-			for m in game_state.opponent.board:
-				if m.has_ability(Abilities.YETI) and not game_state.player.board.is_empty():
-					result["minion"] = m
-					result["ready"] = true
-					break
-		"heal":
-			if not opponent_targetable.is_empty():
-				var damaged: Array[Minion] = []
-				for m in opponent_targetable:
-					if m.current_health < m.max_health:
-						damaged.append(m)
-				if not damaged.is_empty():
-					result["minion"] = _pick_lowest_health(damaged)
-				else:
-					result["minion"] = _pick_health_buff_target(opponent_targetable)
-				result["ready"] = true
-		"eject_pilot":
-			var piloted: Array[Minion] = []
-			for m in opponent_targetable:
-				if m.is_piloted:
-					piloted.append(m)
-			if not piloted.is_empty():
-				result["minion"] = _pick_strongest(piloted)
-				result["ready"] = true
-		"eject_all_pilots":
-			for m in opponent_targetable:
-				if m.is_piloted:
-					result["ready"] = true
-					break
-		"give_mech_shielded_temp":
-			var mechs: Array[Minion] = []
-			for m in opponent_targetable:
-				if m.has_ability(Abilities.MECH):
-					mechs.append(m)
-			if not mechs.is_empty():
-				result["minion"] = _pick_strongest(mechs)
-				result["ready"] = true
-	return result
+# --- Attack execution ---
 
-# --- Attack phase ---
-
-func _attack_phase(game_state: GameState, board: Board) -> void:
-	if _check_lethal(game_state):
-		await _attack_all_face(game_state, board)
-		return
-	await _attack_with_all(game_state, board)
-
-func _check_lethal(game_state: GameState) -> bool:
-	if not game_state.player.get_guardian_minions().is_empty():
-		return false
-	var total = 0
-	for m in game_state.opponent.board:
-		if m.can_attack():
-			total += m.current_attack
-	return total >= game_state.player.hero_health
-
-func _attack_all_face(game_state: GameState, board: Board) -> void:
-	for m in game_state.opponent.board.duplicate():
-		if m.can_attack():
-			await get_tree().create_timer(THINK_DELAY).timeout
-			board.log_action("Opponent's %s attacked your hero" % m.data.card_name)
-			game_state.attack(m, null, game_state.player.player_id)
-			board.refresh()
-
-func _attack_with_all(game_state: GameState, board: Board) -> void:
-	var made_attack := true
-	while made_attack:
-		made_attack = false
-		var attackers: Array[Minion] = []
-		for m in game_state.opponent.board:
-			if m.can_attack():
-				attackers.append(m)
-		if attackers.is_empty():
-			break
-
-		var guardians = game_state.player.get_guardian_minions()
-		var forced = not guardians.is_empty()
-		var raw_candidates: Array[Minion] = guardians if forced else game_state.player.board.duplicate()
-
-		# Filter out Ethereal and Ambush targets
-		var candidates: Array[Minion] = []
-		for m in raw_candidates:
-			if not m.has_ability(Abilities.COMBAT_IMMUNE) and not m.has_ability(Abilities.AMBUSH):
-				candidates.append(m)
-
-		# If nothing to trade into, go face — or stall if blocked by ethereal guardians
-		if candidates.is_empty():
-			if forced:
-				break
-			for attacker in attackers:
-				await get_tree().create_timer(THINK_DELAY).timeout
-				board.log_action("Opponent's %s attacked your hero" % attacker.data.card_name)
-				game_state.attack(attacker, null, game_state.player.player_id)
-				board.refresh()
-			return
-
-		var best_score := -999
-		var best_attacker: Minion = null
-		var best_target: Minion = null  # null = go face
-
-		for attacker in attackers:
-			for target in candidates:
-				var score = _score_trade(attacker, target, game_state)
-				if score > best_score:
-					best_score = score
-					best_attacker = attacker
-					best_target = target
-			if not forced:
-				# Face pressure weighted by attacker's damage output
-				var face_score = _face_pressure_score(game_state) + attacker.current_attack / 2
-				if face_score > best_score:
-					best_score = face_score
-					best_attacker = attacker
-					best_target = null
-
-		# Don't make losing plays when not forced
-		if best_score <= 0 and not forced:
-			break
-		if best_attacker == null:
-			break
-
-		await get_tree().create_timer(THINK_DELAY).timeout
-		if best_target != null:
-			board.log_action("Opponent's %s attacked your %s" % [best_attacker.data.card_name, best_target.data.card_name])
-			game_state.attack(best_attacker, best_target)
-			await board.animate_creature_attack(best_attacker.instance_id, game_state.opponent.player_id, best_target.instance_id)
-		else:
-			board.log_action("Opponent's %s attacked your hero" % best_attacker.data.card_name)
-			game_state.attack(best_attacker, null, game_state.player.player_id)
-		board.refresh()
-		made_attack = true
-
-# Score a trade: positive = worth doing, negative = avoid
-func _score_trade(attacker: Minion, target: Minion, game_state: GameState) -> int:
-	if target.has_ability(Abilities.COMBAT_IMMUNE):
-		return -999
-
-	var target_shield := 0
-	for ab in target.abilities:
-		if Abilities.is_shielded(ab):
-			target_shield = Abilities.get_shield_value(ab)
-			break
-	var attacker_shield := 0
-	for ab in attacker.abilities:
-		if Abilities.is_shielded(ab):
-			attacker_shield = Abilities.get_shield_value(ab)
-			break
-	var attacker_amp := game_state._get_enemy_damage_amp(attacker.owner_id)
-
-	var hits := 2 if attacker.has_ability(Abilities.DUAL_STRIKE) else 1
-	var damage_to_target := maxi(0, attacker.current_attack + attacker_amp - target_shield) * hits
-
-	var we_kill: bool
-	if attacker.has_ability(Abilities.VOIDTOUCH):
-		we_kill = true  # voidtouch sets target health to 0 regardless of shield
+func _attack_action(attacker: Minion, target: Minion, target_player_id: String, game_state: GameState, board: Board) -> void:
+	await get_tree().create_timer(THINK_DELAY).timeout
+	if target != null:
+		board.log_action("Opponent's %s attacked your %s" % [attacker.data.card_name, target.data.card_name])
+		game_state.attack(attacker, target)
+		await board.animate_creature_attack(attacker.instance_id, game_state.opponent.player_id, target.instance_id)
 	else:
-		we_kill = damage_to_target >= target.current_health
+		board.log_action("Opponent's %s attacked your hero" % attacker.data.card_name)
+		game_state.attack(attacker, null, target_player_id)
+	board.refresh()
 
-	var damage_to_us := maxi(0, target.current_attack - attacker_shield)
-	var we_survive := attacker.current_health > damage_to_us
-
-	if we_kill and we_survive:
-		return target.current_attack * 2 + target.current_health + 10
-	elif we_kill:
-		var target_value   = target.current_attack   + target.current_health
-		var attacker_value = attacker.current_attack + attacker.current_health
-		return target_value - attacker_value + 1
-	elif we_survive:
-		return -5
-	else:
-		return -15
-
-# How urgently should we hit face right now?
-func _face_pressure_score(game_state: GameState) -> int:
-	var hp := game_state.player.hero_health
-	var score: int
-	if hp <= 8:
-		score = 30
-	elif hp <= 12:
-		score = 18
-	elif hp <= 16:
-		score = 8
-	elif hp <= 20:
-		score = 3
-	else:
-		score = 0
-	# Extra pressure when ahead on board
-	if game_state.opponent.board.size() > game_state.player.board.size() + 1:
-		score += 6
-	return score
-
-# --- Target selection helpers ---
+# --- Backward-compatible delegates (called directly by game_manager.gd for
+# non-AI-turn opponent decisions, e.g. reactive pending-queue resolution) ---
 
 func _pick_best_removal_target(minions: Array[Minion], damage: int) -> Minion:
-	if minions.is_empty():
-		return null
-	var best_kill: Minion = null
-	var highest_attack: Minion = null
-	for m in minions:
-		if m.current_health <= damage:
-			if best_kill == null or m.current_attack > best_kill.current_attack:
-				best_kill = m
-		if highest_attack == null or m.current_attack > highest_attack.current_attack:
-			highest_attack = m
-	return best_kill if best_kill != null else highest_attack
+	return AIHeuristics.pick_best_removal_target(minions, damage)
 
 func _pick_challenge_target(minions: Array[Minion], challenger: Minion) -> Minion:
-	var best_favorable: Minion = null
-	var best_kill: Minion = null
-	var highest_attack: Minion = null
-	for m in minions:
-		if m.has_ability(Abilities.AMBUSH):
-			continue
-		var we_kill    = challenger.current_attack >= m.current_health
-		var we_survive = challenger.current_health > m.current_attack
-		if we_kill and we_survive:
-			if best_favorable == null or m.current_attack > best_favorable.current_attack:
-				best_favorable = m
-		elif we_kill:
-			if best_kill == null or m.current_attack > best_kill.current_attack:
-				best_kill = m
-		if highest_attack == null or m.current_attack > highest_attack.current_attack:
-			highest_attack = m
-	if best_favorable != null: return best_favorable
-	if best_kill      != null: return best_kill
-	return highest_attack
+	return AIHeuristics.pick_challenge_target(minions, challenger)
 
-func _pick_best_pilot_target(mechs: Array[Minion], pilot: Minion = null) -> Minion:
-	var pilot_atk := 0
-	var pilot_hp := 0
-	if pilot != null:
-		for ab in pilot.abilities:
-			if Abilities.is_pilot(ab):
-				pilot_atk = Abilities.get_pilot_attack(ab)
-				pilot_hp  = Abilities.get_pilot_health(ab)
-				break
-	var best: Minion = null
-	var best_score := -999
-	for m in mechs:
-		var score := (m.current_attack + pilot_atk) + (m.current_health + pilot_hp)
-		if m.has_ability(Abilities.ON_PILOTED_GAIN_RUSH) or \
-				(pilot != null and pilot.has_ability(Abilities.PILOT_GIVES_RUSH)):
-			score += 4
-		if m.has_ability(Abilities.ON_PILOTED_GAIN_CLOAKED) or \
-				(pilot != null and pilot.has_ability(Abilities.PILOT_GIVES_CLOAKED)):
-			score += 2
-		if pilot != null and pilot.has_ability(Abilities.PILOT_GIVES_GUARDIAN):
-			score += 3
-		if m.has_ability(Abilities.ON_PILOTED_STAT_BOOST):
-			score += 2
-		if score > best_score:
-			best_score = score
-			best = m
-	return best
-
-func _is_pilot_without_target(card: CardData, game_state: GameState) -> bool:
-	if card.card_type != CardData.CardType.CREATURE:
-		return false
-	for ab in card.abilities:
-		if Abilities.is_pilot(ab):
-			for m in game_state.opponent.board:
-				if m.has_ability(Abilities.MECH) and not m.is_piloted:
-					return false
-			return true
-	return false
-
-func _pick_strongest(minions: Array[Minion]) -> Minion:
-	return minions.reduce(func(a, b): return a if a.current_attack > b.current_attack else b)
-
-func _pick_lowest_health(minions: Array[Minion]) -> Minion:
-	return minions.reduce(func(a, b): return a if a.current_health < b.current_health else b)
-
-## Priority target for "give a friendly minion health" effects: a Heal-to-Draw
-## minion turns any health gain into a free card (always take it), then a
-## Transform-at-max-health minion closest to its threshold (push the payoff),
-## then fall back to protecting the weakest body on board.
 func _pick_health_buff_target(minions: Array[Minion]) -> Minion:
-	if minions.is_empty():
-		return null
-	for m in minions:
-		if m.has_ability(Abilities.HEAL_TO_DRAW):
-			return m
-	var best_transform: Minion = null
-	var best_gap := 999
-	for m in minions:
-		for ab in m.abilities:
-			if Abilities.is_transform_at_max_health(ab):
-				var gap: int = Abilities.get_transform_health_threshold(ab) - m.max_health
-				if gap >= 0 and gap < best_gap:
-					best_gap = gap
-					best_transform = m
-				break
-	if best_transform != null:
-		return best_transform
-	return _pick_lowest_health(minions)
+	return AIHeuristics.pick_health_buff_target(minions)

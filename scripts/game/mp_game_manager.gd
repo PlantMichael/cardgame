@@ -10,11 +10,22 @@ var _my_id: String
 var _opp_id: String
 var _is_host: bool
 
+## Set when this match came from ranked matchmaking (see main.gd's ranked
+## flow / Net.ranked_match_found) rather than a casual friend lobby — drives
+## whether game-over reports a ladder result and moves matchmaking Elo.
+var is_ranked: bool = false
+var _opponent_rating: int = -1
+
 # ── Entry points ──────────────────────────────────────────────────────────
 
-func start_as_host(board_node: Board, player_deck: Array[CardData], opp_deck: Array[CardData]) -> void:
+func start_as_host(board_node: Board, player_deck: Array[CardData], opp_deck: Array[CardData],
+					opponent_name: String = "", ranked: bool = false, opponent_rating: int = -1) -> void:
 	board = board_node
 	board.is_online = true
+	is_ranked = ranked
+	_opponent_rating = opponent_rating
+	if not opponent_name.is_empty():
+		board.set_opponent_name(opponent_name)
 	_my_id = HOST_ID
 	_opp_id = GUEST_ID
 	_is_host = true
@@ -47,9 +58,14 @@ func start_as_host(board_node: Board, player_deck: Array[CardData], opp_deck: Ar
 		board.log_action("--- Opponent Turn %d ---" % game_state.turn_number)
 		await _host_run_guest_turn()
 
-func start_as_guest(board_node: Board) -> void:
+func start_as_guest(board_node: Board, opponent_name: String = "", ranked: bool = false,
+					 opponent_rating: int = -1) -> void:
 	board = board_node
 	board.is_online = true
+	is_ranked = ranked
+	_opponent_rating = opponent_rating
+	if not opponent_name.is_empty():
+		board.set_opponent_name(opponent_name)
 	_my_id = GUEST_ID
 	_opp_id = HOST_ID
 	_is_host = false
@@ -298,12 +314,18 @@ func _host_process_pending() -> void:
 	await _host_process_overwatch()
 
 func _host_announce_pending_draws() -> void:
-	if game_state.pending_drawn_cards.is_empty():
+	if game_state.pending_drawn_cards.is_empty() and game_state.pending_fatigue_damage.is_empty():
 		return
 	for card_data in game_state.pending_drawn_cards:
 		board.log_action("Drew %s" % card_data.card_name)
 		await board.animate_draw()
 	game_state.pending_drawn_cards.clear()
+	for player_id in game_state.pending_fatigue_damage:
+		var p := game_state._get_player_by_id(player_id)
+		var whose := "You" if player_id == HOST_ID else "Opponent"
+		board.log_action("%s took %d fatigue damage!" % [whose, p.fatigue_damage])
+		board.refresh()
+	game_state.pending_fatigue_damage.clear()
 	_send_state()
 
 func _host_process_tank_shots() -> void:
@@ -525,6 +547,19 @@ func _host_run_on_play(minion: Minion) -> void:
 				game_state.apply_transform_choice(minion, chosen.id)
 				board.refresh()
 				_send_state()
+	if minion.has_ability(Abilities.ON_PLAY_DEVOUR_FRIENDLY) and minion in game_state.player.board:
+		var devour_others := game_state.player.board.filter(func(m): return m != minion)
+		if not devour_others.is_empty():
+			board.log_action("Choose a friendly minion to devour")
+			board.start_buff_friendly_targeting(minion)
+			var devour_target: Minion = await board.buff_friendly_target_selected
+			if devour_target != null:
+				board.log_action("Your %s devoured %s and gained +%d health" % [
+					minion.data.card_name, devour_target.data.card_name, devour_target.current_health * 2])
+				_relay_log("Opponent's %s devoured %s" % [minion.data.card_name, devour_target.data.card_name])
+				game_state.apply_devour_friendly(minion, devour_target, game_state.player)
+				board.refresh()
+				_send_state()
 	for ability in minion.abilities.duplicate():
 		if Abilities.is_on_play_damage(ability):
 			var damage := Abilities.get_on_play_damage_value(ability)
@@ -603,6 +638,38 @@ func _host_run_on_play(minion: Minion) -> void:
 				_handle_game_over()
 
 func _host_run_guest_on_play(minion: Minion) -> void:
+	if minion.has_ability(Abilities.ON_PLAY_TRANSFORM_CHOICE) and not minion.data.transform_choices.is_empty():
+		var options: Array[CardData] = []
+		for cid in minion.data.transform_choices:
+			var cd = CardDatabase.get_card(cid)
+			if cd != null:
+				options.append(cd)
+		if not options.is_empty():
+			var option_ids: Array = []
+			for c in options:
+				option_ids.append(c.id)
+			Net.relay({"type": "prompt_transform_choice", "minion_id": minion.instance_id, "options": option_ids})
+			_send_state()
+			var t_resp: Dictionary = await Net.await_relay_of_type("response_transform_choice")
+			var chosen_id := str(t_resp.get("card_id", ""))
+			if chosen_id != "" and minion in game_state.opponent.board:
+				game_state.apply_transform_choice(minion, chosen_id)
+				board.refresh()
+				_send_state()
+	if minion.has_ability(Abilities.ON_PLAY_DEVOUR_FRIENDLY) and minion in game_state.opponent.board:
+		var devour_others := game_state.opponent.board.filter(func(m): return m != minion)
+		if not devour_others.is_empty():
+			Net.relay({"type": "prompt_devour_friendly", "devourer_id": minion.instance_id})
+			_send_state()
+			var d_resp: Dictionary = await Net.await_relay_of_type("response_devour_friendly")
+			var devour_target := _find_minion(GUEST_ID, str(d_resp.get("target_id", "")))
+			if devour_target != null:
+				board.log_action("Opponent's %s devoured %s" % [minion.data.card_name, devour_target.data.card_name])
+				_relay_log("Your %s devoured %s and gained +%d health" % [
+					minion.data.card_name, devour_target.data.card_name, devour_target.current_health * 2])
+				game_state.apply_devour_friendly(minion, devour_target, game_state.opponent)
+				board.refresh()
+				_send_state()
 	for ability in minion.abilities.duplicate():
 		if Abilities.is_on_play_damage(ability):
 			var damage := Abilities.get_on_play_damage_value(ability)
@@ -821,7 +888,7 @@ func _guest_drain_queue() -> bool:
 			var was_my_turn := game_state != null and game_state.is_local_player_turn()
 			_apply_state(state_msg["state"])
 			if game_state.current_phase == GameState.Phase.GAME_OVER:
-				board.show_game_over(game_state.winner_id == GUEST_ID)
+				_report_and_show_game_over(game_state.winner_id == GUEST_ID)
 				return false
 			var is_my_turn_now := game_state.is_local_player_turn()
 			if not was_my_turn and is_my_turn_now:
@@ -877,6 +944,23 @@ func _guest_respond_to_prompt(prompt: Dictionary) -> void:
 				"target_minion_id": result[0].instance_id if result[0] != null else "",
 				"target_player_id": result[1] if result[0] == null else "",
 			})
+		"prompt_transform_choice":
+			var opt_ids: Array = prompt.get("options", [])
+			var options: Array[CardData] = []
+			for oid in opt_ids:
+				var c = CardDatabase.get_card(str(oid))
+				if c != null:
+					options.append(c)
+			var chosen: CardData = await board.show_transform_picker(options)
+			Net.relay({"type": "response_transform_choice", "card_id": chosen.id if chosen != null else ""})
+		"prompt_devour_friendly":
+			var devourer := _find_minion(GUEST_ID, str(prompt.get("devourer_id", "")))
+			if devourer != null:
+				board.start_buff_friendly_targeting(devourer)
+				var target: Minion = await board.buff_friendly_target_selected
+				Net.relay({"type": "response_devour_friendly", "target_id": target.instance_id if target != null else ""})
+			else:
+				Net.relay({"type": "response_devour_friendly", "target_id": ""})
 		"prompt_on_play_pilot":
 			var pilot := _find_minion(GUEST_ID, str(prompt.get("pilot_id", "")))
 			if pilot != null:
@@ -908,12 +992,18 @@ func _guest_respond_to_prompt(prompt: Dictionary) -> void:
 				Net.relay({"type": "response_overwatch", "yeti_id": "", "target_id": ""})
 
 func _guest_announce_pending_draws() -> void:
-	if game_state.pending_drawn_cards.is_empty():
+	if game_state.pending_drawn_cards.is_empty() and game_state.pending_fatigue_damage.is_empty():
 		return
 	for card_data in game_state.pending_drawn_cards:
 		board.log_action("Drew %s" % card_data.card_name)
 		await board.animate_draw()
 	game_state.pending_drawn_cards.clear()
+	for player_id in game_state.pending_fatigue_damage:
+		var p := game_state._get_player_by_id(player_id)
+		var whose := "You" if player_id == GUEST_ID else "Opponent"
+		board.log_action("%s took %d fatigue damage!" % [whose, p.fatigue_damage])
+		board.refresh()
+	game_state.pending_fatigue_damage.clear()
 
 # ── Shared utilities ───────────────────────────────────────────────────────
 
@@ -937,4 +1027,18 @@ func _handle_game_over() -> void:
 	if _is_host:
 		Net.relay({"type": "game_over", "winner_id": game_state.winner_id})
 		_send_state()
-	board.show_game_over(game_state.winner_id == _my_id)
+	_report_and_show_game_over(game_state.winner_id == _my_id)
+
+## Shared by the host's own game-over detection and the guest's (see the
+## state_update branch in the guest message loop) so both sides report their
+## own ranked result and Elo independently — each side only ever mutates its
+## own account row, so there's no cross-client transaction to coordinate.
+func _report_and_show_game_over(won: bool) -> void:
+	if is_ranked:
+		var old_bracket := Auth.rank_bracket
+		var old_in_legend := Auth.rank_in_legend
+		var old_legend_rating := Auth.rank_legend_rating
+		Auth.report_ranked_result(won, _opponent_rating)
+		board.show_game_over(won, true, old_bracket, old_in_legend, old_legend_rating)
+	else:
+		board.show_game_over(won)

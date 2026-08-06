@@ -8,6 +8,7 @@
 - Stratagem targeting (drag to any creature or hero)
 - Mana system (1 crystal per turn, refreshes each turn)
 - Draw card each turn
+- Fatigue: drawing with an empty deck deals incrementing damage (1, then 2, then 3, ...) instead of a flat 1, for both the player and the AI; the game now also checks for a lethal fatigue draw immediately when a turn begins rather than only on the next unrelated action
 - End turn flow
 - Card preview on hover (right side of screen)
 - Board zone highlights when dragging cards
@@ -29,9 +30,14 @@
 - Drone Pilot deathrattle (on death: return a stratagem from graveyard to hand)
 - Commanding Shout (buff_all_friendly_attack: +1 attack to all friendly creatures, no target)
 - Mortar (deal_damage 4 to target creature)
-- AI controller (tactical: plays cards, trades minions, goes face, checks lethal, handles Challenge, Pilot, on-play damage, Cloaked filtering, Commanding Shout)
+- AI controller: per-decision heuristic-guided MCTS search (`MCTSEngine`, UCT selection/expansion/backprop over the current turn's atomic action sequence via `HeadlessTurn`, leaf-scored by `AIHeuristics.evaluate_state`), replacing the old one-ply greedy scorer; `AIController.ai_level` (1-10, `MCTSEngine.AI_LEVEL_CONFIG`) scales search budget, look-ahead depth, and an injected mistake-rate
+- Ranked mode: main-menu "RANKED" flow vs. a random-faction AI opponent at the player's current ladder position; ladder state (21 bracketed tiers Orbital-Cosmic, then continuous-rating Legend tiers) is authoritative on the server (`Auth.rank_*`, updated via `Auth.report_ranked_result()` → `server/relay.js`'s `nextRankState()`), not a local client-side file; `RankedProgress` (`scripts/game/ranked_progress.gd`) is stateless display/AI-level-derivation math over whatever `Auth` reports
+- Ranked tier floors: `rank_floor` (server-authoritative, `relay.js`'s `nextRankState()`/`tierFloor()`) tracks the highest tier "III" sub-rank ever reached; a loss can never drop the bracket below that floor (Hearthstone-style safety net), shown on the Ranked menu via `RankedProgress.get_floor_display_string()`
+- Ranked game-over screen shows the rank change (e.g. "Lunar III -> Lunar II") once the server acks `report_ranked_result`, instead of only updating the Ranked menu on the next visit; Play Again now actually re-rolls the opponent and re-fetches the new AI level for the next ranked match (previously it silently reloaded the whole scene back to the main menu instead of chaining into the next match)
+- Ranked matchmaking: START MATCH queues on the server (`relay.js`'s in-memory `rankedQueue`) for up to 10s looking for a human opponent within a widening rating band (`sweepRankedQueue`/`ratingBandAt`), showing a Searching screen with Cancel (`main.gd`'s `_begin_ranked_search` and friends); a match reuses the existing lobby/relay plumbing (`startRankedMatch` synthesizes a `lobbies` entry) so the game itself runs through the same `MpGameManager` host/guest flow as a casual lobby, just tagged `is_ranked`. A brief "Match Found" confirmation (opponent name + rating) shows before the game starts. No match in time falls back to the existing AI opponent with a random fake name (`RankedProgress.random_bot_name()`). PvP ranked results move the same bracket/Legend ladder as AI matches (unified rank), plus a separate invisible Elo (`players.rating`, `relay.js`'s `nextElo`) used only for pairing, updated via `report_ranked_result`'s new `opponent_rating` field. The opponent's name (real username or bot name) shows in a top-right nameplate (`Board.set_opponent_name`). Known gap: if a matched opponent disconnects between match-found and the game actually starting, the local player can be left stuck awaiting a deck exchange that will never arrive (same pre-existing limitation as the casual lobby flow, not something this pass fixed).
+- Account system and multiplayer networking: login/register required at app startup (`Auth`/`Net` autoloads, `scripts/game/auth.gd`/`net.gd`) against a custom WebSocket relay server (`server/relay.js`, Node.js) — not Nakama; MULTIPLAYER menu flow supports host/join lobbies (`MpGameManager`, `scripts/game/mp_game_manager.gd`) relaying real-time actions between two live players, separate from the AI-opponent paths
 - Win/loss overlay (modal with "You Win!" / "You Lose!" and Play Again button)
-- Transform system: attack-count transform (`transform_N`) and max-health-threshold transform (`transform_at_max_health_N`); Haven Guard → Haven Warden (5/4 Rush at 5 max health); threshold fires on all health-gain paths (Moonchild, Blood Transfusion, Sanguine, Apothecary, Pilot, stratagem buffs)
+- Transform system: attack-count transform (`transform_N`) and max-health-threshold transform (`transform_at_max_health_N`, fires at that value *or higher*, not just exactly); Haven Guard → Hungering Wolf (5/4 Rush) at 4+ max health; threshold now fires on every health-gain path, including ones that previously skipped the check entirely when they granted health in a single large jump (Devour, Yeti challenge-win buff, healing a topped-out minion, Metamorphosis's transform-buff-self), not just the +1-at-a-time paths (Moonchild, Blood Transfusion, Sanguine, Apothecary, Pilot, stratagem buffs)
 - Crimson faction: Crypt Gangrel deathrattle (AOE 1 damage → Fleshripper); Blood Transfusion (steal 2 health from enemy creature, give to friendly); Sanguine (move 2 health from one friendly to another)
 - Cascade death handling: `_remove_dead_minions` loops until no more deaths, so AOE deathrattles chain correctly
 - Faction selection buttons uniform width via `SIZE_EXPAND_FILL` in a fixed-width HBoxContainer
@@ -57,10 +63,16 @@
 - `ambush` ability: immune to enemy attacks and stratagem targeting until it attacks first; stripped on first attack
 - `enemy_damage_amp_N` parameterized ability: passive aura adding +N to all owner damage vs enemy creatures; stacks across board
 - `on_play_swap_friendly_health` ability: swap current health of two chosen friendlies (Blood Merchant)
-- `on_play_devour_friendly` ability: destroy a friendly, gain half its health rounded up (Crypt Lurker)
+- `on_play_devour_friendly` ability: destroy a friendly, gain double its health (Crypt Lurker)
+- `tainted_blood` stratagem effect: destroy a target friendly creature and deal damage to the enemy hero equal to its health times N (Tainted Blood)
+- `bloodlet` stratagem effect: heal N to a friendly target (minion or own hero) or deal N damage to an enemy target (Bloodlet)
+- `feast_attendant` ability: at end of owner's turn, give board-adjacent friendly creatures +0/+1 (Feast Attendant)
+- `on_play_devour_all` ability: destroy every other creature on both boards and gain their combined attack and health (Blood Drenched)
+- `exsanguinate` stratagem effect: deal damage to a target enemy minion equal to its own health (Exsanguinate)
+- `blood_boil` stratagem effect: double a target friendly creature's current health (permanently, via current+max health gain) (Blood boil)
 - `deathrattle_rummage_creature` ability: on death, rummage a non-legendary creature (Stinkherder)
 - `rummage_equal_cost` ability: passive — while on board, rummages may retrieve equal-cost cards (Clutterpunk)
-- AI simulation mode: headless AI-vs-AI loop accessible from main menu; tracks win rates per faction; runs ~hundreds of games per second with no UI overhead
+- AI simulation mode: headless AI-vs-AI loop accessible from main menu; tracks win rates per faction. Both sides are driven by `MCTSEngine` at level 10 (see `SimRunner._sim_play_turn`), so measured card/faction win rates reflect strong play rather than the old one-ply greedy policy — at the cost of speed: real search on both sides runs roughly a minute per game rather than the old near-instant greedy games, so batches need to be sized accordingly
 - `rejuvenate_N` ability: at end of owner's turn, heals N health per minion that has it; handled via `_apply_rejuvenate` in `end_turn()`
 - `broodtender_aura` ability: while on board, all friendly monstrosities gain Rejuvenate 2; applied on-play and on new monstrosity entry; removed on death
 - `growvin_aura` ability (Growvin the Architect): while on board, all friendly mechs gain Cloaked, Rejuvenate 1, and Shielded 1; tracked via `growvin_granted`; handles two-Growvin edge case
@@ -71,13 +83,11 @@
 ## TODO / Not Working Yet
 
 - Dead minions not visually confirmed working (need to test with AI)
-- Card art (images not added to cards yet)
-- Networking (Nakama — planned after AI is solid)
+- Card art (partial — some faction art added under `assets/`, e.g. `assets/crimsoncard.png`, `assets/teal/*.png`, but not all cards have art yet)
 - Sound
 
 ## Next Steps
 
 1. Test that dead minions are properly removed after combat
-2. Test the full AI turn loop
-3. Add card art support
-4. Move to Nakama networking
+2. Finish card art coverage for remaining cards
+3. Continue tuning MCTS AI difficulty levels against real play (see `.docs/ai.md` for `MCTSBenchmark`/`SimRunner` verification tools)

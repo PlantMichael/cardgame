@@ -5,6 +5,7 @@ extends Node2D
 @onready var opponent_board_zone: HBoxContainer = $OpponentBoardZone
 @onready var player_board_zone: HBoxContainer = $PlayerBoardZone
 @onready var player_hand_zone: HBoxContainer = $PlayerHandZone
+@onready var center_bar: Control = $CenterBar
 @onready var end_turn_button: Button = $CenterBar/EndTurnButton
 @onready var coinflip_label: Label = $CenterBar/CoinflipLabel
 @onready var turn_label: Label = $CenterBar/TurnLabel
@@ -31,6 +32,8 @@ var selected_attacker: Card = null
 var _dragging_stratagem: bool = false
 var _dragging_card: bool = false
 var _hide_scheduled: bool = false
+var _hover_card: Card = null
+const HOVER_PREVIEW_DELAY_SEC := 0.4
 var _challenge_mode: bool = false
 var _challenging_minion: Minion = null
 var _on_play_damage_mode: bool = false
@@ -49,6 +52,7 @@ var _deck_count_label: Label
 var is_online: bool = false
 var _pause_overlay: CanvasLayer = null
 var _game_over: bool = false
+var _opponent_name_label: Label = null
 
 var _keywords: Dictionary = {}
 var _keyword_vbox: VBoxContainer = null
@@ -488,19 +492,60 @@ func _highlight_board_zone(value: bool) -> void:
 
 func _update_hover(mouse_pos: Vector2) -> void:
 	if _dragging_card:
+		_hover_card = null
+		_hide_card_preview()
 		return
+
+	if center_bar.get_global_rect().has_point(mouse_pos):
+		_hover_card = null
+		_hide_card_preview()
+		return
+
+	var found_card: Card = null
+	var found_data: CardData = null
+	var found_minion: Minion = null
+	var found_rect: Rect2 = Rect2()
+	var found_in_hand: bool = false
+
 	for wrapper in player_hand_zone.get_children():
 		var card = _get_card_child(wrapper)
 		if card and wrapper.get_global_rect().has_point(mouse_pos):
-			_show_card_preview(card.data, null, wrapper.get_global_rect())
-			return
-	for zone in [player_board_zone, opponent_board_zone]:
-		for wrapper in zone.get_children():
-			var card = _get_card_child(wrapper)
-			if card and wrapper.get_global_rect().has_point(mouse_pos):
-				_show_card_preview(card.minion.data, card.minion, wrapper.get_global_rect())
-				return
-	_hide_card_preview()
+			found_card = card
+			found_data = card.data
+			found_rect = wrapper.get_global_rect()
+			found_in_hand = true
+			break
+
+	if found_card == null:
+		for zone in [player_board_zone, opponent_board_zone]:
+			for wrapper in zone.get_children():
+				var card = _get_card_child(wrapper)
+				if card and wrapper.get_global_rect().has_point(mouse_pos):
+					found_card = card
+					found_data = card.minion.data
+					found_minion = card.minion
+					found_rect = wrapper.get_global_rect()
+					break
+			if found_card != null:
+				break
+
+	if found_card == _hover_card:
+		return # still hovering the same card (or the same empty space) — don't restart the timer
+
+	_hover_card = found_card
+	if found_card == null:
+		_hide_card_preview()
+		return
+
+	if found_in_hand:
+		_show_card_preview(found_data, found_minion, found_rect)
+		return
+
+	# Field cards: only show the preview if this same card is still hovered after the delay.
+	get_tree().create_timer(HOVER_PREVIEW_DELAY_SEC).timeout.connect(func():
+		if _hover_card == found_card:
+			_show_card_preview(found_data, found_minion, found_rect)
+	)
 
 func _get_card_child(wrapper: Node) -> Card:
 	if wrapper.get_child_count() == 0:
@@ -1353,16 +1398,16 @@ func _stratagem_needs_target(data: CardData) -> bool:
 	return data.effect not in ["destroy_all_creatures", "deal_damage_all_creatures", "deal_damage_all_enemy", "buff_all_friendly_attack", "eject_all_pilots"]
 
 func _stratagem_needs_creature_target(data: CardData) -> bool:
-	return data.effect in ["give_ability", "buff_creature", "buff_health", "force_challenge", "poke_bear", "blood_transfusion", "sanguine", "heal", "eject_pilot", "give_mech_shielded_temp"]
+	return data.effect in ["give_ability", "buff_creature", "buff_health", "force_challenge", "poke_bear", "blood_transfusion", "sanguine", "heal", "eject_pilot", "give_mech_shielded_temp", "tainted_blood", "exsanguinate", "blood_boil"]
 
 func _stratagem_needs_friendly_yeti(data: CardData) -> bool:
 	return data.effect in ["force_challenge", "poke_bear"]
 
 func _stratagem_needs_enemy_creature_only(data: CardData) -> bool:
-	return data.effect in ["blood_transfusion"]
+	return data.effect in ["blood_transfusion", "exsanguinate"]
 
 func _stratagem_needs_friendly_creature_only(data: CardData) -> bool:
-	return data.effect in ["sanguine", "heal", "give_ability"]
+	return data.effect in ["sanguine", "heal", "give_ability", "tainted_blood", "blood_boil"]
 
 func _stratagem_needs_friendly_piloted_mech(data: CardData) -> bool:
 	return data.effect == "eject_pilot"
@@ -1471,7 +1516,25 @@ func _pause_btn(label: String) -> Button:
 	btn.add_theme_font_size_override("font_size", 22)
 	return btn
 
-func show_game_over(won: bool) -> void:
+## Nameplate for the current opponent (real username for a matched PvP
+## opponent, a fake bot name for AI matches) — top-right of the screen,
+## regardless of where the opponent hero portrait itself sits on the board.
+func set_opponent_name(display_name: String) -> void:
+	if _opponent_name_label == null:
+		var layer := CanvasLayer.new()
+		add_child(layer)
+		_opponent_name_label = Label.new()
+		_opponent_name_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		_opponent_name_label.offset_left = -280
+		_opponent_name_label.offset_top = 12
+		_opponent_name_label.offset_right = -16
+		_opponent_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		_opponent_name_label.add_theme_font_size_override("font_size", 18)
+		layer.add_child(_opponent_name_label)
+	_opponent_name_label.text = display_name
+
+func show_game_over(won: bool, is_ranked: bool = false, old_bracket: int = 0,
+					 old_in_legend: bool = false, old_legend_rating: int = 0) -> void:
 	_game_over = true
 	var layer = CanvasLayer.new()
 	add_child(layer)
@@ -1499,8 +1562,39 @@ func show_game_over(won: bool) -> void:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(label)
 
+	if is_ranked:
+		var rank_lbl := Label.new()
+		rank_lbl.text = "Updating rank..."
+		rank_lbl.add_theme_font_size_override("font_size", 22)
+		rank_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		vbox.add_child(rank_lbl)
+		_connect_ranked_result_display(rank_lbl, won, old_bracket, old_in_legend, old_legend_rating)
+
 	var btn = Button.new()
 	btn.text = "Play Again"
 	btn.custom_minimum_size = Vector2(160, 48)
-	btn.pressed.connect(func(): get_tree().reload_current_scene())
+	btn.pressed.connect(func():
+		if is_online:
+			get_tree().reload_current_scene()
+		else:
+			restart_requested.emit()
+	)
 	vbox.add_child(btn)
+
+## Fills in `rank_lbl` once the server acks the ranked result Auth already
+## sent in _handle_game_over — shows the old -> new tier/rating so a rank
+## up/down is visible on the game-over screen instead of only on the next
+## visit to the Ranked menu.
+func _connect_ranked_result_display(rank_lbl: Label, won: bool, old_bracket: int,
+								   old_in_legend: bool, old_legend_rating: int) -> void:
+	Net.ranked_result_received.connect(func(success: bool, _profile: Dictionary):
+		if not is_instance_valid(rank_lbl):
+			return
+		if not success:
+			rank_lbl.text = "Rank sync failed"
+			return
+		var old_str := RankedProgress.get_display_string(old_bracket, old_in_legend, old_legend_rating)
+		var new_str := RankedProgress.get_display_string(Auth.rank_bracket, Auth.rank_in_legend, Auth.rank_legend_rating)
+		rank_lbl.text = new_str if old_str == new_str else "%s -> %s" % [old_str, new_str]
+		rank_lbl.modulate = Color(0.4, 0.9, 0.4) if won else Color(0.9, 0.4, 0.4)
+	, CONNECT_ONE_SHOT)

@@ -11,6 +11,12 @@ enum DeckMode { RANDOM, ARCHETYPE }
 
 var deck_mode: DeckMode = DeckMode.RANDOM
 
+## MCTSEngine level both sides search at (see mcts_ai.gd's AI_LEVEL_CONFIG).
+## Higher is stronger/more realistic balance data but proportionally slower —
+## level 10 does ~3x the iterations and one extra look-ahead ply versus
+## level 5, so a full game can run into the minute-plus range.
+var ai_level: int = 10
+
 var stats: Dictionary = {}
 var total_games: int = 0
 var card_wins: Dictionary = {}    # card_id -> int
@@ -19,14 +25,15 @@ var card_kills: Dictionary = {}   # card_id -> int
 var card_damage: Dictionary = {}  # card_id -> int
 var card_plays: Dictionary = {}   # card_id -> int
 
-func _init(mode: DeckMode = DeckMode.RANDOM) -> void:
+func _init(mode: DeckMode = DeckMode.RANDOM, level: int = 10) -> void:
 	deck_mode = mode
+	ai_level = clampi(level, 1, 10)
 	for key in FACTION_KEYS:
 		stats[key] = {"wins": 0, "losses": 0}
 
 func run_batch(count: int) -> void:
 	for _i in count:
-		_run_one_game()
+		await _run_one_game()
 
 func _build_deck(color: CardData.CardColor) -> Array[CardData]:
 	if deck_mode == DeckMode.ARCHETYPE:
@@ -56,11 +63,7 @@ func _run_one_game() -> void:
 	for _t in 200:
 		if gs.current_phase == GameState.Phase.GAME_OVER:
 			break
-		var active := gs.active_player_id
-		_sim_play_cards(gs, active)
-		if gs.current_phase == GameState.Phase.GAME_OVER:
-			break
-		_sim_attack_phase(gs, active)
+		await _sim_play_turn(gs, gs.active_player_id)
 		if gs.current_phase == GameState.Phase.GAME_OVER:
 			break
 		gs.end_turn()
@@ -132,6 +135,7 @@ func _key_to_color(key: String) -> CardData.CardColor:
 
 func _resolve_pending(gs: GameState) -> void:
 	gs.pending_drawn_cards.clear()
+	gs.pending_fatigue_damage.clear()
 	var changed := true
 	while changed:
 		changed = false
@@ -182,7 +186,7 @@ func _resolve_pending(gs: GameState) -> void:
 			var pid: String = gs.pending_buff_friendly_health.pop_front()
 			var p_state: PlayerState = gs.player if pid == gs.player.player_id else gs.opponent
 			if not p_state.board.is_empty():
-				gs.apply_buff_friendly_health(_pick_health_buff_target(p_state.board))
+				gs.apply_buff_friendly_health(AIHeuristics.pick_health_buff_target(p_state.board))
 
 		while not gs.pending_tank_specialist_buffs.is_empty():
 			changed = true
@@ -231,45 +235,64 @@ func _resolve_pending(gs: GameState) -> void:
 			if gs.current_phase == GameState.Phase.GAME_OVER:
 				return
 
-# ── Card play ────────────────────────────────────────────────────────────────
+# ── Turn driver (MCTSEngine for both sides, level configurable via ai_level) ──
 
-func _sim_play_cards(gs: GameState, active_id: String) -> void:
-	var p_state: PlayerState = gs.player if active_id == gs.player.player_id else gs.opponent
-
-	var played := true
-	while played:
-		played = false
+## Balance stats are only meaningful if both sides play close to their best,
+## so simulated games are driven by the same search engine real matches use
+## (at `ai_level` for both sides) instead of the older one-ply greedy policy
+## — a card's measured win rate should reflect strong play, not mediocre play.
+## `ai_level` defaults to 10 (strongest, slowest) but is tunable since level
+## 10 on both sides can push a single game past a minute — see main.gd's
+## Simulation screen difficulty picker.
+## This mirrors HeadlessTurn's atomic action loop, but keeps SimRunner's own
+## per-card kill/damage/play tracking wired directly around each action.
+func _sim_play_turn(gs: GameState, active_id: String) -> void:
+	var engine := MCTSEngine.new(active_id, ai_level)
+	for _i in 60:  # safety cap; a real turn never needs anywhere near this many actions
 		if gs.current_phase == GameState.Phase.GAME_OVER:
 			return
-		var hand := p_state.hand.duplicate()
-		hand.sort_custom(func(a: CardData, b: CardData) -> bool: return a.cost > b.cost)
-
-		for card in hand:
-			if card not in p_state.hand:
-				continue
-			if not p_state.can_play_card(card):
-				continue
-			if card.card_type == CardData.CardType.CREATURE:
-				if p_state.board.size() >= PlayerState.MAX_BOARD_SIZE:
-					continue
+		# MCTSEngine.choose_action() itself yields every few iterations now,
+		# so a single call no longer blocks rendering/input for its whole
+		# ~1-1.5s (level 10) — driving both sides at level 10 back-to-back no
+		# longer stalls the engine for a whole game's worth of searches.
+		var action := await engine.choose_action(gs)
+		match action["type"]:
+			"play_creature":
+				var card: CardData = action["card"]
 				var m := gs.play_creature(active_id, card)
 				if m != null:
 					card_plays[card.id] = card_plays.get(card.id, 0) + 1
 					_sim_handle_on_play(m, gs)
 					_resolve_pending(gs)
-					played = true
-					break
-			elif card.card_type == CardData.CardType.STRATAGEM:
-				var pick := _pick_stratagem(card, gs, active_id)
-				if not pick["ready"]:
-					continue
-				var ok := gs.play_stratagem(active_id, card, pick.get("minion"), pick.get("player_id", ""))
+			"play_stratagem":
+				var card: CardData = action["card"]
+				var target_minion: Minion = action.get("minion")
+				var ok := gs.play_stratagem(active_id, card, target_minion, action.get("player_id", ""))
 				if ok:
 					card_plays[card.id] = card_plays.get(card.id, 0) + 1
-					_handle_stratagem_secondary(card, pick.get("minion"), gs, active_id)
+					_handle_stratagem_secondary(card, target_minion, gs, active_id)
 					_resolve_pending(gs)
-					played = true
-					break
+			"attack":
+				var attacker: Minion = action["attacker"]
+				var target: Minion = action.get("target")
+				var target_player_id: String = action.get("target_player_id", "")
+				if target != null:
+					var enemy: PlayerState = gs._get_player_by_id(gs._opponent_id(active_id))
+					var pre_hp: int = target.current_health
+					gs.attack(attacker, target)
+					var still_alive: bool = target in enemy.board
+					_track_combat(attacker.data.id,
+						pre_hp - (target.current_health if still_alive else 0), not still_alive)
+				else:
+					var enemy_p := gs._get_player_by_id(target_player_id)
+					var pre_face: int = enemy_p.hero_health
+					gs.attack(attacker, null, target_player_id)
+					_track_combat(attacker.data.id, pre_face - maxi(0, enemy_p.hero_health), false)
+				_resolve_pending(gs)
+			"end_turn":
+				return
+		if gs.current_phase == GameState.Phase.GAME_OVER:
+			return
 
 # ── On-play effect handler ───────────────────────────────────────────────────
 
@@ -283,7 +306,7 @@ func _sim_handle_on_play(m: Minion, gs: GameState) -> void:
 		if Abilities.is_on_play_damage(ability):
 			var dmg := Abilities.get_on_play_damage_value(ability)
 			if not enemy.board.is_empty():
-				var tgt := _pick_removal(enemy.board.duplicate(), dmg)
+				var tgt := AIHeuristics.pick_best_removal_target(enemy.board.duplicate(), dmg)
 				if tgt != null:
 					gs.apply_on_play_damage(tgt, dmg, m.owner_id)
 				else:
@@ -300,7 +323,7 @@ func _sim_handle_on_play(m: Minion, gs: GameState) -> void:
 		return
 
 	if m.has_ability(Abilities.CHALLENGE) and not enemy.board.is_empty():
-		var tgt := _pick_challenge(enemy.board, m)
+		var tgt := AIHeuristics.pick_challenge_target(enemy.board, m)
 		if tgt != null:
 			_do_challenge(m, tgt, gs, enemy)
 		if gs.current_phase == GameState.Phase.GAME_OVER:
@@ -324,7 +347,7 @@ func _sim_handle_on_play(m: Minion, gs: GameState) -> void:
 		return
 
 	if m.has_ability(Abilities.ON_PLAY_CHALLENGE_WIN_BUFF) and not enemy.board.is_empty():
-		var tgt := _pick_challenge(enemy.board, m)
+		var tgt := AIHeuristics.pick_challenge_target(enemy.board, m)
 		if tgt != null:
 			_do_challenge(m, tgt, gs, enemy)
 			if m in friendly.board and tgt not in enemy.board:
@@ -344,7 +367,7 @@ func _sim_handle_on_play(m: Minion, gs: GameState) -> void:
 				yeti = bm
 				break
 		if yeti != null:
-			var tgt := _pick_challenge(enemy.board, yeti)
+			var tgt := AIHeuristics.pick_challenge_target(enemy.board, yeti)
 			if tgt != null:
 				_do_challenge(yeti, tgt, gs, enemy)
 		if gs.current_phase == GameState.Phase.GAME_OVER:
@@ -408,179 +431,12 @@ func _sim_handle_on_play(m: Minion, gs: GameState) -> void:
 				gs.apply_pilot(m, mechs[randi() % mechs.size()], friendly)
 			break
 
-# ── Attack phase ─────────────────────────────────────────────────────────────
-
-func _sim_attack_phase(gs: GameState, active_id: String) -> void:
-	var p_state: PlayerState = gs.player if active_id == gs.player.player_id else gs.opponent
-	var enemy: PlayerState = gs.opponent if active_id == gs.player.player_id else gs.player
-	var enemy_id := enemy.player_id
-
-	var made_attack := true
-	while made_attack:
-		made_attack = false
-		if gs.current_phase == GameState.Phase.GAME_OVER:
-			return
-
-		var attackers: Array[Minion] = []
-		for m in p_state.board:
-			if m.can_attack():
-				attackers.append(m)
-		if attackers.is_empty():
-			break
-
-		var guardians := enemy.get_guardian_minions()
-		var raw: Array[Minion] = guardians if not guardians.is_empty() else enemy.board.duplicate()
-		var targets: Array[Minion] = []
-		for m in raw:
-			if not m.has_ability(Abilities.COMBAT_IMMUNE) and not m.has_ability(Abilities.AMBUSH):
-				targets.append(m)
-
-		if targets.is_empty():
-			if not guardians.is_empty():
-				break  # Guardians present but all ethereal/ambush — stall
-			for attacker in attackers:
-				var pre_face_hp: int = enemy.hero_health
-				gs.attack(attacker, null, enemy_id)
-				_track_combat(attacker.data.id, pre_face_hp - max(0, enemy.hero_health), false)
-				_resolve_pending(gs)
-				if gs.current_phase == GameState.Phase.GAME_OVER:
-					return
-			made_attack = true
-			continue
-
-		var best_score := -999
-		var best_atk: Minion = null
-		var best_tgt: Minion = null
-
-		for attacker in attackers:
-			for tgt in targets:
-				var sc := _score_trade(attacker, tgt)
-				if sc > best_score:
-					best_score = sc
-					best_atk = attacker
-					best_tgt = tgt
-			if guardians.is_empty():
-				var face := _face_score(enemy.hero_health, p_state.board.size(), enemy.board.size())
-				var weighted := face + attacker.current_attack / 2
-				if weighted > best_score:
-					best_score = weighted
-					best_atk = attacker
-					best_tgt = null
-
-		if best_score <= 0 and guardians.is_empty():
-			break
-		if best_atk == null:
-			break
-
-		if best_tgt != null:
-			var pre_hp: int = best_tgt.current_health
-			gs.attack(best_atk, best_tgt)
-			var still_alive: bool = best_tgt in enemy.board
-			_track_combat(best_atk.data.id,
-				pre_hp - (best_tgt.current_health if still_alive else 0),
-				not still_alive)
-		else:
-			var pre_face: int = enemy.hero_health
-			gs.attack(best_atk, null, enemy_id)
-			_track_combat(best_atk.data.id, pre_face - max(0, enemy.hero_health), false)
-		_resolve_pending(gs)
-		made_attack = true
-
-# ── Stratagem targeting ──────────────────────────────────────────────────────
-
-func _pick_stratagem(card: CardData, gs: GameState, acting_id: String) -> Dictionary:
-	var result := {"ready": false, "minion": null, "player_id": ""}
-	var friendly: PlayerState = gs.player if acting_id == gs.player.player_id else gs.opponent
-	var enemy: PlayerState = gs.opponent if acting_id == gs.player.player_id else gs.player
-
-	var enemy_tgts: Array[Minion] = []
-	for m in enemy.board:
-		if not m.has_ability(Abilities.CLOAKED) and not m.has_ability(Abilities.AMBUSH):
-			enemy_tgts.append(m)
-	var friendly_tgts: Array[Minion] = []
-	for m in friendly.board:
-		if not m.has_ability(Abilities.CLOAKED):
-			friendly_tgts.append(m)
-
-	match card.effect:
-		"deal_damage":
-			if not enemy_tgts.is_empty():
-				result["minion"] = _pick_removal(enemy_tgts, card.effect_value)
-				result["ready"] = true
-			elif enemy.get_guardian_minions().is_empty():
-				result["player_id"] = enemy.player_id
-				result["ready"] = true
-		"buff_creature", "give_ability":
-			if not friendly_tgts.is_empty():
-				result["minion"] = friendly_tgts[randi() % friendly_tgts.size()]
-				result["ready"] = true
-		"buff_health":
-			if not friendly_tgts.is_empty():
-				result["minion"] = friendly_tgts[randi() % friendly_tgts.size()]
-				result["ready"] = true
-		"destroy_all_creatures":
-			var ep := 0
-			for m in enemy.board:
-				ep += m.current_attack + m.current_health
-			var fp := 0
-			for m in friendly.board:
-				fp += m.current_attack + m.current_health
-			result["ready"] = not enemy.board.is_empty() and ep >= fp
-		"deal_damage_all_creatures", "deal_damage_all_enemy":
-			result["ready"] = not enemy.board.is_empty()
-		"buff_all_friendly_attack":
-			result["ready"] = not friendly.board.is_empty()
-		"blood_transfusion":
-			if not enemy_tgts.is_empty():
-				result["minion"] = _pick_removal(enemy_tgts, card.effect_value)
-				result["ready"] = true
-		"sanguine":
-			var sources: Array[Minion] = []
-			for m in friendly_tgts:
-				if m.current_health > card.effect_value + 1:
-					sources.append(m)
-			if sources.size() >= 2 or (not sources.is_empty() and friendly_tgts.size() >= 2):
-				result["minion"] = sources[randi() % sources.size()] if not sources.is_empty() else friendly_tgts[0]
-				result["ready"] = true
-		"heal":
-			if not friendly_tgts.is_empty():
-				var damaged: Array[Minion] = []
-				for m in friendly_tgts:
-					if m.current_health < m.max_health:
-						damaged.append(m)
-				if not damaged.is_empty():
-					result["minion"] = _pick_lowest_health(damaged)
-				else:
-					result["minion"] = _pick_health_buff_target(friendly_tgts)
-				result["ready"] = true
-		"force_challenge", "poke_bear":
-			for m in friendly.board:
-				if m.has_ability(Abilities.YETI) and not enemy.board.is_empty():
-					result["minion"] = m
-					result["ready"] = true
-					break
-		"eject_pilot":
-			result["ready"] = false
-		"eject_all_pilots":
-			result["ready"] = false
-		"give_mech_shielded_temp":
-			var best: Minion = null
-			for m in friendly.board:
-				if m.has_ability(Abilities.MECH):
-					if best == null or m.current_health > best.current_health:
-						best = m
-			if best != null:
-				result["minion"] = best
-				result["ready"] = true
-
-	return result
-
 func _handle_stratagem_secondary(card: CardData, target: Minion, gs: GameState, acting_id: String) -> void:
 	var friendly: PlayerState = gs.player if acting_id == gs.player.player_id else gs.opponent
 	var enemy: PlayerState = gs.opponent if acting_id == gs.player.player_id else gs.player
 
 	if card.effect == "blood_transfusion" and not friendly.board.is_empty():
-		gs.apply_heal_buff(_pick_health_buff_target(friendly.board), card.effect_value)
+		gs.apply_heal_buff(AIHeuristics.pick_health_buff_target(friendly.board), card.effect_value)
 
 	if card.effect == "sanguine" and target != null:
 		var others: Array[Minion] = []
@@ -588,7 +444,7 @@ func _handle_stratagem_secondary(card: CardData, target: Minion, gs: GameState, 
 			if m != target:
 				others.append(m)
 		if not others.is_empty():
-			gs.apply_heal_buff(_pick_health_buff_target(others), card.effect_value)
+			gs.apply_heal_buff(AIHeuristics.pick_health_buff_target(others), card.effect_value)
 
 	if card.effect in ["force_challenge", "poke_bear"] and target != null:
 		var yeti: Minion = target
@@ -598,7 +454,7 @@ func _handle_stratagem_secondary(card: CardData, target: Minion, gs: GameState, 
 				if not m.has_ability(Abilities.AMBUSH):
 					non_ambush.append(m)
 			if not non_ambush.is_empty():
-				var tgt := _pick_challenge(non_ambush, yeti)
+				var tgt := AIHeuristics.pick_challenge_target(non_ambush, yeti)
 				if tgt != null:
 					_do_challenge(yeti, tgt, gs, enemy)
 					if card.effect == "force_challenge" and card.effect_value > 0 \
@@ -607,85 +463,7 @@ func _handle_stratagem_secondary(card: CardData, target: Minion, gs: GameState, 
 						yeti.current_health += card.effect_value
 						yeti.max_health += card.effect_value
 
-# ── Scoring helpers ──────────────────────────────────────────────────────────
-
-func _score_trade(attacker: Minion, target: Minion) -> int:
-	var we_kill    := attacker.current_attack >= target.current_health
-	var we_survive := attacker.current_health > target.current_attack
-	if we_kill and we_survive:
-		return target.current_attack * 2 + target.current_health + 10
-	elif we_kill:
-		return (target.current_attack + target.current_health) - (attacker.current_attack + attacker.current_health) + 1
-	elif we_survive:
-		return -5
-	else:
-		return -15
-
-func _face_score(enemy_hp: int, my_board: int, their_board: int) -> int:
-	var s := 0
-	if enemy_hp <= 8:    s = 30
-	elif enemy_hp <= 12: s = 18
-	elif enemy_hp <= 16: s = 8
-	elif enemy_hp <= 20: s = 3
-	if my_board > their_board + 1:
-		s += 6
-	return s
-
-func _pick_lowest_health(minions: Array[Minion]) -> Minion:
-	var lowest := minions[0]
-	for m in minions:
-		if m.current_health < lowest.current_health:
-			lowest = m
-	return lowest
-
-## Mirrors AIController._pick_health_buff_target: Heal-to-Draw minions always
-## take priority (free card), then Transform-at-max-health minions closest to
-## their threshold, then fall back to the weakest body on board.
-func _pick_health_buff_target(minions: Array[Minion]) -> Minion:
-	if minions.is_empty():
-		return null
-	for m in minions:
-		if m.has_ability(Abilities.HEAL_TO_DRAW):
-			return m
-	var best_transform: Minion = null
-	var best_gap := 999
-	for m in minions:
-		for ab in m.abilities:
-			if Abilities.is_transform_at_max_health(ab):
-				var gap: int = Abilities.get_transform_health_threshold(ab) - m.max_health
-				if gap >= 0 and gap < best_gap:
-					best_gap = gap
-					best_transform = m
-				break
-	if best_transform != null:
-		return best_transform
-	return _pick_lowest_health(minions)
-
-func _pick_removal(minions: Array[Minion], damage: int) -> Minion:
-	var best_kill: Minion = null
-	var highest_atk: Minion = null
-	for m in minions:
-		if m.current_health <= damage:
-			if best_kill == null or m.current_attack > best_kill.current_attack:
-				best_kill = m
-		if highest_atk == null or m.current_attack > highest_atk.current_attack:
-			highest_atk = m
-	return best_kill if best_kill != null else highest_atk
-
-func _pick_challenge(minions: Array[Minion], challenger: Minion) -> Minion:
-	var best: Minion = null
-	var best_score := -999
-	for m in minions:
-		if m.has_ability(Abilities.AMBUSH):
-			continue
-		var wk := challenger.current_attack >= m.current_health
-		var ws := challenger.current_health > m.current_attack
-		var sc: int
-		if wk and ws:      sc = m.current_attack * 2 + m.current_health + 10
-		elif wk:           sc = (m.current_attack + m.current_health) - (challenger.current_attack + challenger.current_health) + 1
-		elif ws:           sc = -5
-		else:              sc = -15
-		if sc > best_score:
-			best_score = sc
-			best = m
-	return best
+# Scoring/target-selection now lives in AIHeuristics (shared with
+# AIController and MCTSEngine) — see score_trade, face_pressure_score,
+# pick_lowest_health, pick_health_buff_target, pick_best_removal_target,
+# pick_challenge_target.

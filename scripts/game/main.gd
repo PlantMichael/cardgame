@@ -12,9 +12,11 @@ var _opponent_deck_ids: Array[String] = []
 var _sim_running: bool = false
 var _sim_runner: SimRunner = null
 var _sim_deck_mode: SimRunner.DeckMode = SimRunner.DeckMode.RANDOM
+var _sim_ai_level: int = 5  # Medium by default — level 10 on both sides is much slower
 var _sim_stat_labels: Dictionary = {}
 var _sim_totals_lbl: Label = null
-var _sim_gps_timer: float = 0.0
+var _sim_status_lbl: Label = null
+var _sim_game_start_ms: int = 0
 var _sim_gps_count: int = 0
 var _sim_gps_display: float = 0.0
 var _sim_card_grid: GridContainer = null
@@ -27,7 +29,33 @@ var _mp_player_deck_ids: Array[String] = []
 var _mp_guest_deck_ids: Array[String] = []
 var _mp_manager: MpGameManager = null
 
+# Ranked matchmaking state
+const RANKED_SEARCH_TIMEOUT_SEC := 10.0
+const RANKED_MATCH_CONFIRM_SEC := 1.5
+# Bumped on every begin/cancel/resolve so a stale timer or match-found signal
+# left over from a cancelled or already-resolved search (e.g. Cancel then
+# immediately Start again) can tell it's no longer current and no-op instead
+# of hijacking whatever search is active now.
+var _ranked_search_id: int = 0
+var _ranked_match_found_callable: Callable = Callable()
+
 func _ready() -> void:
+	if "--mcts-timing" in OS.get_cmdline_user_args():
+		_run_mcts_timing_cli()
+		return
+	if "--mcts-benchmark" in OS.get_cmdline_user_args():
+		_run_mcts_benchmark_cli()
+		return
+	if "--fatigue-test" in OS.get_cmdline_user_args():
+		_run_fatigue_test_cli()
+		return
+	if "--haven-test" in OS.get_cmdline_user_args():
+		_run_haven_test_cli()
+		return
+	if "--sim-test" in OS.get_cmdline_user_args():
+		_run_sim_test_cli()
+		return
+
 	_canvas = CanvasLayer.new()
 	add_child(_canvas)
 
@@ -39,15 +67,135 @@ func _ready() -> void:
 	_canvas.add_child(bg)
 
 	Net.opponent_left.connect(_on_opponent_left)
-	_show_main_menu()
+	if OS.has_feature("editor"):
+		# Skip the login gate when run from the Godot editor (playtesting) —
+		# "editor" is only ever true for an editor-launched debug run, never
+		# for an exported build (web or otherwise), so this can't ship live.
+		_show_main_menu()
+	else:
+		_require_login_then(_show_main_menu, false)
 
 func _clear_screen() -> void:
 	for i in range(_canvas.get_child_count() - 1, 0, -1):
 		_canvas.get_child(i).queue_free()
 
+## Dev-only headless verification hook: run via
+##   godot --headless --path <project> -- --mcts-benchmark
+## Bypasses the UI entirely (skipped autoloads aren't available in bare
+## --script mode, so this runs through the real project instead) and prints
+## win rates so MCTSEngine level tuning can be checked without manual play.
+## Dev-only timing probe: godot --headless --path <project> -- --mcts-timing
+## Measures wall-clock ms per choose_action() call at each level on a
+## realistic mid-game board, to catch a level being too slow before it's
+## ever played against.
+func _run_mcts_timing_cli() -> void:
+	var deck_a := DeckManager.build_random_faction_deck(CardData.CardColor.CRIMSON)
+	var deck_b := DeckManager.build_random_faction_deck(CardData.CardColor.TEAL)
+	var gs := GameState.new("sim_a", "sim_b", deck_a, deck_b)
+	gs.start_game("sim_a")
+	HeadlessTurn._resolve_pending(gs)
+	# Play a few greedy turns each side first so the board isn't the empty
+	# opening state (a mid-game board has more legal actions to search).
+	for _t in 6:
+		HeadlessTurn.play_full_turn_greedy(gs, gs.active_player_id)
+		if gs.current_phase == GameState.Phase.GAME_OVER:
+			break
+
+	for level in [1, 3, 5, 7, 10]:
+		var engine := MCTSEngine.new("sim_a", level)
+		var start_ms := Time.get_ticks_msec()
+		var action := await engine.choose_action(gs)
+		var elapsed := Time.get_ticks_msec() - start_ms
+		print("Level %d: %d ms, chose %s" % [level, elapsed, action["type"]])
+	get_tree().quit()
+
+## Dev-only smoke test for SimRunner's MCTS-level-10-both-sides turn driver:
+##   godot --headless --path <project> -- --sim-test
+func _run_sim_test_cli() -> void:
+	print("Running 1 SimRunner game per deck mode (both sides MCTS level 10)...")
+	for mode in [SimRunner.DeckMode.RANDOM, SimRunner.DeckMode.ARCHETYPE]:
+		var start_ms := Time.get_ticks_msec()
+		var runner := SimRunner.new(mode)
+		await runner.run_batch(1)
+		var elapsed := Time.get_ticks_msec() - start_ms
+		print("[%s] done in %d ms. total_games=%d stats=%s" % [
+			SimRunner.DeckMode.keys()[mode], elapsed, runner.total_games, runner.stats])
+	get_tree().quit()
+
+## Dev-only one-shot check of the fatigue math (both players start with an
+## empty deck, so every draw fatigues immediately): godot --headless --path
+## <project> -- --fatigue-test
+func _run_fatigue_test_cli() -> void:
+	print("Testing fatigue with empty decks...")
+	var gs := GameState.new("a", "b", [], [])
+	gs.start_game("a")
+	print("After opening hand: a.hp=%d a.fatigue=%d" % [gs.player.hero_health, gs.player.fatigue_damage])
+	for i in 40:
+		if gs.current_phase == GameState.Phase.GAME_OVER:
+			print("GAME OVER after %d end_turns. winner=%s a.hp=%d b.hp=%d" % [
+				i, gs.winner_id, gs.player.hero_health, gs.opponent.hero_health])
+			break
+		gs.end_turn()
+		print("turn=%d active=%s a.hp=%d(fatigue=%d) b.hp=%d(fatigue=%d) phase=%d" % [
+			gs.turn_number, gs.active_player_id, gs.player.hero_health, gs.player.fatigue_damage,
+			gs.opponent.hero_health, gs.opponent.fatigue_damage, gs.current_phase])
+	get_tree().quit()
+
+## Dev-only check that health-threshold transform (Haven Guard -> Haven
+## Warden at 4+ max health) fires even when a single effect jumps straight
+## past the threshold instead of landing on it exactly (e.g. devour, which
+## used to skip the check entirely): godot --headless --path <project> --
+## --haven-test
+func _run_haven_test_cli() -> void:
+	print("Testing Haven Guard transform via a jump that skips over exactly 4...")
+	var card := CardDatabase.get_card("cr_003")
+	var gs := GameState.new("a", "b", [], [])
+	var m := Minion.new(card, "a")
+	gs.player.board.append(m)
+	print("Before: name=%s max_health=%d" % [m.data.card_name, m.max_health])
+	var fodder := Minion.new(card, "a")
+	fodder.current_health = 5  # devour gain = 5*2 = 10, so max_health jumps 3 -> 13, skipping 4 entirely
+	gs.player.board.append(fodder)
+	gs.apply_devour_friendly(m, fodder, gs.player)
+	var transformed := m.data.id != card.id
+	print("After devour (3 -> 13, skipping 4): name=%s max_health=%d transformed=%s" % [
+		m.data.card_name, m.max_health, transformed])
+	print("RESULT: %s" % ("PASS" if transformed else "FAIL"))
+	get_tree().quit()
+
+func _run_mcts_benchmark_cli() -> void:
+	print("Running MCTS benchmark...")
+	var r1 := await MCTSBenchmark.run(6, MCTSBenchmark.mcts(3), MCTSBenchmark.mcts(1))
+	print("Level 3 MCTS vs Level 1 MCTS (6 games): ", r1)
+	var r2 := await MCTSBenchmark.run(6, MCTSBenchmark.mcts(5), MCTSBenchmark.mcts(1))
+	print("Level 5 MCTS vs Level 1 MCTS (6 games): ", r2)
+	get_tree().quit()
+
 # ── Main menu ──────────────────────────────────────────────────────────
 
 func _show_main_menu() -> void:
+	var account_bar := HBoxContainer.new()
+	account_bar.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	account_bar.position = Vector2(-220, 16)
+	account_bar.add_theme_constant_override("separation", 10)
+	_canvas.add_child(account_bar)
+
+	var account_lbl := Label.new()
+	account_lbl.text = "Logged in as %s" % Auth.username if Auth.is_logged_in else "Offline (Editor)"
+	account_lbl.add_theme_font_size_override("font_size", 14)
+	account_bar.add_child(_bg_cell(account_lbl))
+
+	if Auth.is_logged_in:
+		var logout_btn := Button.new()
+		logout_btn.text = "Log Out"
+		logout_btn.add_theme_font_size_override("font_size", 14)
+		logout_btn.pressed.connect(func():
+			Auth.logout()
+			_clear_screen()
+			_require_login_then(_show_main_menu, false)
+		)
+		account_bar.add_child(logout_btn)
+
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_canvas.add_child(center)
@@ -75,6 +223,10 @@ func _show_main_menu() -> void:
 	play_btn.pressed.connect(_on_play_pressed)
 	vbox.add_child(play_btn)
 
+	var ranked_btn := _menu_btn("RANKED")
+	ranked_btn.pressed.connect(_on_ranked_pressed)
+	vbox.add_child(ranked_btn)
+
 	var build_btn := _menu_btn("DECK BUILDER")
 	build_btn.pressed.connect(_on_deck_builder_pressed)
 	vbox.add_child(build_btn)
@@ -82,6 +234,20 @@ func _show_main_menu() -> void:
 	var sim_btn := _menu_btn("SIMULATION")
 	sim_btn.pressed.connect(_on_simulation_pressed)
 	vbox.add_child(sim_btn)
+
+## Wraps a label in a translucent dark panel so it stays legible over the background art.
+func _bg_cell(label: Control) -> PanelContainer:
+	var panel := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.06, 0.07, 0.10, 0.78)
+	style.set_corner_radius_all(4)
+	style.content_margin_left = 6
+	style.content_margin_right = 6
+	style.content_margin_top = 1
+	style.content_margin_bottom = 1
+	panel.add_theme_stylebox_override("panel", style)
+	panel.add_child(label)
+	return panel
 
 func _menu_btn(label: String) -> Button:
 	var btn := Button.new()
@@ -94,14 +260,23 @@ func _menu_btn(label: String) -> Button:
 
 func _on_multiplayer_pressed() -> void:
 	_clear_screen()
-	if Auth.is_logged_in:
+	_require_login_then(func():
 		_mp_name = Auth.username
 		_with_connection(_show_lobby_browser)
+	)
+
+## Runs on_ready once Auth.is_logged_in is true, logging in first (silently
+## resuming a saved session, or showing the login/register screen) if it
+## isn't yet. allow_back controls whether the login screen offers a way back
+## to the main menu — false at game startup, since it doesn't exist yet.
+func _require_login_then(on_ready: Callable, allow_back: bool = true) -> void:
+	if Auth.is_logged_in:
+		on_ready.call()
 		return
 	if Auth.has_saved_session():
-		_show_reconnecting_screen()
+		_show_reconnecting_screen(on_ready, allow_back)
 		return
-	_show_auth_screen(false)
+	_show_auth_screen(false, on_ready, allow_back)
 
 # Ensures the relay connection is open before running on_ready, connecting first if needed.
 # If the connection doesn't open within CONNECT_TIMEOUT_SEC, on_timeout runs instead (if given).
@@ -123,7 +298,7 @@ func _with_connection(on_ready: Callable, on_timeout: Callable = Callable()) -> 
 				on_timeout.call()
 		)
 
-func _show_reconnecting_screen() -> void:
+func _show_reconnecting_screen(on_success: Callable, allow_back: bool = true) -> void:
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_canvas.add_child(center)
@@ -140,27 +315,29 @@ func _show_reconnecting_screen() -> void:
 	vbox.add_child(lbl)
 
 	_with_connection(func():
-		Auth.login_result.connect(_on_resume_session_result, CONNECT_ONE_SHOT)
+		Auth.login_result.connect(func(success: bool, message: String):
+			_on_resume_session_result(success, message, on_success, allow_back)
+		, CONNECT_ONE_SHOT)
 		Auth.try_resume_session()
 	, func():
 		lbl.text = "Couldn't reach the server. Check your connection and try again."
 		var retry_btn := _menu_btn("RETRY")
 		retry_btn.pressed.connect(func():
 			_clear_screen()
-			_show_reconnecting_screen()
+			_show_reconnecting_screen(on_success, allow_back)
 		)
 		vbox.add_child(retry_btn)
 	)
 
-func _on_resume_session_result(success: bool, _message: String) -> void:
+func _on_resume_session_result(success: bool, _message: String, on_success: Callable, allow_back: bool) -> void:
 	_clear_screen()
 	if success:
 		_mp_name = Auth.username
-		_show_lobby_browser()
+		on_success.call()
 	else:
-		_show_auth_screen(false)
+		_show_auth_screen(false, on_success, allow_back)
 
-func _show_auth_screen(is_register: bool) -> void:
+func _show_auth_screen(is_register: bool, on_success: Callable, allow_back: bool = true) -> void:
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_canvas.add_child(center)
@@ -205,21 +382,21 @@ func _show_auth_screen(is_register: bool) -> void:
 	toggle_btn.add_theme_font_size_override("font_size", 14)
 	vbox.add_child(toggle_btn)
 
-	var back_btn := Button.new()
-	back_btn.text = "Back"
-	back_btn.custom_minimum_size = Vector2(300, 48)
-	back_btn.add_theme_font_size_override("font_size", 18)
-	vbox.add_child(back_btn)
-
-	back_btn.pressed.connect(func():
-		_clear_screen()
-		_show_main_menu()
-	)
+	if allow_back:
+		var back_btn := Button.new()
+		back_btn.text = "Back"
+		back_btn.custom_minimum_size = Vector2(300, 48)
+		back_btn.add_theme_font_size_override("font_size", 18)
+		vbox.add_child(back_btn)
+		back_btn.pressed.connect(func():
+			_clear_screen()
+			_show_main_menu()
+		)
 
 	toggle_btn.pressed.connect(func():
 		_mp_name = username_edit.text
 		_clear_screen()
-		_show_auth_screen(not is_register)
+		_show_auth_screen(not is_register, on_success, allow_back)
 	)
 
 	submit_btn.pressed.connect(func():
@@ -236,7 +413,7 @@ func _show_auth_screen(is_register: bool) -> void:
 				if success:
 					_clear_screen()
 					_mp_name = Auth.username
-					_show_lobby_browser()
+					on_success.call()
 				else:
 					submit_btn.disabled = false
 					status_lbl.text = message
@@ -540,6 +717,261 @@ func _on_play_pressed() -> void:
 			_show_opponent_select()
 	)
 
+func _on_ranked_pressed() -> void:
+	_clear_screen()
+	_show_deck_select(
+		"Choose Your Deck",
+		DeckManager.get_all_decks(),
+		func(): _clear_screen(); _show_main_menu(),
+		func(deck: Dictionary):
+			_player_deck_ids.clear()
+			for id in deck["card_ids"]:
+				_player_deck_ids.append(str(id))
+			_clear_screen()
+			_show_ranked_start()
+	)
+
+func _show_ranked_start() -> void:
+	var root := VBoxContainer.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_theme_constant_override("separation", 0)
+	_canvas.add_child(root)
+
+	root.add_child(_make_header_bar("Ranked", func():
+		_clear_screen()
+		_on_ranked_pressed()
+	))
+
+	var center := CenterContainer.new()
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(center)
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 14)
+	center.add_child(vbox)
+
+	var level_lbl := Label.new()
+	level_lbl.text = RankedProgress.get_display_string(Auth.rank_bracket, Auth.rank_in_legend, Auth.rank_legend_rating)
+	level_lbl.add_theme_font_size_override("font_size", 32)
+	level_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(level_lbl)
+
+	var record_lbl := Label.new()
+	record_lbl.text = "%d W - %d L" % [Auth.ranked_wins, Auth.ranked_losses]
+	record_lbl.add_theme_font_size_override("font_size", 18)
+	record_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(record_lbl)
+
+	var floor_str := RankedProgress.get_floor_display_string(Auth.rank_floor)
+	if not floor_str.is_empty():
+		var floor_lbl := Label.new()
+		floor_lbl.text = "Floor: %s" % floor_str
+		floor_lbl.add_theme_font_size_override("font_size", 14)
+		floor_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		floor_lbl.modulate = Color(0.7, 0.7, 0.7)
+		vbox.add_child(floor_lbl)
+
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 20)
+	vbox.add_child(gap)
+
+	var start_btn := _menu_btn("START MATCH")
+	start_btn.pressed.connect(_begin_ranked_search)
+	vbox.add_child(start_btn)
+
+# ── Ranked matchmaking ──────────────────────────────────────────────────
+#
+# START MATCH queues for a same-skill human opponent for up to
+# RANKED_SEARCH_TIMEOUT_SEC; if nobody's found in time, falls back to the
+# existing AI match (with a fake bot name in the opponent nameplate) so
+# Ranked always produces a match. A found human match gets a brief
+# confirmation screen (opponent name + rating) before the game starts.
+# `_ranked_search_id` guards against the match-found signal and the timeout
+# racing each other, and against a stale timer/signal from an earlier
+# cancelled search firing into a later one — whichever resolution is current
+# wins, anything bound to an older id is a no-op.
+
+func _begin_ranked_search() -> void:
+	_ranked_search_id += 1
+	var search_id := _ranked_search_id
+	_clear_screen()
+	_show_ranked_searching()
+	Auth.queue_ranked()
+	_ranked_match_found_callable = _on_ranked_match_found.bind(search_id)
+	Net.ranked_match_found.connect(_ranked_match_found_callable, CONNECT_ONE_SHOT)
+	get_tree().create_timer(RANKED_SEARCH_TIMEOUT_SEC).timeout.connect(_on_ranked_search_timeout.bind(search_id))
+
+func _disconnect_ranked_match_found() -> void:
+	if _ranked_match_found_callable.is_valid() and Net.ranked_match_found.is_connected(_ranked_match_found_callable):
+		Net.ranked_match_found.disconnect(_ranked_match_found_callable)
+
+func _show_ranked_searching() -> void:
+	var root := VBoxContainer.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_theme_constant_override("separation", 0)
+	_canvas.add_child(root)
+
+	root.add_child(_make_header_bar("Ranked", _cancel_ranked_search))
+
+	var center := CenterContainer.new()
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(center)
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 18)
+	center.add_child(vbox)
+
+	var status_lbl := Label.new()
+	status_lbl.text = "Searching for opponent..."
+	status_lbl.add_theme_font_size_override("font_size", 24)
+	status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(status_lbl)
+
+	var cancel_btn := _menu_btn("CANCEL")
+	cancel_btn.pressed.connect(_cancel_ranked_search)
+	vbox.add_child(cancel_btn)
+
+func _cancel_ranked_search() -> void:
+	_ranked_search_id += 1
+	_disconnect_ranked_match_found()
+	Auth.cancel_ranked_queue()
+	_clear_screen()
+	_show_ranked_start()
+
+func _on_ranked_search_timeout(search_id: int) -> void:
+	if search_id != _ranked_search_id:
+		return
+	_ranked_search_id += 1
+	_disconnect_ranked_match_found()
+	Auth.cancel_ranked_queue()
+	var ai_level := RankedProgress.get_ai_level(Auth.rank_bracket, Auth.rank_in_legend)
+	_clear_screen()
+	_start_game(_player_deck_ids, _random_ranked_opponent_ids(), ai_level, true, RankedProgress.random_bot_name())
+
+func _on_ranked_match_found(lobby_id: String, role: String, opponent_name: String, opponent_rating: int,
+							 search_id: int) -> void:
+	if search_id != _ranked_search_id:
+		return
+	_ranked_search_id += 1
+	_show_ranked_match_confirmation(role, opponent_name, opponent_rating)
+
+func _show_ranked_match_confirmation(role: String, opponent_name: String, opponent_rating: int) -> void:
+	_clear_screen()
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_canvas.add_child(center)
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 12)
+	center.add_child(vbox)
+
+	var found_lbl := Label.new()
+	found_lbl.text = "Match Found!"
+	found_lbl.add_theme_font_size_override("font_size", 36)
+	found_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(found_lbl)
+
+	var vs_lbl := Label.new()
+	vs_lbl.text = "vs %s (~%d)" % [opponent_name, opponent_rating]
+	vs_lbl.add_theme_font_size_override("font_size", 20)
+	vs_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(vs_lbl)
+
+	await get_tree().create_timer(RANKED_MATCH_CONFIRM_SEC).timeout
+	_start_ranked_pvp_match(role, opponent_name, opponent_rating)
+
+func _start_ranked_pvp_match(role: String, opponent_name: String, opponent_rating: int) -> void:
+	if role == "host":
+		_await_ranked_guest_deck_and_start(opponent_name, opponent_rating)
+	else:
+		Net.relay({"type": "deck_selected", "deck_ids": _player_deck_ids})
+		_canvas.queue_free()
+		var board := BoardScene.instantiate()
+		add_child(board)
+		_mp_manager = MpGameManager.new()
+		board.add_child(_mp_manager)
+		_mp_manager.start_as_guest(board, opponent_name, true, opponent_rating)
+
+func _await_ranked_guest_deck_and_start(opponent_name: String, opponent_rating: int) -> void:
+	var msg: Dictionary = await Net.await_relay_of_type("deck_selected")
+	var guest_deck_ids: Array[String] = []
+	for id in msg.get("deck_ids", []):
+		guest_deck_ids.append(str(id))
+	var pd := DeckManager.build_deck_from_ids(_player_deck_ids)
+	var od := DeckManager.build_deck_from_ids(guest_deck_ids)
+	_canvas.queue_free()
+	var board := BoardScene.instantiate()
+	add_child(board)
+	_mp_manager = MpGameManager.new()
+	board.add_child(_mp_manager)
+	_mp_manager.start_as_host(board, pd, od, opponent_name, true, opponent_rating)
+
+const RANKED_FACTIONS := [
+	CardData.CardColor.GREEN, CardData.CardColor.CRIMSON, CardData.CardColor.BLACK,
+	CardData.CardColor.ORANGE, CardData.CardColor.TEAL,
+]
+
+func _random_ranked_opponent_ids() -> Array[String]:
+	var faction_color: CardData.CardColor = RANKED_FACTIONS[randi() % RANKED_FACTIONS.size()]
+	var opp_deck := DeckManager.build_random_faction_deck(faction_color)
+	var opp_ids: Array[String] = []
+	for c in opp_deck:
+		opp_ids.append(c.id)
+	return opp_ids
+
+const AI_DIFFICULTIES := [
+	{"label": "EASY",   "level": 1,  "color": Color(0.30, 0.80, 0.30)},
+	{"label": "MEDIUM", "level": 5,  "color": Color(0.90, 0.70, 0.20)},
+	{"label": "HARD",   "level": 10, "color": Color(0.85, 0.25, 0.25)},
+]
+
+## Shared Easy/Medium/Hard (AI level 1/5/10) toggle row, used by both the VS
+## AI opponent-select screen and the Simulation screen. on_change(level) is
+## called immediately when a different option is picked.
+func _add_difficulty_row(vbox: Control, default_level: int, on_change: Callable) -> void:
+	var diff_label := Label.new()
+	diff_label.text = "Difficulty"
+	diff_label.add_theme_font_size_override("font_size", 16)
+	diff_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(diff_label)
+
+	var diff_row := HBoxContainer.new()
+	diff_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	diff_row.add_theme_constant_override("separation", 10)
+	vbox.add_child(diff_row)
+
+	var diff_group := ButtonGroup.new()
+	for entry in AI_DIFFICULTIES:
+		var level: int = entry["level"]
+		var swatch: Color = entry["color"]
+
+		var dbtn := Button.new()
+		dbtn.text = entry["label"]
+		dbtn.custom_minimum_size = Vector2(110, 48)
+		dbtn.add_theme_font_size_override("font_size", 16)
+		dbtn.toggle_mode = true
+		dbtn.button_group = diff_group
+		dbtn.button_pressed = (level == default_level)
+
+		var ns := StyleBoxFlat.new()
+		ns.bg_color = Color(0.14, 0.14, 0.17)
+		ns.set_corner_radius_all(6)
+		ns.border_width_left = 3
+		ns.border_color = swatch.darkened(0.3)
+		dbtn.add_theme_stylebox_override("normal", ns)
+		var pressed_s := StyleBoxFlat.new()
+		pressed_s.bg_color = swatch.darkened(0.55)
+		pressed_s.set_corner_radius_all(6)
+		pressed_s.border_width_left = 3
+		pressed_s.border_color = swatch
+		dbtn.add_theme_stylebox_override("pressed", pressed_s)
+
+		dbtn.pressed.connect(func(): on_change.call(level))
+		diff_row.add_child(dbtn)
+
 func _show_opponent_select() -> void:
 	var root := VBoxContainer.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -559,6 +991,13 @@ func _show_opponent_select() -> void:
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.add_theme_constant_override("separation", 14)
 	center.add_child(vbox)
+
+	var selected_ai_level := 5  # Medium by default
+	_add_difficulty_row(vbox, selected_ai_level, func(level: int): selected_ai_level = level)
+
+	var diff_gap := Control.new()
+	diff_gap.custom_minimum_size = Vector2(0, 10)
+	vbox.add_child(diff_gap)
 
 	var FACTIONS := [
 		{"label": "Random Sapiens",        "color": CardData.CardColor.GREEN,   "swatch": Color(0.20, 0.65, 0.20)},
@@ -600,7 +1039,7 @@ func _show_opponent_select() -> void:
 			var opp_ids: Array[String] = []
 			for c in opp_deck:
 				opp_ids.append(c.id)
-			_start_game(_player_deck_ids, opp_ids)
+			_start_game(_player_deck_ids, opp_ids, selected_ai_level)
 		)
 		vbox.add_child(btn)
 
@@ -728,21 +1167,44 @@ func _deck_card_btn(deck: Dictionary, on_select: Callable) -> Button:
 
 # ── Simulation ─────────────────────────────────────────────────────────
 
-func _process(delta: float) -> void:
-	if not _sim_running or _sim_runner == null:
+## Drives the simulation as an async loop instead of a _process() poll.
+## SimRunner now yields once per atomic AI decision (see
+## SimRunner._sim_play_turn), so `await run_batch(1)` here doesn't block
+## rendering/input for a whole game — the engine keeps pumping frames
+## between each MCTS decision, and STOP takes effect within about one
+## decision instead of within a whole game (previously) or a whole batch of
+## 20 games (before that, back when both were near-instant).
+## `runner`/`last_gps_ms` are captured locally, and the loop bails out the
+## moment `_sim_runner` no longer matches — either STOP was pressed, or the
+## deck-mode toggle rebuilt the screen with a brand new SimRunner instance.
+func _process(_delta: float) -> void:
+	if not is_instance_valid(_sim_status_lbl):
 		return
-	const BATCH := 20
-	var before := _sim_runner.total_games
-	_sim_runner.run_batch(BATCH)
-	var ran := _sim_runner.total_games - before
-	_sim_gps_count += ran
-	_sim_gps_timer += delta
-	if _sim_gps_timer >= 0.75:
-		_sim_gps_display = _sim_gps_count / _sim_gps_timer
-		_sim_gps_count = 0
-		_sim_gps_timer = 0.0
-		_rebuild_card_list()
-	_update_sim_labels()
+	if not _sim_running:
+		_sim_status_lbl.text = ""
+		return
+	var elapsed_s := (Time.get_ticks_msec() - _sim_game_start_ms) / 1000.0
+	_sim_status_lbl.text = "Simulating... %.0fs" % elapsed_s
+
+func _run_simulation_loop() -> void:
+	var runner := _sim_runner
+	var last_gps_ms := Time.get_ticks_msec()
+	while _sim_running and _sim_runner == runner:
+		var before := runner.total_games
+		_sim_game_start_ms = Time.get_ticks_msec()
+		await runner.run_batch(1)
+		if not _sim_running or _sim_runner != runner:
+			return
+		var ran := runner.total_games - before
+		_sim_gps_count += ran
+		var now_ms := Time.get_ticks_msec()
+		var elapsed_sec := (now_ms - last_gps_ms) / 1000.0
+		if elapsed_sec >= 0.75:
+			_sim_gps_display = (_sim_gps_count / elapsed_sec) if elapsed_sec > 0.0 else 0.0
+			_sim_gps_count = 0
+			last_gps_ms = now_ms
+			_rebuild_card_list()
+		_update_sim_labels()
 
 func _update_sim_labels() -> void:
 	for key in _sim_stat_labels:
@@ -765,10 +1227,9 @@ func _on_simulation_pressed() -> void:
 
 func _show_simulation_screen() -> void:
 	_sim_running = false
-	_sim_runner = SimRunner.new(_sim_deck_mode)
+	_sim_runner = SimRunner.new(_sim_deck_mode, _sim_ai_level)
 	_sim_stat_labels = {}
 	_sim_card_grid = null
-	_sim_gps_timer = 0.0
 	_sim_gps_count = 0
 	_sim_gps_display = 0.0
 
@@ -781,6 +1242,7 @@ func _show_simulation_screen() -> void:
 		_sim_running = false
 		_sim_stat_labels = {}
 		_sim_totals_lbl = null
+		_sim_status_lbl = null
 		_sim_card_grid = null
 		_clear_screen()
 		_show_main_menu()
@@ -827,6 +1289,20 @@ func _show_simulation_screen() -> void:
 	)
 	left_vbox.add_child(mode_btn)
 
+	## Higher = stronger/more realistic balance data but proportionally
+	## slower (level 10 on both sides can push a single game past a minute).
+	## Changing this rebuilds the screen with a fresh SimRunner, same as the
+	## deck-mode toggle, so accumulated stats never mix data from two levels.
+	_add_difficulty_row(left_vbox, _sim_ai_level, func(level: int):
+		_sim_ai_level = level
+		_clear_screen()
+		_show_simulation_screen()
+	)
+
+	var sim_diff_gap := Control.new()
+	sim_diff_gap.custom_minimum_size = Vector2(0, 4)
+	left_vbox.add_child(sim_diff_gap)
+
 	var table := GridContainer.new()
 	table.columns = 4
 	table.add_theme_constant_override("h_separation", 36)
@@ -841,7 +1317,7 @@ func _show_simulation_screen() -> void:
 		lbl.add_theme_color_override("font_color", Color(0.55, 0.55, 0.65))
 		if h != "Faction":
 			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		table.add_child(lbl)
+		table.add_child(_bg_cell(lbl))
 
 	const FACTIONS := [
 		["Sapiens",         "GREEN",   Color(0.20, 0.70, 0.20)],
@@ -860,28 +1336,28 @@ func _show_simulation_screen() -> void:
 		name_lbl.text = fname
 		name_lbl.add_theme_font_size_override("font_size", 19)
 		name_lbl.add_theme_color_override("font_color", clr)
-		table.add_child(name_lbl)
+		table.add_child(_bg_cell(name_lbl))
 
 		var wins_lbl := Label.new()
 		wins_lbl.text = "0"
 		wins_lbl.add_theme_font_size_override("font_size", 19)
 		wins_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		wins_lbl.add_theme_color_override("font_color", Color.WHITE)
-		table.add_child(wins_lbl)
+		table.add_child(_bg_cell(wins_lbl))
 
 		var losses_lbl := Label.new()
 		losses_lbl.text = "0"
 		losses_lbl.add_theme_font_size_override("font_size", 19)
 		losses_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		losses_lbl.add_theme_color_override("font_color", Color.WHITE)
-		table.add_child(losses_lbl)
+		table.add_child(_bg_cell(losses_lbl))
 
 		var pct_lbl := Label.new()
 		pct_lbl.text = "-"
 		pct_lbl.add_theme_font_size_override("font_size", 19)
 		pct_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		pct_lbl.add_theme_color_override("font_color", Color.WHITE)
-		table.add_child(pct_lbl)
+		table.add_child(_bg_cell(pct_lbl))
 
 		_sim_stat_labels[key] = {"wins": wins_lbl, "losses": losses_lbl, "pct": pct_lbl}
 
@@ -894,11 +1370,24 @@ func _show_simulation_screen() -> void:
 	_sim_totals_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	left_vbox.add_child(_sim_totals_lbl)
 
+	## Both sides now search at MCTS level 10, so a single game can take from
+	## several seconds to well over a minute — without this, the screen gives
+	## zero feedback between clicking START and the first game finishing,
+	## which reads as "nothing happened" even though it's working correctly.
+	_sim_status_lbl = Label.new()
+	_sim_status_lbl.text = ""
+	_sim_status_lbl.add_theme_font_size_override("font_size", 13)
+	_sim_status_lbl.add_theme_color_override("font_color", Color(0.9, 0.8, 0.3))
+	_sim_status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	left_vbox.add_child(_sim_status_lbl)
+
 	var start_btn := _menu_btn("START")
 	start_btn.custom_minimum_size = Vector2(240, 56)
 	start_btn.pressed.connect(func():
 		_sim_running = not _sim_running
 		start_btn.text = "STOP" if _sim_running else "START"
+		if _sim_running:
+			_run_simulation_loop()
 	)
 	left_vbox.add_child(start_btn)
 
@@ -960,9 +1449,13 @@ func _show_simulation_screen() -> void:
 		lbl.add_theme_color_override("font_color", Color(0.45, 0.45, 0.55))
 		if h == "Card":
 			lbl.custom_minimum_size = Vector2(220, 0)
+			_sim_card_grid.add_child(_bg_cell(lbl))
+		elif h == "Win%":
+			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			_sim_card_grid.add_child(_bg_cell(lbl))
 		else:
 			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		_sim_card_grid.add_child(lbl)
+			_sim_card_grid.add_child(lbl)
 
 func _rebuild_card_list() -> void:
 	if not is_instance_valid(_sim_card_grid) or _sim_runner == null:
@@ -974,7 +1467,7 @@ func _rebuild_card_list() -> void:
 		_sim_card_grid.remove_child(child)
 		child.free()
 
-	const MIN_GAMES := 30
+	const MIN_GAMES := 0
 	const FACTION_COLOR_MAP := {
 		CardData.CardColor.GREEN:   Color(0.20, 0.70, 0.20),
 		CardData.CardColor.CRIMSON: Color(0.90, 0.25, 0.25),
@@ -1023,7 +1516,7 @@ func _rebuild_card_list() -> void:
 		name_lbl.add_theme_font_size_override("font_size", 13)
 		name_lbl.add_theme_color_override("font_color", clr)
 		name_lbl.custom_minimum_size = Vector2(220, 0)
-		_sim_card_grid.add_child(name_lbl)
+		_sim_card_grid.add_child(_bg_cell(name_lbl))
 
 		var plays_i: int = row["plays"]
 		var plays_lbl := Label.new()
@@ -1050,7 +1543,7 @@ func _rebuild_card_list() -> void:
 			pct_lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
 		pct_lbl.add_theme_font_size_override("font_size", 13)
 		pct_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		_sim_card_grid.add_child(pct_lbl)
+		_sim_card_grid.add_child(_bg_cell(pct_lbl))
 
 		var kills_i: int = row["kills"]
 		var kills_lbl := Label.new()
@@ -1081,7 +1574,8 @@ func _on_deck_builder_pressed() -> void:
 
 # ── Game start ─────────────────────────────────────────────────────────
 
-func _start_game(player_ids: Array[String], opp_ids: Array[String]) -> void:
+func _start_game(player_ids: Array[String], opp_ids: Array[String], ai_level: int = 5, ranked: bool = false,
+				  opponent_name: String = "") -> void:
 	_player_deck_ids = player_ids.duplicate()
 	_opponent_deck_ids = opp_ids.duplicate()
 	var pd := DeckManager.build_deck_from_ids(player_ids)
@@ -1090,8 +1584,19 @@ func _start_game(player_ids: Array[String], opp_ids: Array[String]) -> void:
 		_canvas.queue_free()
 	var board := BoardScene.instantiate()
 	add_child(board)
+	if not opponent_name.is_empty():
+		board.set_opponent_name(opponent_name)
 	board.restart_requested.connect(func():
 		board.queue_free()
-		_start_game(_player_deck_ids, _opponent_deck_ids)
+		if ranked:
+			# Re-roll the opponent and re-fetch the current AI level rather than
+			# reusing what was captured at match start — a ranked win/loss just
+			# moved the ladder, and Play Again should reflect that, not replay
+			# the exact same matchup.
+			var next_ai_level := RankedProgress.get_ai_level(Auth.rank_bracket, Auth.rank_in_legend)
+			_start_game(_player_deck_ids, _random_ranked_opponent_ids(), next_ai_level, true,
+						RankedProgress.random_bot_name())
+		else:
+			_start_game(_player_deck_ids, _opponent_deck_ids, ai_level, ranked)
 	, CONNECT_ONE_SHOT)
-	GameManagerAutoload.start_local_game(board, pd, od)
+	GameManagerAutoload.start_local_game(board, pd, od, ai_level, ranked)

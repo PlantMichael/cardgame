@@ -15,6 +15,8 @@ extends Area2D
 const CARD_TEMPLATES = {
 	CardData.CardColor.GREEN: preload("res://assets/greencard.png"),
 	CardData.CardColor.BLACK: preload("res://assets/blackcard.png"),
+	CardData.CardColor.CRIMSON: preload("res://assets/crimsoncard.png"),
+	CardData.CardColor.TEAL: preload("res://assets/tealcard.png"),
 }
 
 const CARD_FONT := preload("res://assets/fonts/Orbitron.ttf")

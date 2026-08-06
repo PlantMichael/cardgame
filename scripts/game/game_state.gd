@@ -10,6 +10,7 @@ var active_player_id: String = ""
 var turn_number: int = 0
 var winner_id: String = ""
 var pending_drawn_cards: Array[CardData] = []
+var pending_fatigue_damage: Array[String] = []
 var pending_rummages: Array[Dictionary] = []
 var pending_tank_shots: Array[String] = []
 var pending_nulls: Array[Dictionary] = []
@@ -40,14 +41,19 @@ func start_game(first_player_id: String) -> void:
 func _begin_turn() -> void:
 	var active = _get_active_player()
 	active.gain_mana_crystal()
+	var was_deck_empty: bool = active.deck.is_empty()
 	var drawn := active.draw_card()
-	if _opening_hand_dealt and drawn != null and active.player_id == player.player_id:
+	if was_deck_empty:
+		pending_fatigue_damage.append(active.player_id)
+	elif _opening_hand_dealt and drawn != null and active.player_id == player.player_id:
 		pending_drawn_cards.append(drawn)
 	active.reset_for_new_turn()
+	_check_win_condition()
 
 func end_turn() -> void:
 	_expire_temp_shields_for(active_player_id)
 	_apply_rejuvenate(active_player_id)
+	_apply_feast_attendant(active_player_id)
 	if active_player_id == player.player_id:
 		active_player_id = opponent.player_id
 		current_phase = Phase.OPPONENT_TURN
@@ -194,6 +200,7 @@ func apply_challenge(challenger: Minion, target: Minion) -> void:
 				challenger.current_health += 1
 				challenger.max_health += 1
 				_try_apothecary_bonus(owner_id, challenger)
+				_try_health_transform(challenger)
 				break
 
 	if was_yeti:
@@ -227,11 +234,12 @@ func apply_swap_friendly_health(minion_a: Minion, minion_b: Minion) -> void:
 	_remove_dead_minions()
 
 func apply_devour_friendly(devourer: Minion, target: Minion, owner: PlayerState) -> void:
-	var gain := ceili(target.current_health / 2.0)
+	var gain := target.current_health * 2
 	owner.remove_minion(target)
 	owner.graveyard.append(target.data)
 	devourer.max_health += gain
 	devourer.current_health += gain
+	_try_health_transform(devourer)
 
 func apply_on_play_damage(target: Minion, damage: int, source_player_id: String = "") -> void:
 	var amp := _get_enemy_damage_amp(source_player_id) if source_player_id != "" else 0
@@ -434,6 +442,45 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 				target_minion.take_damage(card.effect_value)
 				_remove_dead_minions()
 				_check_win_condition()
+		"exsanguinate":
+			if target_minion:
+				target_minion.take_damage(target_minion.current_health * card.effect_value)
+				_remove_dead_minions()
+				_check_win_condition()
+		"blood_boil":
+			if target_minion:
+				var gain := target_minion.current_health * card.effect_value
+				target_minion.current_health += gain
+				target_minion.max_health += gain
+				_try_apothecary_bonus(target_minion.owner_id, target_minion)
+				_try_health_transform(target_minion)
+		"tainted_blood":
+			if target_minion:
+				var acting := _get_player_by_id(acting_player_id)
+				var enemy := opponent if acting == player else player
+				enemy.hero_health -= target_minion.current_health * card.effect_value
+				acting.remove_minion(target_minion)
+				acting.graveyard.append(target_minion.data)
+				_check_win_condition()
+		"bloodlet":
+			if target_minion:
+				if target_minion.owner_id == acting_player_id:
+					var pre := target_minion.current_health
+					target_minion.current_health = mini(target_minion.current_health + card.effect_value, target_minion.max_health)
+					_try_heal_to_draw(target_minion, target_minion.current_health - pre)
+					_try_apothecary_bonus(target_minion.owner_id, target_minion)
+				else:
+					var amp := _get_enemy_damage_amp(acting_player_id) if acting_player_id != "" else 0
+					target_minion.take_damage(card.effect_value + amp)
+					_remove_dead_minions()
+					_check_win_condition()
+			elif target_player_id != "":
+				var target_p := _get_player_by_id(target_player_id)
+				if target_player_id == acting_player_id:
+					target_p.hero_health += card.effect_value
+				else:
+					target_p.hero_health -= card.effect_value
+				_check_win_condition()
 		"heal":
 			if target_minion:
 				var pre := target_minion.current_health
@@ -442,6 +489,7 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 					target_minion.current_health += 1
 					_try_heal_to_draw(target_minion, 1)
 					_try_apothecary_bonus(target_minion.owner_id, target_minion)
+					_try_health_transform(target_minion)
 				else:
 					target_minion.current_health = min(target_minion.current_health + card.effect_value, target_minion.max_health)
 					_try_heal_to_draw(target_minion, target_minion.current_health - pre)
@@ -548,6 +596,31 @@ func complete_rummage(player_id: String, card: CardData, play_it: bool = false, 
 func is_local_player_turn() -> bool:
 	return active_player_id == player.player_id
 
+## Deep copy for AI search simulation (distinct from to_net_dict/from_net_dict,
+## which serve wire serialization). Safe for a search rollout to mutate freely
+## without affecting the real match.
+func duplicate_for_sim() -> GameState:
+	var gs := GameState.new(player.player_id, opponent.player_id, [], [])
+	gs.player = player.duplicate_for_sim()
+	gs.opponent = opponent.duplicate_for_sim()
+	gs.current_phase = current_phase
+	gs.active_player_id = active_player_id
+	gs.turn_number = turn_number
+	gs.winner_id = winner_id
+	gs.pending_drawn_cards = pending_drawn_cards.duplicate()
+	gs.pending_fatigue_damage = pending_fatigue_damage.duplicate()
+	gs.pending_rummages = pending_rummages.duplicate(true)
+	gs.pending_tank_shots = pending_tank_shots.duplicate()
+	gs.pending_nulls = pending_nulls.duplicate(true)
+	gs.pending_overwatch_challenges = pending_overwatch_challenges.duplicate()
+	gs.pending_buff_friendly_health = pending_buff_friendly_health.duplicate()
+	gs.pending_tank_specialist_buffs = pending_tank_specialist_buffs.duplicate()
+	gs.pending_on_reinforce_damages = pending_on_reinforce_damages.duplicate(true)
+	gs.temp_shielded = temp_shielded.duplicate(true)
+	gs.growvin_granted = growvin_granted.duplicate(true)
+	gs._opening_hand_dealt = _opening_hand_dealt
+	return gs
+
 func to_net_dict() -> Dictionary:
 	return {
 		"phase": current_phase,
@@ -564,6 +637,7 @@ func to_net_dict() -> Dictionary:
 		"pending_on_reinforce_damages": pending_on_reinforce_damages.duplicate(true),
 		"pending_overwatch_challenges": pending_overwatch_challenges.duplicate(),
 		"pending_drawn_cards": pending_drawn_cards.map(func(c): return c.id),
+		"pending_fatigue_damage": pending_fatigue_damage.duplicate(),
 	}
 
 static func from_net_dict(d: Dictionary, my_id: String) -> GameState:
@@ -601,6 +675,9 @@ static func from_net_dict(d: Dictionary, my_id: String) -> GameState:
 		var card = CardDatabase.get_card(str(cid))
 		if card != null:
 			gs.pending_drawn_cards.append(card)
+	gs.pending_fatigue_damage.clear()
+	for pid in d.get("pending_fatigue_damage", []):
+		gs.pending_fatigue_damage.append(str(pid))
 	gs._opening_hand_dealt = true
 	return gs
 
@@ -655,6 +732,7 @@ func _try_mirror_transform(new_data: CardData, transforming: Minion, owner: Play
 				m.current_health += 1
 				m.max_health += 1
 				_try_apothecary_bonus(owner.player_id, m)
+				_try_health_transform(m)
 
 func _apply_rejuvenate(player_id: String) -> void:
 	var owner := _get_player_by_id(player_id)
@@ -674,6 +752,20 @@ func _apply_rejuvenate(player_id: String) -> void:
 			if gained > 0:
 				_try_heal_to_draw(m, gained)
 				_try_apothecary_bonus(player_id, m)
+
+func _apply_feast_attendant(player_id: String) -> void:
+	var owner := _get_player_by_id(player_id)
+	for i in range(owner.board.size()):
+		if not owner.board[i].has_ability(Abilities.FEAST_ATTENDANT):
+			continue
+		for j in [i - 1, i + 1]:
+			if j < 0 or j >= owner.board.size():
+				continue
+			var neighbor: Minion = owner.board[j]
+			neighbor.current_health += 1
+			neighbor.max_health += 1
+			_try_apothecary_bonus(player_id, neighbor)
+			_try_health_transform(neighbor)
 
 func _expire_temp_shields_for(ending_player_id: String) -> void:
 	var keep: Array[Dictionary] = []

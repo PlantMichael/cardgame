@@ -26,7 +26,7 @@ Abilities are plain strings stored on `CardData.abilities` and copied to `Minion
 | `CLOAKED` | `"cloaked"` | Cannot be targeted by enemy stratagems or attacks until it attacks; friendly stratagems can still target cloaked creatures |
 | `TACTICAL_OFFICER` | `"tactical_officer"` | Passive: whenever a friendly creature reinforces, give the reinforce copy +1 attack |
 | `TRANSFORM` | `"transform_N"` (e.g. `"transform_3"`) | After attacking N times, transforms into the card specified by `CardData.transform_into`; retains damage taken |
-| `TRANSFORM_AT_MAX_HEALTH` | `"transform_at_max_health_N"` (e.g. `"transform_at_max_health_5"`) | Transforms when `max_health` reaches N (triggered by buff stratagems or Pilot); uses `CardData.transform_into`; retains damage taken |
+| `TRANSFORM_AT_MAX_HEALTH` | `"transform_at_max_health_N"` (e.g. `"transform_at_max_health_5"`) | Transforms when `max_health` reaches N *or more* (checked via `GameState._try_health_transform`, called from every effect that raises max_health — buff stratagems, Pilot, Devour, Yeti challenge-win buff, healing a topped-out minion, Metamorphosis); uses `CardData.transform_into`; retains damage taken |
 | `DEATHRATTLE_RETURN_STRATAGEM` | `"deathrattle_return_stratagem"` | On death: return a stratagem from your graveyard to your hand |
 | `DEATHRATTLE_DRAW_CARD` | `"deathrattle_draw_card"` | On death: draw a card from your deck |
 | `RUMMAGE_BUFF` | `"rummage_buff"` | Passive: whenever the owner completes a rummage, this minion gains +0/+1 health |
@@ -69,9 +69,13 @@ Abilities are plain strings stored on `CardData.abilities` and copied to `Minion
 | `AMBUSH` | `"ambush"` | Cannot be targeted by enemy stratagems or attacks until it attacks first; stripped on first attack |
 | `ENEMY_DAMAGE_AMP` | `"enemy_damage_amp_N"` (e.g. `"enemy_damage_amp_1"`) | Passive aura: all damage dealt by the owner to enemy creatures (attacks, challenges, on-play damage, stratagem AOE) is increased by N; stacks across all friendly minions with this ability |
 | `ON_PLAY_SWAP_FRIENDLY_HEALTH` | `"on_play_swap_friendly_health"` | On play: swap the current health values of two chosen friendly minions (each capped at the other's max_health) |
-| `ON_PLAY_DEVOUR_FRIENDLY` | `"on_play_devour_friendly"` | On play: destroy a chosen friendly minion and gain `ceil(target.current_health / 2)` max and current health |
+| `ON_PLAY_DEVOUR_FRIENDLY` | `"on_play_devour_friendly"` | On play: destroy a chosen friendly minion and gain `target.current_health * 2` max and current health |
 | `DEATHRATTLE_RUMMAGE_CREATURE` | `"deathrattle_rummage_creature"` | On death: rummage a non-legendary creature from your graveyard (any cost; no discount) |
 | `RUMMAGE_EQUAL_COST` | `"rummage_equal_cost"` | Passive: while this minion is on the board, rummages may also retrieve cards of equal cost (normally only strictly cheaper cards qualify) |
+| `ON_PLAY_BUFF_ALL_FRIENDLY_HEALTH` | `"on_play_buff_all_friendly_health"` | On play: give all friendly minions (including itself) +0/+1 |
+| `ON_PLAY_VOIDTOUCH_IF_RUMMAGED` | `"on_play_voidtouch_if_rummaged"` | On play: if this card's `rummage_count` is > 0 (i.e. it was retrieved by a rummage before being played), permanently gain Voidtouch |
+| `FEAST_ATTENDANT` | `"feast_attendant"` | At the end of the owner's turn: give board-adjacent friendly creatures (index ±1) +0/+1 max and current health (displayed as "Feast") |
+| `ON_PLAY_DEVOUR_ALL` | `"on_play_devour_all"` | On play: destroy every other creature on both boards (fires death triggers), then gain the sum of their attack and health |
 | `REJUVENATE` | `"rejuvenate_N"` (e.g. `"rejuvenate_1"`) | At end of owner's turn, this minion heals N health (up to max_health); parsed via `is_rejuvenate` / `get_rejuvenate_value` |
 | `MONSTROSITY` | `"monstrosity"` | Tribe tag; targeted by `BROODTENDER_AURA` |
 | `BROODTENDER_AURA` | `"broodtender_aura"` | Aura: while on board, all friendly monstrosities have Rejuvenate 2 |
@@ -98,4 +102,4 @@ To add a new tribe: add its constant to `TRIBES` in `abilities.gd`.
 
 1. Add a constant and entry in `DEFINITIONS` in `abilities.gd`
 2. Handle it in `trigger_death()` if it has a death effect
-3. Handle it in `ai_controller.gd` if the AI needs to factor it into decisions
+3. If the AI needs to factor it into decisions, add scoring/target-pick logic to `AIHeuristics` and/or on-play/pending-resolution handling to `HeadlessTurn` (see `.docs/ai.md`) — not directly in `ai_controller.gd`, so both the greedy policy and the MCTS search see it consistently

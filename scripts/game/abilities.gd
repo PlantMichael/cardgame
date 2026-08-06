@@ -113,6 +113,8 @@ const DEFINITIONS: Dictionary = {
 	RUMMAGE_EQUAL_COST:              { "display": "Equal Rummage",   "color": Color(0.30, 0.15, 0.45) },
 	ON_PLAY_BUFF_ALL_FRIENDLY_HEALTH: { "display": "On Play:",       "color": Color(0.70, 0.25, 0.45) },
 	ON_PLAY_VOIDTOUCH_IF_RUMMAGED:    { "display": "On Play:",       "color": Color(0.45, 0.10, 0.65) },
+	FEAST_ATTENDANT:                  { "display": "Feast",          "color": Color(0.70, 0.25, 0.45) },
+	ON_PLAY_DEVOUR_ALL:               { "display": "On Play:",       "color": Color(0.55, 0.10, 0.20) },
 }
 
 const ON_PLAY_DAMAGE             = "on_play_damage"
@@ -147,6 +149,8 @@ const DEATHRATTLE_RUMMAGE_CREATURE   = "deathrattle_rummage_creature"
 const RUMMAGE_EQUAL_COST             = "rummage_equal_cost"
 const ON_PLAY_BUFF_ALL_FRIENDLY_HEALTH  = "on_play_buff_all_friendly_health"
 const ON_PLAY_VOIDTOUCH_IF_RUMMAGED     = "on_play_voidtouch_if_rummaged"
+const FEAST_ATTENDANT                   = "feast_attendant"
+const ON_PLAY_DEVOUR_ALL                = "on_play_devour_all"
 
 const TRIBES: Array = [YETI, MECH, TANK, SPRITE, MONSTROSITY]
 
@@ -157,7 +161,7 @@ const KEYWORD_TOOLTIPS: Array[String] = [
 	TACTICAL_OFFICER, ON_YETI_CHALLENGE_BUFF, ON_YETI_DEATH_CHALLENGE,
 	ON_FRIENDLY_YETI_DEATH_BUFF, ON_FRIENDLY_MECH_DEATH_BUFF,
 	STINKPILE_PASSIVE, HEAL_TO_DRAW,
-	DUAL_STRIKE, VOIDTOUCH, AMBUSH, REJUVENATE,
+	DUAL_STRIKE, VOIDTOUCH, AMBUSH, REJUVENATE, FEAST_ATTENDANT,
 	YETI, MECH, TANK, SPRITE,
 ]
 
@@ -384,6 +388,23 @@ func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 			ON_PLAY_VOIDTOUCH_IF_RUMMAGED:
 				if minion.data.rummage_count > 0 and not minion.has_ability(VOIDTOUCH):
 					minion.abilities.append(VOIDTOUCH)
+			ON_PLAY_DEVOUR_ALL:
+				var total_atk := 0
+				var total_hp := 0
+				for p in [gs.player, gs.opponent]:
+					for m in p.board.duplicate():
+						if m == minion:
+							continue
+						total_atk += m.current_attack
+						total_hp += m.current_health
+						m.current_health = 0
+				gs._remove_dead_minions()
+				if minion in owner.board:
+					minion.current_attack += total_atk
+					minion.current_health += total_hp
+					minion.max_health += total_hp
+					gs._try_apothecary_bonus(owner.player_id, minion)
+				gs._check_win_condition()
 	for ability in minion.abilities:
 		if is_on_play_aoe_enemy(ability):
 			var damage = get_on_play_aoe_enemy_value(ability)

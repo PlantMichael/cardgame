@@ -18,6 +18,8 @@ signal error_received(message: String)
 signal register_result(success: bool, message: String, profile: Dictionary)
 signal login_result(success: bool, message: String, profile: Dictionary)
 signal logged_out
+signal ranked_result_received(success: bool, profile: Dictionary)
+signal ranked_match_found(lobby_id: String, role: String, opponent_name: String, opponent_rating: int)
 signal _queue_updated
 
 func connect_to_relay() -> void:
@@ -66,6 +68,16 @@ func _handle_incoming(msg: Dictionary) -> void:
 			login_result.emit(success, str(msg.get("message", "")), _profile_from(msg) if success else {})
 		"logged_out":
 			logged_out.emit()
+		"ranked_result_ack":
+			var success := bool(msg.get("success", false))
+			ranked_result_received.emit(success, _rank_fields_from(msg) if success else {})
+		"ranked_match_found":
+			ranked_match_found.emit(
+				str(msg.get("lobby_id", "")),
+				str(msg.get("role", "")),
+				str(msg.get("opponent_name", "")),
+				int(msg.get("opponent_rating", 1000))
+			)
 		"relay":
 			var payload = msg.get("payload", {})
 			var from_role = str(msg.get("from_role", ""))
@@ -101,13 +113,38 @@ func resume_session(token: String) -> void:
 func logout(token: String) -> void:
 	send({"type": "logout", "token": token})
 
+func report_ranked_result(token: String, won: bool, opponent_rating: int = -1) -> void:
+	var msg := {"type": "report_ranked_result", "token": token, "won": won}
+	if opponent_rating >= 0:
+		msg["opponent_rating"] = opponent_rating
+	send(msg)
+
+func queue_ranked(token: String) -> void:
+	send({"type": "queue_ranked", "token": token})
+
+func cancel_ranked_queue(token: String) -> void:
+	send({"type": "cancel_ranked_queue", "token": token})
+
 func _profile_from(msg: Dictionary) -> Dictionary:
-	return {
+	var d := {
 		"token": str(msg.get("token", "")),
 		"username": str(msg.get("username", "")),
 		"wins": int(msg.get("wins", 0)),
 		"losses": int(msg.get("losses", 0)),
 		"rating": int(msg.get("rating", 0)),
+	}
+	d.merge(_rank_fields_from(msg))
+	return d
+
+func _rank_fields_from(msg: Dictionary) -> Dictionary:
+	return {
+		"rating": int(msg.get("rating", 1000)),
+		"rank_bracket": int(msg.get("rank_bracket", 0)),
+		"rank_in_legend": bool(msg.get("rank_in_legend", false)),
+		"rank_legend_rating": int(msg.get("rank_legend_rating", 0)),
+		"rank_floor": int(msg.get("rank_floor", 0)),
+		"ranked_wins": int(msg.get("ranked_wins", 0)),
+		"ranked_losses": int(msg.get("ranked_losses", 0)),
 	}
 
 # Pops first message of a given type from the queue, or null if not found.

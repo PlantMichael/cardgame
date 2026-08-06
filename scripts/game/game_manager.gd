@@ -3,6 +3,7 @@ extends Node
 var game_state: GameState
 var board: Board
 var ai_controller: AIController
+var is_ranked: bool = false
 
 const LOCAL_PLAYER_ID = "player_1"
 const OPPONENT_PLAYER_ID = "player_2"
@@ -11,9 +12,12 @@ func _ready() -> void:
 	ai_controller = AIController.new()
 	add_child(ai_controller)
 
-func start_local_game(board_node: Board, player_deck: Array[CardData], opponent_deck: Array[CardData]) -> void:
+func start_local_game(board_node: Board, player_deck: Array[CardData], opponent_deck: Array[CardData],
+					   ai_level: int = 5, ranked: bool = false) -> void:
 	board = board_node
 	board.is_online = false
+	ai_controller.ai_level = ai_level
+	is_ranked = ranked
 	game_state = GameState.new(LOCAL_PLAYER_ID, OPPONENT_PLAYER_ID, player_deck, opponent_deck)
 	board.action_play_card.connect(_on_play_card)
 	board.action_play_stratagem.connect(_on_play_stratagem)
@@ -50,6 +54,9 @@ func start_local_game(board_node: Board, player_deck: Array[CardData], opponent_
 		await _process_pending_tank_specialist_buffs()
 		await _process_pending_on_reinforce_damages()
 		await _process_pending_overwatch_challenges()
+		if game_state.current_phase == GameState.Phase.GAME_OVER:
+			_handle_game_over()
+			return
 		board.log_action("--- Your Turn %d ---" % game_state.turn_number)
 
 func _on_play_card(card_data: CardData) -> void:
@@ -231,7 +238,7 @@ func _run_player_on_play(minion: Minion) -> void:
 			if target != null:
 				board.log_action("Your %s devoured %s and gained +%d health" % [
 					minion.data.card_name, target.data.card_name,
-					ceili(target.current_health / 2.0)])
+					target.current_health * 2])
 				game_state.apply_devour_friendly(minion, target, game_state.player)
 				board.refresh()
 
@@ -492,13 +499,25 @@ func _process_pending_rummages() -> void:
 				else:
 					await ai_controller._handle_on_play_effects(placed, game_state, board)
 
+## Also announces fatigue damage (from GameState._begin_turn()'s draw step
+## finding an empty deck) so every existing call site gets it for free.
 func _announce_pending_draws() -> void:
-	if game_state.pending_drawn_cards.is_empty():
-		return
 	for card_data in game_state.pending_drawn_cards:
 		board.log_action("Drew %s" % card_data.card_name)
 		await board.animate_draw()
 	game_state.pending_drawn_cards.clear()
+	for player_id in game_state.pending_fatigue_damage:
+		var p := game_state._get_player_by_id(player_id)
+		var whose := "You" if player_id == LOCAL_PLAYER_ID else "Opponent"
+		board.log_action("%s took %d fatigue damage!" % [whose, p.fatigue_damage])
+		board.refresh()
+	game_state.pending_fatigue_damage.clear()
+	# Deliberately not calling _handle_game_over() here even if fatigue just
+	# ended the game (GameState._begin_turn() -> _check_win_condition()
+	# already flips current_phase to GAME_OVER) — every call site of this
+	# function already does its own "if GAME_OVER: _handle_game_over()"
+	# check afterward, and calling it here too would fire it twice (e.g.
+	# double-reporting a ranked result).
 
 func _on_pilot(pilot_instance_id: String, target_instance_id: String) -> void:
 	var pilot = _find_minion(LOCAL_PLAYER_ID, pilot_instance_id)
@@ -640,6 +659,9 @@ func _on_end_turn() -> void:
 		await _process_pending_tank_specialist_buffs()
 		await _process_pending_on_reinforce_damages()
 		await _process_pending_overwatch_challenges()
+		if game_state.current_phase == GameState.Phase.GAME_OVER:
+			_handle_game_over()
+			return
 		board.log_action("--- Your Turn %d ---" % game_state.turn_number)
 
 func _find_minion(player_id: String, instance_id: String) -> Minion:
@@ -650,4 +672,12 @@ func _find_minion(player_id: String, instance_id: String) -> Minion:
 	return null
 
 func _handle_game_over() -> void:
-	board.show_game_over(game_state.winner_id == LOCAL_PLAYER_ID)
+	var won := game_state.winner_id == LOCAL_PLAYER_ID
+	if is_ranked:
+		var old_bracket := Auth.rank_bracket
+		var old_in_legend := Auth.rank_in_legend
+		var old_legend_rating := Auth.rank_legend_rating
+		Auth.report_ranked_result(won)
+		board.show_game_over(won, true, old_bracket, old_in_legend, old_legend_rating)
+	else:
+		board.show_game_over(won)

@@ -1,28 +1,47 @@
-# AI Controller
+# AI
 
-`AIController` (`scripts/game/ai_controller.gd`) runs after the player ends their turn.
+The opponent AI is a heuristic-guided Monte Carlo Tree Search (MCTS), not a hand-coded priority list. `AIController` (`scripts/game/ai_controller.gd`) still owns turn pacing and Board/animation glue, but its decisions come from `MCTSEngine` (`scripts/game/mcts_ai.gd`), which searches over `HeadlessTurn` (`scripts/game/headless_turn.gd`) — a UI-free, cloneable turn executor built on the same `GameState` used by the real game.
 
-## Decision Priority
+## Why not classic random-rollout MCTS
 
-1. **Lethal check** — if the player hero can be killed this turn, do it
-2. **Trades** — attack opponent minions to remove threats
-3. **Go face** — attack the opponent hero directly
+Random playouts to a finished game are slow and play badly in this game (long matches, hidden opponent hand). Instead, MCTS searches the real combinatorial space that matters in a turn-based game — the sequence of atomic actions (which cards to play, in what order, which attacks to make) within the *current* turn — and scores leaves with a heuristic evaluator instead of simulating to game-over. The opponent's predicted response (and any further look-ahead turns) is filled in with a fast greedy policy rather than also being tree-searched.
 
-## Behavior Details
+## Architecture
 
-- Uses `THINK_DELAY = 0.6s` pauses between actions to feel natural
-- Calls `board.log_action()` to report each play to the combat log
-- Handles the `RUSH` ability when deciding which minions can attack immediately
-- Handles the `CHALLENGE` ability: after playing a creature with Challenge, picks the best trade target on the player's board and calls `game_state.apply_challenge()`
-- Handles the `ON_PLAY_YETI_CHALLENGE` ability: directs a friendly Yeti to challenge after a trigger card is played
-- Handles the `PILOT` ability: after playing a Pilot, buffs the strongest eligible Mech
-- Handles on-play damage: targets the highest-attack enemy minion it can kill; otherwise targets the biggest threat
-- Filters Cloaked and Ambush minions from all stratagem target picks
-- Filters Ambush minions from attack candidates and CHALLENGE_ALL loops
-- Handles `ON_PLAY_DEVOUR_FRIENDLY`: sacrifices the lowest-value (attack+health) friendly minion
-- Handles `ON_PLAY_SWAP_FRIENDLY_HEALTH`: gives health to highest-attack minion, takes from lowest-value minion
-- Plays `buff_all_friendly_attack` stratagems (e.g. Commanding Shout) when it has creatures on board
+- **`AIHeuristics`** (`scripts/game/ai_heuristics.gd`) — shared, stateless scoring/target-selection functions (`score_trade`, `face_pressure_score`, `pick_best_removal_target`, `pick_challenge_target`, `pick_health_buff_target`, `pick_best_pilot_target`) used by `AIController`, `SimRunner`, and the search engine, plus `evaluate_state(gs, ai_player_id)` — the board-state leaf evaluator (hero health, weighted more heavily near lethal; board attack/health totals; hand-size card advantage; unspent-mana tempo penalty; ±100000 for a decided game).
+- **`HeadlessTurn`** (`scripts/game/headless_turn.gd`) — pure `GameState` turn executor with zero `Board`/UI coupling:
+  - `list_legal_actions(gs, acting_id)` / `apply_action(gs, action)`: one atomic decision at a time (play one creature, play one ready stratagem with its target pre-resolved via `AIHeuristics`, one attacker/target attack pairing, or `end_turn`) — this is what the search branches over.
+  - `greedy_pick_action(gs, acting_id)` / `play_full_turn_greedy(gs, acting_id)`: the old one-ply "always take the best-looking single action" policy, used to finish a rollout past the searched node and to simulate the opponent's (or a further future) turn without spending search budget on it.
+  - Also owns on-play effect resolution and `pending_*` queue resolution for simulated turns (ported from `SimRunner`).
+- **`MCTSEngine`** (`scripts/game/mcts_ai.gd`) — per real decision, clones the live `GameState` (`GameState.duplicate_for_sim()`, which also deep-copies `PlayerState`/`Minion`/`CardData` so a rollout can never corrupt the real match) and runs UCT selection/expansion/backpropagation over `HeadlessTurn` actions for `AI_LEVEL_CONFIG[level].iterations` iterations. Each expanded node is scored by finishing forward `depth_plies` full turns via `play_full_turn_greedy` and calling `AIHeuristics.evaluate_state`. Returns the root child with the most visits as the chosen action (with a chance to substitute a random legal action instead — see below). `choose_action()` is `await`-based: it yields to the engine (`await Engine.get_main_loop().process_frame`) every `ITERATIONS_PER_YIELD` iterations, so a single call never blocks rendering/input for its whole ~1-1.5s (level 10) in one stretch — every caller must `await` it.
+- **`AIController`** (`scripts/game/ai_controller.gd`) — `take_turn()` loops: ask `MCTSEngine.choose_action(game_state)` for one action, apply it to the *real* `game_state`/`board` with `THINK_DELAY` pacing, logging, and animations (same glue as before — only the decision-making changed), repeat until the engine recommends `end_turn`. Also still resolves on-play sub-effects (Challenge, Pilot, Devour, transform choices, etc.) via `_handle_on_play_effects`, called both from here and directly by `game_manager.gd` for reactive opponent decisions outside the AI's own turn (pending rummages, tank shots, overwatch).
 
-## Extending AI
+## Difficulty levels (1-10)
 
-When adding new abilities that affect combat decisions (e.g., a minion that gains bonuses for attacking), add handling in `ai_controller.gd` so the AI can factor those into its priority calculations.
+`AIController.ai_level` (default 5) selects a row of `MCTSEngine.AI_LEVEL_CONFIG`: `iterations` (search budget), `depth_plies` (how many additional full turns get simulated forward before scoring a leaf), and `mistake_rate` (chance to discard the search's pick for a uniformly random *legal* action instead). Level 10 = full budget, zero mistakes. One engine, no forked "easy mode" logic — difficulty is purely these three knobs.
+
+## Ranked mode
+
+Main menu → RANKED → deck select → `_show_ranked_start()` (`scripts/game/main.gd`) starts a match against a random-faction AI opponent at the player's current ladder position. The whole app now requires login at startup (`_require_login_then()` in `main.gd`; skipped only when `OS.has_feature("editor")`, i.e. playtesting from the Godot editor), and ranked progress is tied to the account and authoritative on the server, not local:
+
+- **`Auth`** (autoload, `scripts/game/auth.gd`) holds `rank_bracket`/`rank_in_legend`/`rank_legend_rating`/`ranked_wins`/`ranked_losses`, fetched on login/register/resume and updated via `Auth.report_ranked_result(won)` → a `report_ranked_result` relay message → `server/relay.js`'s `nextRankState()` (the authoritative progression math) → the `players` table.
+- **`RankedProgress`** (`scripts/game/ranked_progress.gd`) is a stateless static-math utility, not an autoload — it holds no state of its own, only the display/derivation math over whatever `Auth` currently reports:
+  - **Bracketed tiers** — `TIER_NAMES` (Orbital, Lunar, Planetary, Solar, Nebular, Galactic, Cosmic) × `SUB_RANKS` (III lowest → I highest) = 21 discrete brackets (`bracket_index` 0-20). A win advances one bracket, a loss drops one.
+  - **Legend-style tiers** — once Cosmic I is beaten, `in_legend` becomes permanent (a loss never demotes back into the bracketed ladder, matching Hearthstone Legend never dropping back to ranked). Progress becomes a single continuous `legend_rating`; `LEGEND_TIER_NAMES` (Superluminal, Celestial, Universal) are just readable bands over that rating via `LEGEND_TIER_SPAN`, with Universal (highest) uncapped.
+  - **AI difficulty** is derived, not stored directly: `get_ai_level(bracket_index, in_legend)` scales linearly across `MCTSEngine`'s 1-10 range (Orbital III → level 1, Cosmic I → level 10), then pins level 10 for all three legend tiers.
+
+`main.gd` re-reads `Auth.rank_*` (and rolls a fresh random opponent) on every new ranked match — including "Play Again" — so a ladder move immediately affects the next match's difficulty instead of replaying the same matchup. This is independent of the multiplayer path (`mp_game_manager.gd`/`server/relay.js`'s lobby code), which has no AI involvement — same relay, separate message types.
+
+**VS AI** (non-ranked) has its own manual difficulty picker on the opponent-select screen: Easy/Medium/Hard buttons map directly to `ai_level` 1/5/10.
+
+## Verification
+
+`MCTSBenchmark` (`scripts/game/mcts_benchmark.gd`) runs headless AI-vs-AI games (random decks, no Board/UI) pitting any two policies — an `MCTSEngine` level or the legacy greedy policy — against each other and reports win rate, to check higher levels actually beat lower levels before trusting them in-game. Invoke it via `main.gd`'s `_run_mcts_benchmark_cli()` dev hook: `godot --headless --path <project> -- --mcts-benchmark` (a bare `--script` entry point doesn't work here since autoloads like `DeckManager`/`CardDatabase` aren't initialized outside the real project scene tree). `--mcts-timing` times a single `choose_action()` call per level, and `--sim-test` runs one full `SimRunner` game per deck mode — useful smoke tests any time `MCTSEngine`'s async/yield behavior changes.
+
+`SimRunner` (`scripts/game/sim_runner.gd`) — the main-menu "SIMULATION" balance-testing tool — drives *both* sides of every game through `MCTSEngine` at `ai_level` (default 10, `_sim_play_turn`), not the old one-ply greedy policy, so measured card/faction win rates reflect strong play. The simulation screen (`main.gd`) exposes this via the same Easy/Medium/Hard row VS AI uses (`_add_difficulty_row`), defaulting to Medium — level 10 on both sides is meaningfully slower (more search iterations *and* one extra look-ahead ply per decision), so it's an explicit choice between speed and how close to optimal the measured data is, not a fixed cost. Changing it rebuilds the screen with a fresh `SimRunner` (same as the deck-mode toggle), so accumulated stats never mix data from two difficulty levels.
+
+Both `SimRunner`'s game loop and `MCTSEngine.choose_action()` are `await`-based so this doesn't freeze the app regardless of level: `choose_action()` yields every `ITERATIONS_PER_YIELD` iterations *within* a single search (not just between decisions — a fully synchronous search still blocks rendering/input for its whole ~1-1.5s at level 10 in one stretch, which reads exactly like a hang). The simulation screen drives games via an async loop (`main.gd`'s `_run_simulation_loop()`) instead of a `_process()` poll, so STOP and the deck-mode/difficulty toggles take effect within about one AI decision. A live "Simulating... Ns" status label ticks every frame while a game is in progress, since at higher levels a single game can take anywhere from several seconds to over a minute and the win/loss table only updates once a game completes — without it, that wait looks indistinguishable from nothing having happened.
+
+## Extending the AI
+
+Behavioral additions (new abilities affecting combat/play decisions) belong in `AIHeuristics` and/or `HeadlessTurn`'s on-play/pending-resolution logic so both the greedy policy and the search see them consistently — avoid adding a third copy of scoring/target-pick logic directly in `AIController` or `SimRunner`.

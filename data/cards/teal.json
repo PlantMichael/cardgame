@@ -290,7 +290,7 @@
 		"abilities": [
 			"guardian"
 		],
-		"art": "res://assets/teal/sereneyeti_t_006.png",
+		"art": "res://assets/teal/sereneyeti.png",
 		"effect": "",
 		"effect_value": 0
 	},

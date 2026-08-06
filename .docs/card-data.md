@@ -2,7 +2,7 @@
 
 ## Pipeline
 
-Card definitions live in `data/cards/{color}.json` (green, crimson, black, orange, teal, generic). `CardDatabase` parses them at `_ready()` and exposes `get_card(id)` / `get_all_cards()`. Cards with `color = GENERIC` are usable by every faction in deckbuilding.
+Card definitions live in `data/cards/{color}.json` (green, crimson, black, orange, teal, generic). `CardDatabase` parses them at `_ready()` and exposes `get_card(id)` / `get_all_cards()`. Cards with `color = GENERIC` are usable by every faction in deckbuilding. An optional `"art"` JSON field holds a `res://` path; if present and the resource exists, `CardDatabase` loads it into `CardData.art` (art coverage is partial — see `.docs/status.md`).
 
 ## CardData Fields
 
@@ -65,7 +65,10 @@ func effective_cost() -> int:
   "health": 4,
   "tribe": "",
   "abilities": ["guardian"],
+  "art": "res://assets/green/thornback.png",
   "effect": "",
   "effect_value": 0
 }
 ```
+
+`"art"` is optional and omitted from most existing card entries; it is only present on cards that already have art added.

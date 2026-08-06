@@ -15,12 +15,47 @@ var losses: int = 0
 var rating: int = 0
 var is_logged_in: bool = false
 
+## Ranked ladder state, tied to the account and authoritative on the server
+## (see RankedProgress for the display/AI-level math over these). Moved by
+## both AI and matchmade PvP ranked results alike — `rating` above is the
+## separate, invisible Elo matchmaking uses to pair PvP opponents.
+var rank_bracket: int = 0
+var rank_in_legend: bool = false
+var rank_legend_rating: int = 0
+var rank_floor: int = 0
+var ranked_wins: int = 0
+var ranked_losses: int = 0
+
 var _saved_token: String = ""
 
 func _ready() -> void:
 	Net.register_result.connect(_on_register_result)
 	Net.login_result.connect(_on_login_result)
+	Net.ranked_result_received.connect(_on_ranked_result_received)
 	_load_saved_session()
+
+## `opponent_rating` should only be passed for a matchmade PvP result (the
+## opponent's rating at match-found time, from Net.ranked_match_found) so the
+## server can move this player's matchmaking Elo; omit it for AI matches.
+func report_ranked_result(won: bool, opponent_rating: int = -1) -> void:
+	Net.report_ranked_result(token, won, opponent_rating)
+
+func queue_ranked() -> void:
+	Net.queue_ranked(token)
+
+func cancel_ranked_queue() -> void:
+	Net.cancel_ranked_queue(token)
+
+func _on_ranked_result_received(success: bool, profile: Dictionary) -> void:
+	if not success:
+		return
+	rating = int(profile.get("rating", rating))
+	rank_bracket = int(profile.get("rank_bracket", rank_bracket))
+	rank_in_legend = bool(profile.get("rank_in_legend", rank_in_legend))
+	rank_legend_rating = int(profile.get("rank_legend_rating", rank_legend_rating))
+	rank_floor = int(profile.get("rank_floor", rank_floor))
+	ranked_wins = int(profile.get("ranked_wins", ranked_wins))
+	ranked_losses = int(profile.get("ranked_losses", ranked_losses))
 
 func has_saved_session() -> bool:
 	return not _saved_token.is_empty()
@@ -55,6 +90,12 @@ func _apply_profile(profile: Dictionary) -> void:
 	wins = int(profile.get("wins", 0))
 	losses = int(profile.get("losses", 0))
 	rating = int(profile.get("rating", 0))
+	rank_bracket = int(profile.get("rank_bracket", 0))
+	rank_in_legend = bool(profile.get("rank_in_legend", false))
+	rank_legend_rating = int(profile.get("rank_legend_rating", 0))
+	rank_floor = int(profile.get("rank_floor", 0))
+	ranked_wins = int(profile.get("ranked_wins", 0))
+	ranked_losses = int(profile.get("ranked_losses", 0))
 	is_logged_in = true
 	_saved_token = token
 	_save_session()
@@ -65,6 +106,12 @@ func _clear_session() -> void:
 	wins = 0
 	losses = 0
 	rating = 0
+	rank_bracket = 0
+	rank_in_legend = false
+	rank_legend_rating = 0
+	rank_floor = 0
+	ranked_wins = 0
+	ranked_losses = 0
 	is_logged_in = false
 	_saved_token = ""
 	if OS.has_feature("web"):

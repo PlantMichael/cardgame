@@ -9,7 +9,17 @@
       "WebSearch",
       "Bash(python *)",
       "Bash(railway --version)",
-      "PowerShell(Select-String *)"
+      "PowerShell(Select-String *)",
+      "Read(//c/Program Files/**)",
+      "Read(//c//**)",
+      "Bash(node -e ' *)",
+      "Bash(jobs -l)",
+      "Bash(node *)",
+      "Bash(awk 'NR==17,NR==33' data/cards/black.json)",
+      "Bash(xxd)",
+      "Bash(sed -i 's#source_file=\"res://assets/stinkpile.png\"#source_file=\"res://assets/black/stinkpile.png\"#' assets/black/stinkpile.png.import)",
+      "Bash(sed -i 's#source_file=\"res://assets/slimelauncher.png\"#source_file=\"res://assets/black/slimelauncher.png\"#' assets/black/slimelauncher.png.import)",
+      "Bash(sed -i 's#source_file=\"res://assets/yetiling.jpg\"#source_file=\"res://assets/teal/yetiling.jpg\"#' assets/teal/yetiling.jpg.import)"
     ]
   }
 }

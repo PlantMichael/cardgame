@@ -38,6 +38,29 @@ func _init(card_data: CardData, owner: String) -> void:
 func has_ability(ability: String) -> bool:
 	return ability in abilities
 
+## Deep copy for AI search simulation. `data` is duplicated because transform/
+## rummage effects mutate `minion.data` in place, and a search rollout must
+## never touch the real game's CardData instances.
+func duplicate_for_sim() -> Minion:
+	var m := Minion.new(data.duplicate(), owner_id)
+	m.instance_id = instance_id
+	m.current_attack = current_attack
+	m.current_health = current_health
+	m.max_health = max_health
+	m.has_attacked = has_attacked
+	m.is_exhausted = is_exhausted
+	m.divine_shield = divine_shield
+	m.is_piloted = is_piloted
+	m.abilities = abilities.duplicate()
+	m.is_newly_reinforced = is_newly_reinforced
+	m.is_newly_transformed = is_newly_transformed
+	m.is_nulled = is_nulled
+	m.transform_counter = transform_counter
+	m.piloted_by = piloted_by.duplicate() if piloted_by != null else null
+	m.pilot_atk_bonus = pilot_atk_bonus
+	m.pilot_hp_bonus = pilot_hp_bonus
+	return m
+
 func take_damage(amount: int) -> void:
 	current_health -= amount
 

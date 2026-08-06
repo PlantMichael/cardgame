@@ -47,7 +47,7 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "Transform when health reaches 4.",
+		"description": "Transform when health reaches 4 or more.",
 		"attack": 2,
 		"health": 3,
 		"abilities": [
@@ -188,7 +188,7 @@
 	{
 		"id": "cr_004",
 		"card_name": "Crypt King",
-		"cost": 5,
+		"cost": 4,
 		"color": "CRIMSON",
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
@@ -332,6 +332,24 @@
 		"effect_value": 0
 	},
 	{
+		"id": "cr_026",
+		"card_name": "Blood drenched, the fuckening",
+		"cost": 10,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Destroy all other creatures on the field. gain stats equal to the stats of the destroyed creatures.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"on_play_devour_all"
+		],
+		"art": "res://assets/crimson/delosthecryptpriest.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "cr_020",
 		"card_name": "Blood Merchant",
 		"cost": 2,
@@ -357,9 +375,9 @@
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "monstrosity",
-		"description": "On play: devour a friendly minion. Gain half it's health rounded up.",
-		"attack": 7,
-		"health": 7,
+		"description": "On play: devour a friendly minion. Gain double it's health.",
+		"attack": 5,
+		"health": 5,
 		"abilities": [
 			"on_play_devour_friendly"
 		],
@@ -380,6 +398,24 @@
 		"health": 2,
 		"abilities": [
 			"on_play_buff_all_friendly_health"
+		],
+		"art": "res://assets/crimson/cryptlurker.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_025",
+		"card_name": "Feast Attendant",
+		"cost": 4,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "At the end of your turn, give adjacent creatures +0/+1",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"feast_attendant"
 		],
 		"art": "res://assets/crimson/cryptlurker.png",
 		"effect": "",
@@ -432,6 +468,70 @@
 		"art": "res://assets/crimson/moonhowl.png",
 		"effect": "heal",
 		"effect_value": 3
+	},
+	{
+		"id": "cr_str_005",
+		"card_name": "Tainted Blood",
+		"cost": 3,
+		"color": "CRIMSON",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Destroy target friendly creature, deal damage to opponent based on it's health.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"art": "res://assets/crimson/moonhowl.png",
+		"effect": "tainted_blood",
+		"effect_value": 1
+	},
+	{
+		"id": "cr_str_006",
+		"card_name": "Bloodlet",
+		"cost": 1,
+		"color": "CRIMSON",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Deal 2 damage or heal 2 health.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"art": "res://assets/crimson/moonhowl.png",
+		"effect": "bloodlet",
+		"effect_value": 2
+	},
+	{
+		"id": "cr_str_007",
+		"card_name": "Exsanguinate",
+		"cost": 5,
+		"color": "CRIMSON",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Deal damage to target minion equal to it's health",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"art": "res://assets/crimson/moonhowl.png",
+		"effect": "exsanguinate",
+		"effect_value": 1
+	},
+	{
+		"id": "cr_str_008",
+		"card_name": "Blood boil",
+		"cost": 2,
+		"color": "CRIMSON",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Double current health of target creature",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"art": "res://assets/crimson/moonhowl.png",
+		"effect": "blood_boil",
+		"effect_value": 1
 	},
 	{
 		"id": "cr_001t",
