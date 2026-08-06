@@ -215,6 +215,7 @@ func _show_editor_page(faction_idx: int, deck_name: String, initial_ids: Array[S
 
 func _rebuild_filter_buttons() -> void:
 	for c in _filter_box.get_children():
+		_filter_box.remove_child(c)
 		c.queue_free()
 	_filter_btns.clear()
 
@@ -267,10 +268,10 @@ func _update_filter_btns() -> void:
 
 func _rebuild_hub_list() -> void:
 	for c in _hub_deck_flow.get_children():
+		_hub_deck_flow.remove_child(c)
 		c.queue_free()
 
 	var custom := DeckManager.get_custom_decks()
-	print("[deck debug] rebuilding hub list, custom=%s" % [custom])
 	if custom.is_empty():
 		var hint := Label.new()
 		hint.text = "No saved decks yet. Click '+ New Deck' to get started."
@@ -338,6 +339,7 @@ func _hub_deck_card(deck: Dictionary) -> Control:
 
 func _refresh_deck() -> void:
 	for c in _deck_content.get_children():
+		_deck_content.remove_child(c)
 		c.queue_free()
 	_count_lbl.text = "%d / %d" % [_deck_ids.size(), DeckManager.MAX_DECK_SIZE]
 
@@ -475,6 +477,7 @@ func _mini_card(card: CardData, is_back: bool) -> Panel:
 
 func _refresh_coll() -> void:
 	for c in _coll_content.get_children():
+		_coll_content.remove_child(c)
 		c.queue_free()
 
 	var counts: Dictionary = {}

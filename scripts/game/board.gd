@@ -655,6 +655,7 @@ func _build_keyword_blocks() -> void:
 
 func _clear_keyword_blocks() -> void:
 	for child in _keyword_vbox.get_children():
+		_keyword_vbox.remove_child(child)
 		child.queue_free()
 
 func _make_keyword_block(kw_name: String, desc: String, accent: Color) -> PanelContainer:
@@ -841,11 +842,18 @@ func _finish_play_stratagem(card: Card, card_data_to_play: CardData, target_mini
 # --- Refresh ---
 
 func _refresh_hand() -> void:
+	# queue_free() only defers actual deletion to end-of-frame — get_children()
+	# would keep returning these nodes (and their signal connections) until
+	# then, piling up indefinitely if this runs more than once per frame (easy
+	# during a fast-paced match). remove_child() detaches immediately so every
+	# call starts from a truly empty zone.
 	for c in player_hand_zone.get_children():
 		c.hide()
+		player_hand_zone.remove_child(c)
 		c.queue_free()
 	for c in opponent_hand_zone.get_children():
 		c.hide()
+		opponent_hand_zone.remove_child(c)
 		c.queue_free()
 
 	# Hearthstone-style squish: cards keep comfortable spacing until the hand
@@ -887,9 +895,11 @@ func _refresh_hand() -> void:
 func _refresh_boards() -> void:
 	for c in player_board_zone.get_children():
 		c.hide()
+		player_board_zone.remove_child(c)
 		c.queue_free()
 	for c in opponent_board_zone.get_children():
 		c.hide()
+		opponent_board_zone.remove_child(c)
 		c.queue_free()
 
 	var is_my_turn = game_state.is_local_player_turn()

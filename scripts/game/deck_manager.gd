@@ -278,7 +278,6 @@ func get_custom_decks() -> Array[Dictionary]:
 # ── Save / delete ──────────────────────────────────────────────────────
 
 func save_deck(deck_name: String, faction_idx: int, card_ids: Array[String]) -> void:
-	print("[deck debug] save_deck called: name=%s faction_idx=%d card_ids.size()=%d is_logged_in=%s" % [deck_name, faction_idx, card_ids.size(), Auth.is_logged_in])
 	if Auth.is_logged_in:
 		var entry := {"name": deck_name, "faction_idx": faction_idx, "card_ids": Array(card_ids), "is_starter": false}
 		var idx := _find_custom_deck_index(deck_name)
@@ -286,7 +285,6 @@ func save_deck(deck_name: String, faction_idx: int, card_ids: Array[String]) -> 
 			Auth.custom_decks[idx] = entry
 		else:
 			Auth.custom_decks.append(entry)
-		print("[deck debug] after optimistic update, custom_decks=%s" % [Auth.custom_decks])
 		Auth.save_deck(deck_name, faction_idx, card_ids)
 		return
 	var data := {"name": deck_name, "faction_idx": faction_idx, "card_ids": Array(card_ids)}

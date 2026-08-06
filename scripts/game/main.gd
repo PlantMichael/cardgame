@@ -83,8 +83,15 @@ func _create_canvas() -> void:
 	_canvas.add_child(bg)
 
 func _clear_screen() -> void:
+	# remove_child() (not just queue_free(), which only defers actual removal
+	# to end-of-frame) so a screen switch that happens more than once per
+	# frame — e.g. a fast double-click through menus — can't leave the
+	# previous screen's nodes (and their signal connections) still attached
+	# and piling up underneath the new one.
 	for i in range(_canvas.get_child_count() - 1, 0, -1):
-		_canvas.get_child(i).queue_free()
+		var child := _canvas.get_child(i)
+		_canvas.remove_child(child)
+		child.queue_free()
 
 ## Dev-only headless verification hook: run via
 ##   godot --headless --path <project> -- --mcts-benchmark
@@ -506,6 +513,7 @@ func _show_lobby_browser() -> void:
 
 	var _populate_list = func(lobbies_data: Array):
 		for c in list_container.get_children():
+			list_container.remove_child(c)
 			c.queue_free()
 		if lobbies_data.is_empty():
 			var lbl := Label.new()
