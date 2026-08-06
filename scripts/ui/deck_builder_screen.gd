@@ -270,6 +270,7 @@ func _rebuild_hub_list() -> void:
 		c.queue_free()
 
 	var custom := DeckManager.get_custom_decks()
+	print("[deck debug] rebuilding hub list, custom=%s" % [custom])
 	if custom.is_empty():
 		var hint := Label.new()
 		hint.text = "No saved decks yet. Click '+ New Deck' to get started."
