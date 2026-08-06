@@ -27,13 +27,37 @@ var ranked_win_streak: int = 0
 var ranked_wins: int = 0
 var ranked_losses: int = 0
 
+## Custom decks tied to this account (see DeckManager, which is the actual
+## read/write API callers use — this array is just where it stores the
+## logged-in-user's copy). Each entry: {name, faction_idx, card_ids,
+## is_starter}. Populated on login/register/resume, kept in sync locally by
+## DeckManager.save_deck/delete_deck (optimistic — the server call happens
+## in the background via save_deck()/delete_deck() below).
+var custom_decks: Array[Dictionary] = []
+
 var _saved_token: String = ""
 
 func _ready() -> void:
 	Net.register_result.connect(_on_register_result)
 	Net.login_result.connect(_on_login_result)
 	Net.ranked_result_received.connect(_on_ranked_result_received)
+	Net.save_deck_result.connect(_on_deck_sync_result.bind("save"))
+	Net.delete_deck_result.connect(_on_deck_sync_result.bind("delete"))
 	_load_saved_session()
+
+func save_deck(deck_name: String, faction_idx: int, card_ids: Array) -> void:
+	Net.save_deck(token, deck_name, faction_idx, card_ids)
+
+func delete_deck(deck_name: String) -> void:
+	Net.delete_deck(token, deck_name)
+
+## DeckManager already applies save/delete to custom_decks optimistically,
+## so this is just a diagnostic backstop for when the server-side write
+## actually failed (e.g. session expired) — the local cache and account can
+## silently diverge until the next login/resume re-syncs it from the server.
+func _on_deck_sync_result(success: bool, message: String, deck_name: String, action: String) -> void:
+	if not success:
+		push_warning("Deck %s failed to sync for '%s': %s" % [action, deck_name, message])
 
 ## `opponent_rating` should only be passed for a matchmade PvP result (the
 ## opponent's rating at match-found time, from Net.ranked_match_found) so the
@@ -99,6 +123,9 @@ func _apply_profile(profile: Dictionary) -> void:
 	ranked_win_streak = int(profile.get("ranked_win_streak", 0))
 	ranked_wins = int(profile.get("ranked_wins", 0))
 	ranked_losses = int(profile.get("ranked_losses", 0))
+	custom_decks.clear()
+	for d in profile.get("decks", []):
+		custom_decks.append(d)
 	is_logged_in = true
 	_saved_token = token
 	_save_session()
@@ -116,6 +143,7 @@ func _clear_session() -> void:
 	ranked_win_streak = 0
 	ranked_wins = 0
 	ranked_losses = 0
+	custom_decks.clear()
 	is_logged_in = false
 	_saved_token = ""
 	if OS.has_feature("web"):

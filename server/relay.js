@@ -56,6 +56,29 @@ async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
+  // Custom decks, tied to the account instead of the browser (see save_deck/
+  // delete_deck below) — one row per deck, keyed by (player_id, name) so
+  // saving under an existing name overwrites it, mirroring the old
+  // per-browser storage's filename-keyed behavior.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS decks (
+      id SERIAL PRIMARY KEY,
+      player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      faction_idx INTEGER NOT NULL DEFAULT 0,
+      card_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (player_id, name)
+    )
+  `);
+}
+
+async function decksOf(playerId) {
+  const result = await pool.query(
+    'SELECT name, faction_idx, card_ids FROM decks WHERE player_id = $1 ORDER BY id',
+    [playerId]
+  );
+  return result.rows.map(r => ({ name: r.name, faction_idx: r.faction_idx, card_ids: r.card_ids }));
 }
 
 // --- Ranked ladder (mirrors scripts/game/ranked_progress.gd's display math;
@@ -316,7 +339,7 @@ async function main() {
             const hash = hashPassword(password, salt);
             const inserted = await pool.query(
               `INSERT INTO players (username, password_hash, salt) VALUES ($1, $2, $3)
-               RETURNING username, wins, losses, rating,
+               RETURNING id, username, wins, losses, rating,
                          rank_bracket, rank_in_legend, rank_legend_rating, rank_lp, ranked_win_streak,
                          ranked_wins, ranked_losses`,
               [username, hash, salt]
@@ -324,10 +347,10 @@ async function main() {
             const player = inserted.rows[0];
             const token = makeToken();
             await pool.query(
-              'INSERT INTO sessions (token, player_id) VALUES ($1, (SELECT id FROM players WHERE username = $2))',
-              [token, username]
+              'INSERT INTO sessions (token, player_id) VALUES ($1, $2)',
+              [token, player.id]
             );
-            sendTo(ws, { type: 'register_result', success: true, token, ...profileOf(player) });
+            sendTo(ws, { type: 'register_result', success: true, token, ...profileOf(player), decks: [] });
           } catch (err) {
             console.error('register error', err);
             sendTo(ws, { type: 'register_result', success: false, message: 'Server error, try again.' });
@@ -347,7 +370,8 @@ async function main() {
             }
             const token = makeToken();
             await pool.query('INSERT INTO sessions (token, player_id) VALUES ($1, $2)', [token, player.id]);
-            sendTo(ws, { type: 'login_result', success: true, token, ...profileOf(player) });
+            const decks = await decksOf(player.id);
+            sendTo(ws, { type: 'login_result', success: true, token, ...profileOf(player), decks });
           } catch (err) {
             console.error('login error', err);
             sendTo(ws, { type: 'login_result', success: false, message: 'Server error, try again.' });
@@ -359,7 +383,7 @@ async function main() {
           const token = msg.token;
           try {
             const result = await pool.query(
-              `SELECT p.username, p.wins, p.losses, p.rating,
+              `SELECT p.id, p.username, p.wins, p.losses, p.rating,
                       p.rank_bracket, p.rank_in_legend, p.rank_legend_rating, p.rank_lp, p.ranked_win_streak,
                       p.ranked_wins, p.ranked_losses
                FROM sessions s JOIN players p ON p.id = s.player_id WHERE s.token = $1`,
@@ -370,10 +394,59 @@ async function main() {
               sendTo(ws, { type: 'login_result', success: false, message: 'Session expired.' });
               return;
             }
-            sendTo(ws, { type: 'login_result', success: true, token, ...profileOf(player) });
+            const decks = await decksOf(player.id);
+            sendTo(ws, { type: 'login_result', success: true, token, ...profileOf(player), decks });
           } catch (err) {
             console.error('resume_session error', err);
             sendTo(ws, { type: 'login_result', success: false, message: 'Server error, try again.' });
+          }
+          break;
+        }
+
+        case 'save_deck': {
+          const token = msg.token;
+          const name = typeof msg.name === 'string' ? msg.name.trim() : '';
+          const factionIdx = Number.isInteger(msg.faction_idx) ? msg.faction_idx : 0;
+          const cardIds = Array.isArray(msg.card_ids) ? msg.card_ids.map(String) : [];
+          if (!name || name.length > 40) {
+            sendTo(ws, { type: 'save_deck_result', success: false, message: 'Invalid deck name.' });
+            return;
+          }
+          try {
+            const session = await pool.query('SELECT player_id FROM sessions WHERE token = $1', [token]);
+            const row = session.rows[0];
+            if (!row) {
+              sendTo(ws, { type: 'save_deck_result', success: false, message: 'Session expired.' });
+              return;
+            }
+            await pool.query(
+              `INSERT INTO decks (player_id, name, faction_idx, card_ids) VALUES ($1, $2, $3, $4)
+               ON CONFLICT (player_id, name) DO UPDATE SET faction_idx = $3, card_ids = $4`,
+              [row.player_id, name, factionIdx, JSON.stringify(cardIds)]
+            );
+            sendTo(ws, { type: 'save_deck_result', success: true, name });
+          } catch (err) {
+            console.error('save_deck error', err);
+            sendTo(ws, { type: 'save_deck_result', success: false, message: 'Server error, try again.' });
+          }
+          break;
+        }
+
+        case 'delete_deck': {
+          const token = msg.token;
+          const name = typeof msg.name === 'string' ? msg.name.trim() : '';
+          try {
+            const session = await pool.query('SELECT player_id FROM sessions WHERE token = $1', [token]);
+            const row = session.rows[0];
+            if (!row) {
+              sendTo(ws, { type: 'delete_deck_result', success: false, message: 'Session expired.' });
+              return;
+            }
+            await pool.query('DELETE FROM decks WHERE player_id = $1 AND name = $2', [row.player_id, name]);
+            sendTo(ws, { type: 'delete_deck_result', success: true, name });
+          } catch (err) {
+            console.error('delete_deck error', err);
+            sendTo(ws, { type: 'delete_deck_result', success: false, message: 'Server error, try again.' });
           }
           break;
         }

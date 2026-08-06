@@ -83,6 +83,7 @@ const BOT_NAMES := [
 	"magicninja23", "CrytoKing", "gooby", "Meteor_Sable_Star", "vibrantjuggler7",
 	"dubiousbug", "KingLebronIV", "BIRDMANN", "feetlover21", "slimelauncherlover67",
 	"PyahPelican", "CADENO", "BotLacek", "BarilBot", "hatsoffgaming",
+	"gwentbetter", "mrawsome1100", "KingKoontz", "Highlander", "hatsoffgaming",
 ]
 
 static func random_bot_name() -> String:

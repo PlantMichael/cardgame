@@ -20,6 +20,8 @@ signal login_result(success: bool, message: String, profile: Dictionary)
 signal logged_out
 signal ranked_result_received(success: bool, profile: Dictionary)
 signal ranked_match_found(lobby_id: String, role: String, opponent_name: String, opponent_rating: int)
+signal save_deck_result(success: bool, message: String, deck_name: String)
+signal delete_deck_result(success: bool, message: String, deck_name: String)
 signal _queue_updated
 
 func connect_to_relay() -> void:
@@ -71,6 +73,10 @@ func _handle_incoming(msg: Dictionary) -> void:
 		"ranked_result_ack":
 			var success := bool(msg.get("success", false))
 			ranked_result_received.emit(success, _rank_fields_from(msg) if success else {})
+		"save_deck_result":
+			save_deck_result.emit(bool(msg.get("success", false)), str(msg.get("message", "")), str(msg.get("name", "")))
+		"delete_deck_result":
+			delete_deck_result.emit(bool(msg.get("success", false)), str(msg.get("message", "")), str(msg.get("name", "")))
 		"ranked_match_found":
 			ranked_match_found.emit(
 				str(msg.get("lobby_id", "")),
@@ -125,6 +131,12 @@ func queue_ranked(token: String) -> void:
 func cancel_ranked_queue(token: String) -> void:
 	send({"type": "cancel_ranked_queue", "token": token})
 
+func save_deck(token: String, deck_name: String, faction_idx: int, card_ids: Array) -> void:
+	send({"type": "save_deck", "token": token, "name": deck_name, "faction_idx": faction_idx, "card_ids": card_ids})
+
+func delete_deck(token: String, deck_name: String) -> void:
+	send({"type": "delete_deck", "token": token, "name": deck_name})
+
 func _profile_from(msg: Dictionary) -> Dictionary:
 	var d := {
 		"token": str(msg.get("token", "")),
@@ -132,9 +144,26 @@ func _profile_from(msg: Dictionary) -> Dictionary:
 		"wins": int(msg.get("wins", 0)),
 		"losses": int(msg.get("losses", 0)),
 		"rating": int(msg.get("rating", 0)),
+		"decks": _decks_from(msg),
 	}
 	d.merge(_rank_fields_from(msg))
 	return d
+
+func _decks_from(msg: Dictionary) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for entry in msg.get("decks", []):
+		if not entry is Dictionary:
+			continue
+		var card_ids: Array[String] = []
+		for id in entry.get("card_ids", []):
+			card_ids.append(str(id))
+		out.append({
+			"name": str(entry.get("name", "")),
+			"faction_idx": int(entry.get("faction_idx", 0)),
+			"card_ids": card_ids,
+			"is_starter": false,
+		})
+	return out
 
 func _rank_fields_from(msg: Dictionary) -> Dictionary:
 	return {

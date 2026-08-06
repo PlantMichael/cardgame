@@ -43,7 +43,7 @@
 - Faction selection buttons uniform width via `SIZE_EXPAND_FILL` in a fixed-width HBoxContainer
 - Main menu with Play and Deck Builder buttons
 - Deck select screen (choose player deck, then opponent starter deck)
-- Deck builder UI: hub listing saved decks, faction picker, collection editor with search, filter buttons (All / Faction / Generic), save to disk
+- Deck builder UI: hub listing saved decks, faction picker, collection editor with search, filter buttons (All / Faction / Generic); custom decks are tied to the logged-in account (server-side, via `Auth.custom_decks`/`DeckManager`), not the browser — falls back to local disk/localStorage only when playtesting from the editor (no login there)
 - Generic card color (`CardData.CardColor.GENERIC`): cards usable by all factions; appear in a separate section after faction cards in the collection browser
 - Inyuites (Teal) starter deck: 2× every non-legendary teal card + 1× Abominus + 1× each of the 5 generic cards = 40
 - `challenge_all` ability (Rampage): on play, challenges every enemy creature left-to-right; each challenge resolves fully before the next

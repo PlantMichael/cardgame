@@ -263,7 +263,14 @@ func get_all_decks() -> Array[Dictionary]:
 	out.append_array(get_custom_decks())
 	return out
 
+## Custom decks are tied to the logged-in account (server-authoritative, see
+## Auth.custom_decks/save_deck/delete_deck) rather than the browser/machine.
+## The editor skips the login gate entirely for playtesting (see main.gd),
+## so it falls back to the old local-storage/file behavior — there's no
+## account to attach decks to there.
 func get_custom_decks() -> Array[Dictionary]:
+	if Auth.is_logged_in:
+		return Auth.custom_decks
 	if OS.has_feature("web"):
 		return _load_from_localstorage()
 	return _load_from_files()
@@ -271,6 +278,15 @@ func get_custom_decks() -> Array[Dictionary]:
 # ── Save / delete ──────────────────────────────────────────────────────
 
 func save_deck(deck_name: String, faction_idx: int, card_ids: Array[String]) -> void:
+	if Auth.is_logged_in:
+		var entry := {"name": deck_name, "faction_idx": faction_idx, "card_ids": Array(card_ids), "is_starter": false}
+		var idx := _find_custom_deck_index(deck_name)
+		if idx >= 0:
+			Auth.custom_decks[idx] = entry
+		else:
+			Auth.custom_decks.append(entry)
+		Auth.save_deck(deck_name, faction_idx, card_ids)
+		return
 	var data := {"name": deck_name, "faction_idx": faction_idx, "card_ids": Array(card_ids)}
 	var json_str := JSON.stringify(data)
 	if OS.has_feature("web"):
@@ -284,11 +300,23 @@ func save_deck(deck_name: String, faction_idx: int, card_ids: Array[String]) -> 
 			file.close()
 
 func delete_deck(deck_name: String) -> void:
+	if Auth.is_logged_in:
+		var idx := _find_custom_deck_index(deck_name)
+		if idx >= 0:
+			Auth.custom_decks.remove_at(idx)
+		Auth.delete_deck(deck_name)
+		return
 	if OS.has_feature("web"):
 		var key := JSON.stringify(LS_PREFIX + _safe(deck_name))
 		JavaScriptBridge.eval("localStorage.removeItem(%s)" % key)
 	else:
 		DirAccess.remove_absolute(SAVE_DIR + _safe(deck_name) + ".json")
+
+func _find_custom_deck_index(deck_name: String) -> int:
+	for i in Auth.custom_decks.size():
+		if str(Auth.custom_decks[i].get("name", "")) == deck_name:
+			return i
+	return -1
 
 # ── Internal loaders ───────────────────────────────────────────────────
 
