@@ -638,6 +638,7 @@ func _build_preview_keyword_blocks(data: CardData) -> void:
 
 func _clear_preview_keyword_blocks() -> void:
 	for child in _preview_keyword_vbox.get_children():
+		_preview_keyword_vbox.remove_child(child)
 		child.queue_free()
 
 func _make_keyword_block(kw_name: String, desc: String, accent: Color) -> PanelContainer:

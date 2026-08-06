@@ -312,6 +312,7 @@ func _apply_silenced_style() -> void:
 
 func _update_mana_dots(cost: int) -> void:
 	for child in mana_dots_panel.get_children():
+		mana_dots_panel.remove_child(child)
 		child.queue_free()
 	var n := clampi(cost, 0, 10)
 	const PANEL_W := 134.0
