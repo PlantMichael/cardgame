@@ -279,7 +279,14 @@ func get_custom_decks() -> Array[Dictionary]:
 
 func save_deck(deck_name: String, faction_idx: int, card_ids: Array[String]) -> void:
 	if Auth.is_logged_in:
-		var entry := {"name": deck_name, "faction_idx": faction_idx, "card_ids": Array(card_ids), "is_starter": false}
+		# duplicate(), not a bare reference — card_ids is the caller's live
+		# editing buffer (e.g. deck_builder_screen.gd's _deck_ids); aliasing it
+		# directly would mean further edits after this save silently mutate
+		# the "saved" snapshot in Auth.custom_decks before the next real save.
+		# duplicate() also preserves the Array[String] type, unlike Array(),
+		# which would've produced an untyped array inconsistent with the
+		# Array[String] shape decks loaded from the server already have.
+		var entry := {"name": deck_name, "faction_idx": faction_idx, "card_ids": card_ids.duplicate(), "is_starter": false}
 		var idx := _find_custom_deck_index(deck_name)
 		if idx >= 0:
 			Auth.custom_decks[idx] = entry
