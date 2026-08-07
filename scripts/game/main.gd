@@ -375,12 +375,21 @@ func _show_reconnecting_screen(on_success: Callable, allow_back: bool = true) ->
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(lbl)
 
+	# The relay round-trip plus a cold WASM boot can take several seconds on
+	# a fresh page load with nothing else on screen changing — a static
+	# label in that stretch is indistinguishable from a real hang. Animating
+	# it is a cheap way to make "still working" visible while that happens.
+	var still_connecting := true
+	_animate_loading_dots(lbl, "Reconnecting", func() -> bool: return still_connecting)
+
 	_with_connection(func():
 		Auth.login_result.connect(func(success: bool, message: String):
+			still_connecting = false
 			_on_resume_session_result(success, message, on_success, allow_back)
 		, CONNECT_ONE_SHOT)
 		Auth.try_resume_session()
 	, func():
+		still_connecting = false
 		lbl.text = "Couldn't reach the server. Check your connection and try again."
 		var retry_btn := _menu_btn("RETRY")
 		retry_btn.pressed.connect(func():
@@ -389,6 +398,16 @@ func _show_reconnecting_screen(on_success: Callable, allow_back: bool = true) ->
 		)
 		vbox.add_child(retry_btn)
 	)
+
+## Cycles `lbl`'s text through base_text, base_text+".", +"..", +"..." every
+## 0.4s until `lbl` is freed or `should_continue` returns false — call
+## without awaiting (fire-and-forget); it stops itself.
+func _animate_loading_dots(lbl: Label, base_text: String, should_continue: Callable) -> void:
+	var dots := 0
+	while is_instance_valid(lbl) and should_continue.call():
+		lbl.text = base_text + ".".repeat((dots % 3) + 1)
+		dots += 1
+		await get_tree().create_timer(0.4).timeout
 
 func _on_resume_session_result(success: bool, _message: String, on_success: Callable, allow_back: bool) -> void:
 	_clear_screen()
@@ -467,10 +486,16 @@ func _show_auth_screen(is_register: bool, on_success: Callable, allow_back: bool
 			status_lbl.text = "Enter a username and password."
 			return
 		submit_btn.disabled = true
+		var still_connecting := true
 		status_lbl.text = "Connecting..."
+		_animate_loading_dots(status_lbl, "Connecting", func() -> bool: return still_connecting)
 		_with_connection(func():
+			still_connecting = false
 			status_lbl.text = "Registering..." if is_register else "Logging in..."
+			still_connecting = true
+			_animate_loading_dots(status_lbl, "Registering" if is_register else "Logging in", func() -> bool: return still_connecting)
 			var handler := func(success: bool, message: String):
+				still_connecting = false
 				if success:
 					_clear_screen()
 					_mp_name = Auth.username
@@ -485,6 +510,7 @@ func _show_auth_screen(is_register: bool, on_success: Callable, allow_back: bool
 				Auth.login_result.connect(handler, CONNECT_ONE_SHOT)
 				Auth.login(uname, pw)
 		, func():
+			still_connecting = false
 			submit_btn.disabled = false
 			status_lbl.text = "Couldn't reach the server. Check your connection and try again."
 		)
@@ -904,6 +930,8 @@ func _show_ranked_searching() -> void:
 	status_lbl.add_theme_font_size_override("font_size", 24)
 	status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(status_lbl)
+	var search_id_at_start := _ranked_search_id
+	_animate_loading_dots(status_lbl, "Searching for opponent", func() -> bool: return _ranked_search_id == search_id_at_start)
 
 	var cancel_btn := _menu_btn("CANCEL")
 	cancel_btn.pressed.connect(_cancel_ranked_search)
