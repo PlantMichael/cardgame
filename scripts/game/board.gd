@@ -542,9 +542,15 @@ func _update_hover(mouse_pos: Vector2) -> void:
 		_show_card_preview(found_data, found_minion, found_rect)
 		return
 
-	# Field cards: only show the preview if this same card is still hovered after the delay.
+	# Field cards: only show the preview if this same card is still hovered after
+	# the delay. found_card/found_minion are captured across that delay, and the
+	# minion can die (or the board can refresh) before the timer fires — most
+	# commonly during an AI turn's attacks while the mouse just happens to be
+	# resting on the board — so both must be revalidated before touching them;
+	# invoking this callable with a freed capture crashes the web export outright
+	# rather than just erroring like a native/debug run would.
 	get_tree().create_timer(HOVER_PREVIEW_DELAY_SEC).timeout.connect(func():
-		if _hover_card == found_card:
+		if is_instance_valid(found_card) and is_instance_valid(found_minion) and _hover_card == found_card:
 			_show_card_preview(found_data, found_minion, found_rect)
 	)
 
