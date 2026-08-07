@@ -47,8 +47,30 @@ const UCT_C := 35.0
 ## sims), where long unyielded stretches otherwise read as the game hanging.
 const ITERATIONS_PER_YIELD := 8
 
+## Iteration budget for a choose_action() call that continues an already-
+## reused tree (see _root/advance_after_real_action below) instead of
+## starting fresh — a turn with several actions no longer pays the full
+## per-level iteration cost on every single one of them, since the reused
+## subtree already carries visit/value stats from the turn's opening search.
+const TOPUP_ITERATIONS := 24
+
 var ai_player_id: String
 var ai_level: int
+
+## Persists across choose_action() calls within the same AIController.take_
+## turn() loop so a turn's search tree is built once and walked forward one
+## atomic action at a time instead of rebuilt from scratch per action (that
+## rebuild-per-action pattern is what made a multi-action AI turn take
+## several stacked full searches — enough to read as the game hanging; see
+## [[project_mcts_ai_ranked]]-adjacent debugging). AIController must call
+## advance_after_real_action() after actually applying each returned action.
+var _root: _MCTSNode = null
+## The child chosen by the most recent choose_action() call — advance_after_
+## real_action() reuses it as the next _root if its predicted post-action
+## state matches what the real game_state turned into (see _fingerprint);
+## otherwise the tree is discarded and rebuilt fresh next call, so a
+## mismatch only costs speed, never correctness.
+var _pending_child: _MCTSNode = null
 
 class _MCTSNode:
 	extends RefCounted
@@ -74,25 +96,36 @@ func _init(p_ai_player_id: String, p_ai_level: int = 5) -> void:
 	ai_player_id = p_ai_player_id
 	ai_level = clampi(p_ai_level, 1, 10)
 
-## Runs a search rooted at (a clone of) `game_state` and returns the single
-## atomic action recommended for `ai_player_id` to take next — safe to apply
-## directly to `game_state` itself (see _translate_to_real).
+## Runs a search rooted at (a clone of) `game_state` — or continues the tree
+## left behind by the previous call if advance_after_real_action() reused it
+## — and returns the single atomic action recommended for `ai_player_id` to
+## take next — safe to apply directly to `game_state` itself (see
+## _translate_to_real). Callers driving a whole turn must invoke
+## advance_after_real_action() with the resulting real `game_state` right
+## after actually applying the returned action, or the tree is silently
+## rebuilt from scratch next call (correct, just back to the pre-reuse cost).
 func choose_action(game_state: GameState) -> Dictionary:
 	var config: Dictionary = AI_LEVEL_CONFIG.get(ai_level, AI_LEVEL_CONFIG[5])
-	var root_state := game_state.duplicate_for_sim()
-	var root_actions := HeadlessTurn.list_legal_actions(root_state, ai_player_id)
-	if root_actions.is_empty():
-		return {"type": "end_turn"}
-	if root_actions.size() == 1:
-		return _translate_to_real(root_actions[0], game_state)
+	var budget: int
 
-	var root := _MCTSNode.new(root_state, null, null, false)
-	root.untried_actions = root_actions.duplicate()
+	if _root == null:
+		var root_state := game_state.duplicate_for_sim()
+		var root_actions := HeadlessTurn.list_legal_actions(root_state, ai_player_id)
+		if root_actions.is_empty():
+			return {"type": "end_turn"}
+		if root_actions.size() == 1:
+			_pending_child = null
+			return _translate_to_real(root_actions[0], game_state)
+		_root = _MCTSNode.new(root_state, null, null, false)
+		_root.untried_actions = root_actions.duplicate()
+		budget = int(config["iterations"])
+	else:
+		budget = mini(int(config["iterations"]), TOPUP_ITERATIONS)
 
-	for i in int(config["iterations"]):
+	for i in budget:
 		if i > 0 and i % ITERATIONS_PER_YIELD == 0:
 			await Engine.get_main_loop().process_frame
-		var node := root
+		var node := _root
 
 		# Selection: descend fully-expanded, non-terminal nodes via UCT.
 		while node.untried_actions.is_empty() and not node.children.is_empty() and not node.is_terminal:
@@ -125,15 +158,64 @@ func choose_action(game_state: GameState) -> Dictionary:
 			cursor = cursor.parent
 
 	var best: _MCTSNode = null
-	for child in root.children:
+	for child in _root.children:
 		if best == null or child.visits > best.visits:
 			best = child
-	var chosen_action: Dictionary = best.action if best != null else root_actions[0]
+	var chosen_action: Dictionary
+	if best != null:
+		chosen_action = best.action
+	elif not _root.untried_actions.is_empty():
+		chosen_action = _root.untried_actions[0]
+	else:
+		chosen_action = {"type": "end_turn"}
+	_pending_child = best
 
 	var mistake_rate: float = config["mistake_rate"]
 	if mistake_rate > 0.0 and randf() < mistake_rate:
-		chosen_action = root_actions[randi() % root_actions.size()]
+		var all_actions: Array[Dictionary] = _root.untried_actions.duplicate()
+		for child in _root.children:
+			all_actions.append(child.action)
+		chosen_action = all_actions[randi() % all_actions.size()]
+		_pending_child = null
+		for child in _root.children:
+			if child.action == chosen_action:
+				_pending_child = child
+				break
 	return _translate_to_real(chosen_action, game_state)
+
+## Called by AIController right after it actually applies the action
+## choose_action() returned to the real `game_state`. If the child the search
+## predicted for that action matches what really happened (verified via a
+## cheap structural fingerprint — instance_ids are preserved verbatim by
+## duplicate_for_sim() so a clone's and the real state's minions line up),
+## that child becomes the new root and its accumulated visit/value stats
+## carry into the next choose_action() call instead of starting cold. A
+## mismatch (e.g. a mid-turn pending-queue ability rolled a different random
+## target than the search's own rollout did) just discards the tree —
+## costs the next call full search time again, never correctness.
+func advance_after_real_action(real_state_after: GameState) -> void:
+	if _pending_child != null and _fingerprint(_pending_child.state) == _fingerprint(real_state_after):
+		_pending_child.parent = null
+		_root = _pending_child
+	else:
+		_root = null
+	_pending_child = null
+
+static func _fingerprint(state: GameState) -> String:
+	var parts: Array[String] = []
+	for p in [state.player, state.opponent]:
+		parts.append("%d|%d" % [p.hero_health, p.current_mana])
+		var hand_ids: Array[String] = []
+		for c in p.hand:
+			hand_ids.append(c.id)
+		hand_ids.sort()
+		parts.append(",".join(hand_ids))
+		var board_sig: Array[String] = []
+		for m in p.board:
+			board_sig.append("%s:%d:%d" % [m.instance_id, m.current_attack, m.current_health])
+		board_sig.sort()
+		parts.append(",".join(board_sig))
+	return "|".join(parts)
 
 ## Root-level actions (the only ones ever returned) reference CardData/Minion
 ## objects from the internal duplicate_for_sim() clone the search ran

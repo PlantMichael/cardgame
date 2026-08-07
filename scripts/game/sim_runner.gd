@@ -293,6 +293,7 @@ func _sim_play_turn(gs: GameState, active_id: String) -> void:
 				return
 		if gs.current_phase == GameState.Phase.GAME_OVER:
 			return
+		engine.advance_after_real_action(gs)
 
 # ── On-play effect handler ───────────────────────────────────────────────────
 

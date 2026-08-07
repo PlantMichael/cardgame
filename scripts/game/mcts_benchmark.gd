@@ -72,3 +72,4 @@ static func _play_turn(gs: GameState, acting_id: String, policy: Policy) -> void
 		HeadlessTurn.apply_action(gs, action)
 		if action["type"] == "end_turn" or gs.current_phase == GameState.Phase.GAME_OVER:
 			return
+		engine.advance_after_real_action(gs)

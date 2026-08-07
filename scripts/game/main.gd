@@ -55,6 +55,9 @@ func _ready() -> void:
 	if "--sim-test" in OS.get_cmdline_user_args():
 		_run_sim_test_cli()
 		return
+	if "--live-ai-test" in OS.get_cmdline_user_args():
+		_run_live_ai_test_cli()
+		return
 
 	_create_canvas()
 
@@ -175,6 +178,50 @@ func _run_haven_test_cli() -> void:
 	print("After devour (3 -> 13, skipping 4): name=%s max_health=%d transformed=%s" % [
 		m.data.card_name, m.max_health, transformed])
 	print("RESULT: %s" % ("PASS" if transformed else "FAIL"))
+	get_tree().quit()
+
+## Dev-only repro for the reported in-match freeze: drives one real game
+## through the actual Board/GameManager/AIController glue (tweens, refresh(),
+## log_action()) instead of the headless SimRunner/HeadlessTurn path, so a
+## hang specific to that glue (not the search engine itself) shows up here.
+## godot --headless --path <project> -- --live-ai-test
+func _run_live_ai_test_cli() -> void:
+	print("Starting live (real Board/GameManager) local AI game to check for turn hangs...")
+	var board := BoardScene.instantiate()
+	add_child(board)
+	var pd := DeckManager.build_random_faction_deck(CardData.CardColor.GREEN)
+	var od := DeckManager.build_random_faction_deck(CardData.CardColor.CRIMSON)
+	GameManagerAutoload.start_local_game(board, pd, od, 10, false)
+	await get_tree().create_timer(4.5).timeout  # let the coinflip animation clear
+	# Fingerprints actual board/hand/health state (via MCTSEngine's own helper)
+	# rather than just turn_number/active_player_id, which legitimately don't
+	# change while the AI is mid-turn working through several real actions —
+	# that used to look identical to a true hang in this harness.
+	var last_fp := ""
+	var stall_ticks := 0
+	for i in 180:
+		await get_tree().create_timer(1.0).timeout
+		var gs := GameManagerAutoload.game_state
+		if gs.current_phase == GameState.Phase.GAME_OVER:
+			print("RESULT: PASS - game reached GAME_OVER at t=%ds without hanging" % (i + 1))
+			get_tree().quit()
+			return
+		if gs.is_local_player_turn():
+			# Simulate the human immediately ending their turn every round so
+			# the AI's turn (the suspected hang site) triggers repeatedly.
+			board.end_turn_pressed.emit()
+		var fp := MCTSEngine._fingerprint(gs)
+		if fp == last_fp:
+			stall_ticks += 1
+		else:
+			stall_ticks = 0
+		last_fp = fp
+		print("t=%ds turn=%d active=%s phase=%d stall_ticks=%d" % [i + 1, gs.turn_number, gs.active_player_id, gs.current_phase, stall_ticks])
+		if stall_ticks >= 20 and not gs.is_local_player_turn():
+			print("RESULT: FAIL - stuck on %s's turn (turn %d) for %d+ seconds with no state change at all" % [gs.active_player_id, gs.turn_number, stall_ticks])
+			get_tree().quit()
+			return
+	print("RESULT: INCONCLUSIVE - loop ended without a clear stall or game over")
 	get_tree().quit()
 
 func _run_mcts_benchmark_cli() -> void:

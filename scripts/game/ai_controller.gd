@@ -10,17 +10,23 @@ var ai_level: int = 5
 ## Repeatedly asks MCTSEngine for the single best next atomic action against
 ## the real game_state, applies it (with the same logging/animation glue the
 ## old one-ply AI used), and stops when the search recommends ending the turn.
+## One MCTSEngine is built for the whole turn (not per action) so its search
+## tree carries forward action-to-action via advance_after_real_action() —
+## rebuilding a full search from scratch for every single action in a turn is
+## what used to make a multi-action AI turn take several stacked full
+## searches in a row, long enough to read as the game hanging.
 func take_turn(game_state: GameState, board: Board) -> void:
+	var engine := MCTSEngine.new(game_state.opponent.player_id, ai_level)
 	for _i in 60:  # safety cap; a real turn never needs anywhere near this many actions
 		if game_state.current_phase == GameState.Phase.GAME_OVER:
 			return
-		var engine := MCTSEngine.new(game_state.opponent.player_id, ai_level)
 		var action: Dictionary = await engine.choose_action(game_state)
 		if action["type"] == "end_turn":
 			return
 		await _apply_action(action, game_state, board)
 		if game_state.current_phase == GameState.Phase.GAME_OVER:
 			return
+		engine.advance_after_real_action(game_state)
 
 func _apply_action(action: Dictionary, game_state: GameState, board: Board) -> void:
 	match action["type"]:
