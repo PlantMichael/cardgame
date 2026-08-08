@@ -30,6 +30,12 @@ const MAX_TILT_RAD := 0.21 # ~12 degrees
 var data: CardData = null
 var _layer3d = null
 var _mesh3d: MeshInstance3D = null
+## True once _update_mesh_transform() has positioned _mesh3d at least once.
+## Gates the mesh's visibility (see _sync_mesh_visibility()) so a freshly
+## acquired mesh never renders at its pre-placement default transform
+## (world origin, scale 1) - it stays invisible instead of flashing there
+## for a frame, whichever it takes for a container-managed rect to resolve.
+var _mesh_placed: bool = false
 var _text_viewport: SubViewport = null
 var _tilt_current: Vector2 = Vector2.ZERO
 var minion: Minion = null
@@ -89,18 +95,20 @@ func _ready() -> void:
 			_setup_text_overlay()
 		else:
 			_apply_preview_label_offsets()
-		_sync_mesh_visibility()
-		# _process() (below) is what normally places the mesh, but a
-		# freshly-added node's first _process() doesn't fire until next
-		# frame - board.refresh() rebuilds every Card in one synchronous
-		# pass, so without this the new mesh would render for one frame at
-		# its default identity transform (world origin, scale 1) instead of
-		# its hand/board spot, reading as every card flashing/vanishing on
-		# every attack, play, death, or end turn. Deferred (not immediate)
-		# so it runs after the hand/board HBoxContainer's own deferred
-		# layout sort - by the time this fires, wrapper.get_global_rect()
-		# already reflects the post-sort position, and it still lands
-		# before this frame is drawn.
+		# _sync_mesh_visibility() above hides the mesh for now: _mesh_placed
+		# is still false at this point, and stays false until
+		# _update_mesh_transform() below has positioned it at least once.
+		# That's the real fix for every card flashing/vanishing on every
+		# attack/play/death/end-turn - board.refresh() rebuilds every Card
+		# in one synchronous pass, and _process() (which normally places the
+		# mesh) doesn't fire on a freshly-added node until next frame, so
+		# without the visibility gate the new mesh would render for a frame
+		# at its default identity transform (world origin, scale 1) instead
+		# of its hand/board spot. The call below is just an optimization to
+		# skip that hidden frame when possible - deferred so it runs after
+		# the hand/board HBoxContainer's own deferred layout sort, meaning
+		# wrapper.get_global_rect() is usually already correct by the time
+		# it fires - but correctness no longer depends on that timing.
 		call_deferred("_update_mesh_transform", 0.0)
 
 ## Renders the card's text (name, description, mana/stat labels, pilot/
@@ -142,9 +150,10 @@ func _apply_preview_label_offsets() -> void:
 ## (board.gd, deck_builder_screen.gd) are shown/hidden by toggling `visible`
 ## rather than being freed - so the mesh needs its own visibility kept in
 ## sync explicitly, both here and on every future visibility change.
+## Also gated on _mesh_placed - see that var's comment.
 func _sync_mesh_visibility() -> void:
 	if is_instance_valid(_mesh3d):
-		_mesh3d.visible = is_visible_in_tree()
+		_mesh3d.visible = is_visible_in_tree() and _mesh_placed
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_VISIBILITY_CHANGED:
@@ -199,6 +208,9 @@ func _update_mesh_transform(delta: float) -> void:
 	# camera's near/far planes.
 	var z_order := 50 if _dragging else get_index()
 	_layer3d.place(_mesh3d, rect, _tilt_current, z_order)
+	if not _mesh_placed:
+		_mesh_placed = true
+		_sync_mesh_visibility()
 
 ## Wraps any keyword (Guardian, Rush, Rummage, ...) found in a card's
 ## description with the same color used for that keyword's ability badge.
