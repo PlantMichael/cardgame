@@ -355,7 +355,12 @@ func _apply_stat_colors(m: Minion) -> void:
 		health_label.add_theme_color_override("font_color", Color.WHITE)
 
 func set_playable(value: bool) -> void:
+	# modulate only reaches the 2D fallback visuals (background/card_visual) -
+	# the mesh and its text overlay live outside Card's own canvas item tree
+	# (see _layer3d), so they need their own dim toggle to actually darken.
 	modulate = Color.WHITE if value else Color(0.5, 0.5, 0.5, 0.8)
+	if _mesh3d and _layer3d:
+		_layer3d.set_dimmed(_mesh3d, not value)
 
 func set_summoning_sick(value: bool) -> void:
 	if value:

@@ -118,12 +118,22 @@ const TEXT_OVERLAY_INSET := 0.94
 ## text renders as fully invisible despite everything else being correct.
 const TEXT_OVERLAY_FRONT_MARGIN := 0.25
 
+## Translucent black quad shown over an unaffordable card (see set_dimmed()).
+## Same idea as the text overlay's inset/margin constants, but uncovered
+## (1.0, not TEXT_OVERLAY_INSET) since it needs to dim the mesh's own
+## frame/border too, not just the art/text - and further out in front
+## (DIM_OVERLAY_FRONT_MARGIN > TEXT_OVERLAY_FRONT_MARGIN) so it clears the
+## text overlay as well as the mesh, dimming both.
+const DIM_OVERLAY_ALPHA := 0.45
+const DIM_OVERLAY_FRONT_MARGIN := 0.4
+
 func acquire_mesh() -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = _card_meshes.get(CardData.CardColor.GENERIC)
 	mi.transform.basis = _stand_basis()
 	_mesh_root.add_child(mi)
 	_add_text_overlay(mi, CardData.CardColor.GENERIC)
+	_add_dim_overlay(mi, CardData.CardColor.GENERIC)
 	return mi
 
 func release_mesh(mesh: MeshInstance3D) -> void:
@@ -177,6 +187,49 @@ func _reposition_text_overlay(mesh: MeshInstance3D, color: CardData.CardColor) -
 	var offset_amount := front_z * (1.0 + TEXT_OVERLAY_FRONT_MARGIN)
 	overlay.position = counter_rotation * Vector3(0, 0, offset_amount)
 
+## A thin black quad, parented to the card mesh like the text overlay, that
+## set_dimmed() shows/hides to darken a card the player can't afford - the
+## 3D equivalent of the old Card.modulate tint, which stopped having any
+## effect once the mesh (and text overlay, a separate SubViewport) moved
+## outside Card's own 2D canvas item tree.
+func _add_dim_overlay(mesh: MeshInstance3D, color: CardData.CardColor) -> void:
+	var overlay := MeshInstance3D.new()
+	overlay.name = "DimOverlay"
+	overlay.visible = false
+	var quad := QuadMesh.new()
+	quad.size = _native_size
+	overlay.mesh = quad
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.albedo_color = Color(0, 0, 0, DIM_OVERLAY_ALPHA)
+	overlay.set_surface_override_material(0, mat)
+	mesh.add_child(overlay)
+	_reposition_dim_overlay(mesh, color)
+
+## Re-centers the dim overlay's forward offset for mesh's current color -
+## same reasoning as _reposition_text_overlay(), called alongside it.
+func _reposition_dim_overlay(mesh: MeshInstance3D, color: CardData.CardColor) -> void:
+	var overlay := mesh.get_node_or_null("DimOverlay") as MeshInstance3D
+	if overlay == null:
+		return
+	var counter_rotation := _stand_basis().inverse()
+	overlay.transform.basis = counter_rotation
+	var front_z: float = _front_z_by_color.get(color, _front_z_by_color.get(CardData.CardColor.GENERIC, 0.0))
+	var offset_amount := front_z * (1.0 + DIM_OVERLAY_FRONT_MARGIN)
+	overlay.position = counter_rotation * Vector3(0, 0, offset_amount)
+
+## Shows/hides the translucent dim overlay - see _add_dim_overlay(). No-op if
+## the mesh has no overlay (stale reference).
+func set_dimmed(mesh: MeshInstance3D, dimmed: bool) -> void:
+	if not is_instance_valid(mesh):
+		return
+	var overlay := mesh.get_node_or_null("DimOverlay")
+	if overlay == null:
+		return
+	overlay.visible = dimmed
+
 ## Projects a card's baked text (see Card._setup_text_overlay()) onto its
 ## mesh's text-overlay quad. No-op if the mesh has no overlay - either it's
 ## a stale reference or the card opted out (use_text_overlay = false).
@@ -209,6 +262,7 @@ func configure_theme(mesh: MeshInstance3D, color: CardData.CardColor, art: Textu
 	for i in new_mesh.get_surface_count():
 		mesh.set_surface_override_material(i, null)
 	_reposition_text_overlay(mesh, color)
+	_reposition_dim_overlay(mesh, color)
 
 ## Tints the whole card (used for damage flash / transform pulses). Pass
 ## null to clear back to the normal per-surface materials.
