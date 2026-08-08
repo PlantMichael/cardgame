@@ -91,6 +91,7 @@ func _load_keywords() -> void:
 
 func _setup_preview_card() -> void:
 	_preview_card_node = CardScene.instantiate()
+	_preview_card_node.use_text_overlay = false
 	_preview_card_node.scale = Vector2(PREVIEW_SCALE, PREVIEW_SCALE)
 	_preview_card_node.position = Vector2(0, 0)
 	_preview_card_node.input_pickable = false
@@ -98,6 +99,7 @@ func _setup_preview_card() -> void:
 	_preview_card_holder.add_child(_preview_card_node)
 	_ignore_control_input(_preview_card_node)
 	_preview_card_node.modulate = Color(1, 1, 1, 0)
+	_preview_card_node.visible = false
 
 func _setup_delete_button() -> void:
 	var hbox := $EditorPage/TopSection/EditorToolbar/HBoxContainer
@@ -589,6 +591,7 @@ func _show_db_preview(data: CardData) -> void:
 	_hide_preview_scheduled = false
 	if _preview_card_node:
 		_preview_card_node.setup(data)
+		_preview_card_node.visible = true
 		_preview_card_node.modulate = Color(1, 1, 1, 1)
 	_build_preview_keyword_blocks(data)
 
@@ -598,6 +601,7 @@ func _hide_db_preview() -> void:
 	if _hide_preview_scheduled:
 		if _preview_card_node:
 			_preview_card_node.modulate = Color(1, 1, 1, 0)
+			_preview_card_node.visible = false
 		_clear_preview_keyword_blocks()
 		_hide_preview_scheduled = false
 

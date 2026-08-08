@@ -229,7 +229,7 @@ func get_display(ability: String) -> String:
 	if is_on_reinforce_damage(ability):
 		return "On Reinforce: %d dmg" % get_on_reinforce_damage_value(ability)
 	if is_on_any_reinforce_shot(ability):
-		return "Any Reinforce: %d dmg" % get_on_any_reinforce_shot_value(ability)
+		return "Friendly Reinforce: %d dmg" % get_on_any_reinforce_shot_value(ability)
 	if is_pilot(ability):
 		return "Pilot %d/%d" % [get_pilot_attack(ability), get_pilot_health(ability)]
 	if is_shielded(ability):
@@ -454,12 +454,11 @@ func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 					if is_on_reinforce_damage(ab):
 						gs.pending_on_reinforce_damages.append({"player_id": owner.player_id, "damage": get_on_reinforce_damage_value(ab), "source": minion.data.card_name})
 						break
-				for p in [gs.player, gs.opponent]:
-					for watcher in p.board:
-						for ab in watcher.abilities:
-							if is_on_any_reinforce_shot(ab):
-								gs.pending_on_reinforce_damages.append({"player_id": watcher.owner_id, "damage": get_on_any_reinforce_shot_value(ab), "source": watcher.data.card_name})
-								break
+				for watcher in owner.board:
+					for ab in watcher.abilities:
+						if is_on_any_reinforce_shot(ab):
+							gs.pending_on_reinforce_damages.append({"player_id": watcher.owner_id, "damage": get_on_any_reinforce_shot_value(ab), "source": watcher.data.card_name})
+							break
 			DEATHRATTLE_DRAW_YETI:
 				var card = _draw_by_tag(owner, YETI)
 				if card:

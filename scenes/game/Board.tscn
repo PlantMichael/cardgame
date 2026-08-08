@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3 uid="uid://ds1w661khk8c0"]
+[gd_scene load_steps=6 format=3 uid="uid://ds1w661khk8c0"]
 
 [ext_resource type="Script" path="res://scripts/game/board.gd" id="1_gn7yc"]
 [ext_resource type="Script" path="res://scripts/game/hero.gd" id="1_km1cx"]
 [ext_resource type="PackedScene" uid="uid://dur40h3mbtdyp" path="res://scenes/cards/Card.tscn" id="3_gyq52"]
 [ext_resource type="Texture2D" path="res://assets/battlefield.png" id="4_battlefield"]
+[ext_resource type="PackedScene" path="res://scenes/cards/Card3DLayer.tscn" id="5_card3d"]
 
 [node name="Board" type="Node2D"]
 script = ExtResource("1_gn7yc")
@@ -125,6 +126,8 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 2
 
+[node name="Card3DLayer" parent="." instance=ExtResource("5_card3d")]
+
 [node name="CardPreviewZone" type="Control" parent="."]
 layout_mode = 3
 anchors_preset = 0
@@ -136,3 +139,4 @@ offset_bottom = 760.0
 [node name="PreviewCard" parent="CardPreviewZone" instance=ExtResource("3_gyq52")]
 position = Vector2(0, 40)
 scale = Vector2(1.5, 1.5)
+use_text_overlay = false

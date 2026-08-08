@@ -12,25 +12,32 @@ extends Area2D
 @onready var background: TextureRect = $Background
 @onready var stats_row: HBoxContainer = $StatsRow
 
-const CARD_TEMPLATES = {
-	CardData.CardColor.GREEN: preload("res://assets/greencard.png"),
-	CardData.CardColor.BLACK: preload("res://assets/blackcard.png"),
-	CardData.CardColor.CRIMSON: preload("res://assets/crimsoncard.png"),
-	CardData.CardColor.TEAL: preload("res://assets/tealcard.png"),
-}
-
 const CARD_FONT := preload("res://assets/fonts/Orbitron.ttf")
 
 const HAND_SCALE := Vector2(0.75, 0.75)
 const HAND_DRAG_OFFSET := Vector2(82.5, 120.0)
 const TOKEN_GAP := 6.0
+const CARD_SIZE := Vector2(220, 320)
+const MAX_TILT_RAD := 0.21 # ~12 degrees
+
+## Preview-panel instances (board.gd's hover preview, the deck builder's
+## preview) never tilt and get reused across many different cards' data, so
+## they're opted out here (set false before add_child()/in the .tscn) and
+## keep rendering their text as plain flat 2D labels - unaffected by the 3D
+## text-overlay wiring below.
+@export var use_text_overlay: bool = true
 
 var data: CardData = null
+var _layer3d = null
+var _mesh3d: MeshInstance3D = null
+var _text_viewport: SubViewport = null
+var _tilt_current: Vector2 = Vector2.ZERO
 var minion: Minion = null
 var is_in_hand: bool = false
 var _is_selected: bool = false
 var _dragging: bool = false
 var _drag_start_pos: Vector2
+var _prev_drag_pos: Vector2 = Vector2.ZERO
 var _original_parent: Node
 var _original_index: int
 var _is_highlighted_as_target: bool = false
@@ -65,6 +72,118 @@ const CARD_BORDER_COLORS = {
 func _ready() -> void:
 	mana_dots_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	image_size_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	_layer3d = get_tree().get_first_node_in_group("card_3d_layer")
+	if _layer3d:
+		_mesh3d = _layer3d.acquire_mesh()
+		# The 3D mesh is the whole card body now (frame/border) - leaving the
+		# old 2D background/panel showing double-draws them on top of it.
+		# art_texture stays visible: it's baked into the text overlay
+		# alongside the labels (see _setup_text_overlay()) for baked cards so
+		# it tilts with the card, and for preview cards it's left as a plain
+		# flat 2D layer same as the other labels (previews never tilt).
+		background.hide()
+		card_visual.hide()
+		if data:
+			_layer3d.configure_theme(_mesh3d, data.color, data.art)
+		if use_text_overlay:
+			_setup_text_overlay()
+		else:
+			_apply_preview_label_offsets()
+		_sync_mesh_visibility()
+
+## Renders the card's text (name, description, mana/stat labels, pilot/
+## reinforce tokens) into a small SubViewport instead of leaving them as
+## flat 2D Controls, and hands that texture to a thin quad parented to the
+## mesh (see card_3d_layer.gd) - being a child of the mesh, the quad inherits
+## its rotation, so the text tilts along with the card instead of staying
+## glued flat to the screen while the model underneath it turns.
+func _setup_text_overlay() -> void:
+	_text_viewport = SubViewport.new()
+	_text_viewport.size = Vector2i(CARD_SIZE)
+	_text_viewport.transparent_bg = true
+	_text_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(_text_viewport)
+	for label in [name_label, description_label, attack_label, health_label, stats_row, mana_dots_panel, art_texture]:
+		label.get_parent().remove_child(label)
+		_text_viewport.add_child(label)
+	_layer3d.set_text_texture(_mesh3d, _text_viewport.get_texture())
+
+## Where pilot/reinforce badge tokens (and anything else built after
+## _ready()) should be parented so they show up in the text overlay when one
+## exists, instead of silently rendering as a flat 2D layer nothing tilts.
+func _text_layer_parent() -> Node:
+	return _text_viewport if _text_viewport else self
+
+## Preview cards (use_text_overlay = false) keep their labels as plain flat
+## 2D Controls rather than baking them into the 3D overlay, and read better
+## at the preview panel's larger scale with a different vertical rhythm than
+## Card.tscn's baseline layout (tuned for the baked hand/board cards):
+## mana pips sit lower, and description/stats sit higher - stats more so,
+## since they anchor the bottom edge and have the least room to spare.
+func _apply_preview_label_offsets() -> void:
+	mana_dots_panel.position.y += 10
+	stats_row.position.y -= 7
+	attack_label.position.y -= 7
+	health_label.position.y -= 7
+
+## The mesh has no modulate of its own to follow, and preview cards
+## (board.gd, deck_builder_screen.gd) are shown/hidden by toggling `visible`
+## rather than being freed - so the mesh needs its own visibility kept in
+## sync explicitly, both here and on every future visibility change.
+func _sync_mesh_visibility() -> void:
+	if is_instance_valid(_mesh3d):
+		_mesh3d.visible = is_visible_in_tree()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_VISIBILITY_CHANGED:
+		_sync_mesh_visibility()
+
+func _exit_tree() -> void:
+	# start_drag() reparents the card via remove_child()+add_child(), which
+	# fires this same exit/re-enter pair - releasing the mesh here would
+	# strand the card meshless for good afterward, since _ready() (and thus
+	# re-acquisition) only ever runs once per node instance. Only release on
+	# an actual deletion.
+	if not is_queued_for_deletion():
+		return
+	if _layer3d and _mesh3d:
+		_layer3d.release_mesh(_mesh3d)
+		_mesh3d = null
+
+func _process(delta: float) -> void:
+	if _mesh3d == null or not is_instance_valid(_mesh3d) or _layer3d == null:
+		return
+	if not is_visible_in_tree():
+		return
+	var gt := get_global_transform()
+	var top_left: Vector2 = gt.origin
+	var bottom_right: Vector2 = gt * CARD_SIZE
+	var rect := Rect2(top_left, bottom_right - top_left)
+	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+		return
+	var target_tilt := Vector2.ZERO
+	if _dragging:
+		# The drag offset keeps the cursor centered on the card, so the
+		# hover-style "mouse position within the rect" calc below would
+		# always read dead center here. Bank on drag velocity instead.
+		var vel := (global_position - _prev_drag_pos) / maxf(delta, 0.0001)
+		target_tilt = Vector2(clampf(-vel.x * 0.0006, -1.0, 1.0), clampf(vel.y * 0.0004, -1.0, 1.0)) * MAX_TILT_RAD
+	elif is_in_hand:
+		var mouse_pos := get_global_mouse_position()
+		if rect.has_point(mouse_pos):
+			var local := (mouse_pos - rect.get_center()) / (rect.size * 0.5)
+			target_tilt = Vector2(clampf(local.x, -1.0, 1.0), clampf(local.y, -1.0, 1.0)) * MAX_TILT_RAD
+	_prev_drag_pos = global_position
+	_tilt_current = _tilt_current.lerp(target_tilt, clampf(delta * 10.0, 0.0, 1.0))
+	# place() turns z_order into world Z via *0.01 (see card_3d_layer.gd) - the
+	# camera sits at world Z=10, so a card-count-scale index like get_index()
+	# is a safe, tiny nudge, but the old sentinel of 1000 here became a full
+	# 10.0 world-unit shift, landing the mesh exactly at the camera and
+	# clipping it out of view entirely. 50 (world Z 0.5) is still comfortably
+	# ahead of any realistic hand/board index while staying well inside the
+	# camera's near/far planes.
+	var z_order := 50 if _dragging else get_index()
+	_layer3d.place(_mesh3d, rect, _tilt_current, z_order)
 
 ## Wraps any keyword (Guardian, Rush, Rummage, ...) found in a card's
 ## description with the same color used for that keyword's ability badge.
@@ -227,10 +346,22 @@ func set_selected(value: bool) -> void:
 	_is_selected = value
 	position.y = -24 if value else 0
 
+## Tween finished-callbacks read _mesh3d fresh from self rather than binding
+## it as a Callable argument up front - the card (and its mesh) can be freed
+## by a board refresh before the tween fires, and a freed Node bound into a
+## delayed Callable throws instead of failing safely (see 74726b8's fix for
+## the same class of bug in board.gd's hover-preview timer).
+func _clear_flash_tint() -> void:
+	if _layer3d and is_instance_valid(_mesh3d):
+		_layer3d.set_flash_tint(_mesh3d, null)
+
 func damage_flash() -> void:
 	var tween = create_tween()
 	tween.tween_property(self, "modulate", Color(1, 0.2, 0.2), 0.1)
 	tween.tween_property(self, "modulate", Color.WHITE, 0.2)
+	if _mesh3d and _layer3d:
+		_layer3d.set_flash_tint(_mesh3d, Color(1, 0.2, 0.2))
+		tween.finished.connect(_clear_flash_tint, CONNECT_ONE_SHOT)
 
 func animate_transform() -> void:
 	# Brief red flash + scale punch on the card itself
@@ -240,6 +371,9 @@ func animate_transform() -> void:
 	flash.tween_property(self, "modulate", Color.WHITE, 0.45).set_delay(0.12)
 	flash.tween_property(self, "scale", base_scale * 1.18, 0.12)
 	flash.tween_property(self, "scale", base_scale, 0.22).set_delay(0.12)
+	if _mesh3d and _layer3d:
+		_layer3d.set_flash_tint(_mesh3d, Color(1.6, 0.15, 0.15))
+		flash.finished.connect(_clear_flash_tint, CONNECT_ONE_SHOT)
 
 	# Ring of red orbs that spiral inward by rotating + shrinking their container
 	var swirl := Node2D.new()
@@ -270,6 +404,14 @@ func animate_transform() -> void:
 func start_drag() -> void:
 	if not is_in_hand:
 		clicked.emit(self)
+		return
+	# board.gd's own _input() hit-tests hand cards and calls this directly,
+	# then (since it never marks the event handled) the wrapper Button's own
+	# button_down signal fires the same call again for the same click. A
+	# second entry here would re-capture _original_parent as the viewport
+	# (since that's this card's parent by then), corrupting return_to_hand()
+	# into dropping the card at the screen's literal (0,0) origin.
+	if _dragging:
 		return
 	_drag_start_pos = global_position
 	_original_parent = get_parent()
@@ -336,7 +478,13 @@ func _update_mana_dots(cost: int) -> void:
 func _apply_color_theme(color: CardData.CardColor) -> void:
 	var border = CARD_BORDER_COLORS[color]
 	card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0, 0, 0, 0), border, 2))
-	background.texture = CARD_TEMPLATES.get(color, preload("res://assets/card_template.png"))
+	# background is a 2D fallback for when no Card3DLayer is present (see
+	# _ready()) - every color's actual look now comes from its own baked
+	# model (see card_3d_layer.gd's CARD_MODEL_SCENES), so there's no longer
+	# a per-color texture here.
+	background.texture = preload("res://assets/card_template.png")
+	if _mesh3d and _layer3d:
+		_layer3d.configure_theme(_mesh3d, color, data.art if data else null)
 
 func _get_corner_radius() -> int:
 	return 6
@@ -351,7 +499,7 @@ func _make_stylebox(bg: Color, border: Color, border_width: int) -> StyleBoxFlat
 
 func update_piloted_token(piloted: bool) -> void:
 	if is_instance_valid(_pilot_token):
-		remove_child(_pilot_token)
+		_pilot_token.get_parent().remove_child(_pilot_token)
 		_pilot_token.queue_free()
 	_pilot_token = null
 	if not piloted:
@@ -365,7 +513,7 @@ func update_piloted_token(piloted: bool) -> void:
 	style.border_color = Color(1.0, 0.85, 0.5)
 	style.set_border_width_all(1)
 	panel.add_theme_stylebox_override("panel", style)
-	panel.position = Vector2(_mana_dots_end_x + TOKEN_GAP, 14)
+	panel.position = Vector2(_mana_dots_end_x + TOKEN_GAP, 0)
 	var label := Label.new()
 	label.text = "P"
 	label.add_theme_font_override("font", CARD_FONT)
@@ -375,12 +523,12 @@ func update_piloted_token(piloted: bool) -> void:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	panel.add_child(label)
-	add_child(panel)
+	_text_layer_parent().add_child(panel)
 	_pilot_token = panel
 
 func update_reinforce_token(reinforced: bool) -> void:
 	if is_instance_valid(_reinforce_token):
-		remove_child(_reinforce_token)
+		_reinforce_token.get_parent().remove_child(_reinforce_token)
 		_reinforce_token.queue_free()
 	_reinforce_token = null
 	if not reinforced:
@@ -394,7 +542,7 @@ func update_reinforce_token(reinforced: bool) -> void:
 	style.border_color = Color(0.5, 1.0, 0.6)
 	style.set_border_width_all(1)
 	panel.add_theme_stylebox_override("panel", style)
-	panel.position = Vector2(_mana_dots_end_x + TOKEN_GAP, 32)
+	panel.position = Vector2(_mana_dots_end_x + TOKEN_GAP, 17)
 	var label := Label.new()
 	label.text = "R"
 	label.add_theme_font_override("font", CARD_FONT)
@@ -404,5 +552,5 @@ func update_reinforce_token(reinforced: bool) -> void:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	panel.add_child(label)
-	add_child(panel)
+	_text_layer_parent().add_child(panel)
 	_reinforce_token = panel

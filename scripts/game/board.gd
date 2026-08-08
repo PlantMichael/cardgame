@@ -105,6 +105,7 @@ func _ready() -> void:
 	_create_decline_button()
 	set_process_input(true)
 	preview_card.modulate = Color(1, 1, 1, 0)
+	preview_card.visible = false
 	card_preview_zone.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	card_preview_zone.size = Vector2(_PREVIEW_W, _PREVIEW_H)
 	_ignore_control_input(card_preview_zone)
@@ -586,6 +587,7 @@ func _show_card_preview(data: CardData, minion: Minion = null, source_rect: Rect
 		var py: float = source_rect.get_center().y - _PREVIEW_H * 0.5
 		py = clamp(py, 0.0, vp.y - _PREVIEW_H)
 		card_preview_zone.position = Vector2(px, py)
+	preview_card.visible = true
 	preview_card.modulate = Color(1, 1, 1, 1)
 
 func _hide_card_preview() -> void:
@@ -596,6 +598,7 @@ func _hide_card_preview() -> void:
 	await get_tree().create_timer(0.08).timeout
 	if _hide_scheduled:
 		preview_card.modulate = Color(1, 1, 1, 0)
+		preview_card.visible = false
 		_hide_scheduled = false
 
 func _load_keywords() -> void:
@@ -774,6 +777,14 @@ func _on_card_dropped(card: Card) -> void:
 		var board_rect = player_board_zone.get_global_rect().grow(20)
 		if board_rect.has_point(mouse_pos) and game_state.player.board.size() < PlayerState.MAX_BOARD_SIZE:
 			var card_data_to_play = card.data
+			# queue_free() before remove_child(): _exit_tree() only releases
+			# the 3D mesh when is_queued_for_deletion() is already true (see
+			# card.gd) - removing first and freeing later (in
+			# _finish_play_card/_finish_play_stratagem) leaves the card
+			# out of the tree before it's ever marked for deletion, so that
+			# guard never sees it queued and the mesh is orphaned forever at
+			# the drop spot, looking like a stuck duplicate of the card.
+			card.queue_free()
 			get_viewport().remove_child(card)
 			call_deferred("_finish_play_card", card, card_data_to_play)
 			return
@@ -784,6 +795,7 @@ func _on_card_dropped(card: Card) -> void:
 	if card.data.card_type == CardData.CardType.STRATAGEM:
 		if not _stratagem_needs_target(card.data):
 			var card_data_to_play = card.data
+			card.queue_free()
 			get_viewport().remove_child(card)
 			call_deferred("_finish_play_stratagem", card, card_data_to_play, null, "")
 			return
@@ -815,6 +827,7 @@ func _on_card_dropped(card: Card) -> void:
 								continue
 						var card_data_to_play = card.data
 						var target_minion = target_card.minion
+						card.queue_free()
 						get_viewport().remove_child(card)
 						call_deferred("_finish_play_stratagem", card, card_data_to_play, target_minion, "")
 						return
@@ -822,11 +835,13 @@ func _on_card_dropped(card: Card) -> void:
 		if not _stratagem_needs_creature_target(card.data):
 			if player_hero.get_global_rect().grow(10).has_point(mouse_pos):
 				var card_data_to_play = card.data
+				card.queue_free()
 				get_viewport().remove_child(card)
 				call_deferred("_finish_play_stratagem", card, card_data_to_play, null, game_state.player.player_id)
 				return
 			if opponent_hero.get_global_rect().grow(10).has_point(mouse_pos):
 				var card_data_to_play = card.data
+				card.queue_free()
 				get_viewport().remove_child(card)
 				call_deferred("_finish_play_stratagem", card, card_data_to_play, null, game_state.opponent.player_id)
 				return
@@ -852,15 +867,18 @@ func _refresh_hand() -> void:
 	# would keep returning these nodes (and their signal connections) until
 	# then, piling up indefinitely if this runs more than once per frame (easy
 	# during a fast-paced match). remove_child() detaches immediately so every
-	# call starts from a truly empty zone.
+	# call starts from a truly empty zone. queue_free() is called first so
+	# is_queued_for_deletion() is already true by the time remove_child()
+	# fires _exit_tree() - Card._exit_tree() only releases its 3D mesh when
+	# that's set, otherwise the mesh is orphaned and stays rendered forever.
 	for c in player_hand_zone.get_children():
 		c.hide()
-		player_hand_zone.remove_child(c)
 		c.queue_free()
+		player_hand_zone.remove_child(c)
 	for c in opponent_hand_zone.get_children():
 		c.hide()
-		opponent_hand_zone.remove_child(c)
 		c.queue_free()
+		opponent_hand_zone.remove_child(c)
 
 	# Hearthstone-style squish: cards keep comfortable spacing until the hand
 	# would overflow the zone, then overlap progressively to keep fitting.
@@ -901,12 +919,12 @@ func _refresh_hand() -> void:
 func _refresh_boards() -> void:
 	for c in player_board_zone.get_children():
 		c.hide()
-		player_board_zone.remove_child(c)
 		c.queue_free()
+		player_board_zone.remove_child(c)
 	for c in opponent_board_zone.get_children():
 		c.hide()
-		opponent_board_zone.remove_child(c)
 		c.queue_free()
+		opponent_board_zone.remove_child(c)
 
 	var is_my_turn = game_state.is_local_player_turn()
 
@@ -1109,6 +1127,7 @@ func announce_card(card_data: CardData) -> void:
 	_show_card_preview(card_data)
 	await get_tree().create_timer(1.0).timeout
 	preview_card.modulate = Color(1, 1, 1, 0)
+	preview_card.visible = false
 
 func animate_creature_attack(attacker_instance_id: String, attacker_player_id: String, target_instance_id: String) -> void:
 	var is_local_attacker = (attacker_player_id == game_state.player.player_id)

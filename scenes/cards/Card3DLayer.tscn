@@ -1,0 +1,35 @@
+[gd_scene load_steps=3 format=3 uid="uid://cawtr5l4r5ckj"]
+
+[ext_resource type="Script" path="res://scripts/cards/card_3d_layer.gd" id="1_layer"]
+
+[sub_resource type="Environment" id="Environment_1"]
+ambient_light_source = 2
+ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_energy = 0.9
+tonemap_mode = 2
+
+[node name="Card3DLayer" type="SubViewportContainer"]
+mouse_filter = 2
+stretch = true
+script = ExtResource("1_layer")
+
+[node name="SubViewport" type="SubViewport" parent="."]
+transparent_bg = true
+handle_input_locally = false
+size = Vector2i(2, 2)
+render_target_update_mode = 4
+
+[node name="Camera3D" type="Camera3D" parent="SubViewport"]
+projection = 1
+current = true
+size = 10.8
+far = 20.0
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="SubViewport"]
+transform = Transform3D(0.906308, 0.271654, -0.323744, 0, 0.766044, 0.642788, 0.422618, -0.582563, 0.694272, 0, 0, 10)
+light_energy = 1.1
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="SubViewport"]
+environment = SubResource("Environment_1")
+
+[node name="Cards" type="Node3D" parent="SubViewport"]
