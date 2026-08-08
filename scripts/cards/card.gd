@@ -27,6 +27,15 @@ const MAX_TILT_RAD := 0.21 # ~12 degrees
 ## text-overlay wiring below.
 @export var use_text_overlay: bool = true
 
+## Hover-preview instances (board.gd, deck builder) share the same global 3D
+## camera/texture as every hand/board card mesh (see card_3d_layer.gd) - their
+## own on-screen rect rarely overlaps another card's, but when it does (e.g. a
+## card sitting near the fixed preview-panel corner), ordinary z_order
+## (get_index()) can lose the depth sort to that other card, letting it render
+## in front of the preview within the shared texture. Forces this instance's
+## mesh to always win that sort instead.
+@export var render_on_top: bool = false
+
 var data: CardData = null
 var _layer3d = null
 var _mesh3d: MeshInstance3D = null
@@ -204,10 +213,15 @@ func _update_mesh_transform(delta: float) -> void:
 	# camera sits at world Z=10, so a card-count-scale index like get_index()
 	# is a safe, tiny nudge, but the old sentinel of 1000 here became a full
 	# 10.0 world-unit shift, landing the mesh exactly at the camera and
-	# clipping it out of view entirely. 50 (world Z 0.5) is still comfortably
-	# ahead of any realistic hand/board index while staying well inside the
-	# camera's near/far planes.
-	var z_order := 50 if _dragging else get_index()
+	# clipping it out of view entirely. 50 (world Z 0.5, dragging) and 100
+	# (world Z 1.0, render_on_top) are still comfortably ahead of any
+	# realistic hand/board index while staying well inside the camera's
+	# near/far planes.
+	var z_order := get_index()
+	if _dragging:
+		z_order = 50
+	elif render_on_top:
+		z_order = 100
 	_layer3d.place(_mesh3d, rect, _tilt_current, z_order)
 	if not _mesh_placed:
 		_mesh_placed = true
@@ -359,7 +373,7 @@ func set_playable(value: bool) -> void:
 	# modulate only reaches the 2D fallback visuals (background/card_visual) -
 	# the mesh and its text overlay live outside Card's own canvas item tree
 	# (see _layer3d), so they need their own dim toggle to actually darken.
-	modulate = Color.WHITE if value else Color(0.5, 0.5, 0.5, 0.8)
+	modulate = Color.WHITE if value else Color(0.32, 0.32, 0.32, 0.85)
 	if _mesh3d and _layer3d:
 		_layer3d.set_dimmed(_mesh3d, not value)
 

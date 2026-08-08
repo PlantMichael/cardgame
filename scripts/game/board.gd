@@ -32,6 +32,12 @@ var selected_attacker: Card = null
 var _dragging_stratagem: bool = false
 var _dragging_card: bool = false
 var _hide_scheduled: bool = false
+## True while a full-screen modal (graveyard viewer, rummage/transform
+## picker) is open - see _open_modal_overlay(). Its own card thumbnails
+## share the same global 3D camera/texture as the hover-preview (see
+## card_3d_layer.gd), so instead of fighting over depth-sort priority the
+## preview simply stays hidden for as long as a modal owns the screen.
+var _modal_open: bool = false
 var _hover_card: Card = null
 const HOVER_PREVIEW_DELAY_SEC := 0.4
 var _challenge_mode: bool = false
@@ -106,6 +112,7 @@ func _ready() -> void:
 	set_process_input(true)
 	preview_card.modulate = Color(1, 1, 1, 0)
 	preview_card.visible = false
+	preview_card.render_on_top = true
 	card_preview_zone.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	card_preview_zone.size = Vector2(_PREVIEW_W, _PREVIEW_H)
 	_ignore_control_input(card_preview_zone)
@@ -493,6 +500,11 @@ func _highlight_board_zone(value: bool) -> void:
 # --- Hover preview ---
 
 func _update_hover(mouse_pos: Vector2) -> void:
+	if _modal_open:
+		_hover_card = null
+		_hide_card_preview()
+		return
+
 	if _dragging_card:
 		_hover_card = null
 		_hide_card_preview()
@@ -600,6 +612,24 @@ func _hide_card_preview() -> void:
 		preview_card.modulate = Color(1, 1, 1, 0)
 		preview_card.visible = false
 		_hide_scheduled = false
+
+## Shared setup for every full-screen modal overlay (graveyard viewer,
+## rummage/transform picker) - besides the common CanvasLayer(10) plumbing,
+## this immediately hides the hover-preview and blocks it from reappearing
+## (via _modal_open) until the overlay leaves the tree, however it closes
+## (queue_free() from a button press, or the caller's own cleanup after an
+## awaited selection).
+func _open_modal_overlay() -> CanvasLayer:
+	var overlay := CanvasLayer.new()
+	overlay.layer = 10
+	add_child(overlay)
+	_modal_open = true
+	_hover_card = null
+	_hide_scheduled = false
+	preview_card.modulate = Color(1, 1, 1, 0)
+	preview_card.visible = false
+	overlay.tree_exiting.connect(func(): _modal_open = false)
+	return overlay
 
 func _load_keywords() -> void:
 	var file = FileAccess.open("res://data/keywords.json", FileAccess.READ)
@@ -1238,9 +1268,7 @@ func animate_draw() -> void:
 	flying.queue_free()
 
 func show_graveyard_picker(options: Array[CardData]) -> CardData:
-	var overlay = CanvasLayer.new()
-	overlay.layer = 10
-	add_child(overlay)
+	var overlay := _open_modal_overlay()
 
 	var bg = ColorRect.new()
 	bg.color = Color(0, 0, 0, 0.78)
@@ -1315,9 +1343,7 @@ func _open_graveyard_viewer() -> void:
 	if game_state == null or game_state.player == null:
 		return
 	var graveyard := game_state.player.graveyard
-	var overlay := CanvasLayer.new()
-	overlay.layer = 10
-	add_child(overlay)
+	var overlay := _open_modal_overlay()
 
 	var bg := ColorRect.new()
 	bg.color = Color(0, 0, 0, 0.78)
@@ -1376,9 +1402,7 @@ func _open_graveyard_viewer() -> void:
 	panel.add_child(close_btn)
 
 func show_transform_picker(options: Array[CardData]) -> CardData:
-	var overlay = CanvasLayer.new()
-	overlay.layer = 10
-	add_child(overlay)
+	var overlay := _open_modal_overlay()
 
 	var bg = ColorRect.new()
 	bg.color = Color(0, 0, 0, 0.78)

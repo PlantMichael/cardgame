@@ -124,7 +124,7 @@ const TEXT_OVERLAY_FRONT_MARGIN := 0.25
 ## frame/border too, not just the art/text - and further out in front
 ## (DIM_OVERLAY_FRONT_MARGIN > TEXT_OVERLAY_FRONT_MARGIN) so it clears the
 ## text overlay as well as the mesh, dimming both.
-const DIM_OVERLAY_ALPHA := 0.45
+const DIM_OVERLAY_ALPHA := 0.68
 const DIM_OVERLAY_FRONT_MARGIN := 0.4
 
 func acquire_mesh() -> MeshInstance3D:

@@ -92,6 +92,7 @@ func _load_keywords() -> void:
 func _setup_preview_card() -> void:
 	_preview_card_node = CardScene.instantiate()
 	_preview_card_node.use_text_overlay = false
+	_preview_card_node.render_on_top = true
 	_preview_card_node.scale = Vector2(PREVIEW_SCALE, PREVIEW_SCALE)
 	_preview_card_node.position = Vector2(0, 0)
 	_preview_card_node.input_pickable = false
