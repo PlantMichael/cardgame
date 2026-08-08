@@ -95,7 +95,8 @@ func _ready() -> void:
 			_setup_text_overlay()
 		else:
 			_apply_preview_label_offsets()
-		# _sync_mesh_visibility() above hides the mesh for now: _mesh_placed
+		_sync_mesh_visibility()
+		# The call above hides the mesh for now: _mesh_placed
 		# is still false at this point, and stays false until
 		# _update_mesh_transform() below has positioned it at least once.
 		# That's the real fix for every card flashing/vanishing on every

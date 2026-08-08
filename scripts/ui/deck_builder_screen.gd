@@ -406,13 +406,21 @@ func _deck_stack(card: CardData, count: int) -> Button:
 	btn.add_theme_stylebox_override("hover", hover_s)
 
 	if count >= 2:
-		var back := _mini_card(card, true)
+		var back := _mini_card_backdrop(card)
 		back.position = Vector2(STACK_OFFSET, STACK_OFFSET)
 		btn.add_child(back)
 
-	var front := _mini_card(card, false)
+	# The same baked 3D model battlefield cards use, at deck-list scale - it
+	# never tilts here since Card only tilts while is_in_hand (hover) or
+	# _dragging, and this instance is neither (input_pickable is off below).
+	var front: Card = CardScene.instantiate()
+	front.scale = Vector2(DECK_W / Card.CARD_SIZE.x, DECK_W / Card.CARD_SIZE.x)
 	front.position = Vector2(0, 0)
+	front.input_pickable = false
+	front.set_process_input(false)
 	btn.add_child(front)
+	front.setup(card)
+	_ignore_control_input(front)
 
 	btn.tooltip_text = "%s (%dx) — click to remove" % [card.card_name, count]
 	btn.pressed.connect(func():
@@ -422,57 +430,18 @@ func _deck_stack(card: CardData, count: int) -> Button:
 	)
 	return btn
 
-func _mini_card(card: CardData, is_back: bool) -> Panel:
+## Darker color-swatch card peeking out from behind the front card in a
+## stack of 2+ copies - just a stacking cue, not a full second model.
+func _mini_card_backdrop(card: CardData) -> Panel:
 	var sw: Color = DeckManager.FACTION_SWATCHES[int(card.color)]
 	var panel := Panel.new()
 	panel.size = Vector2(DECK_W, DECK_H)
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var s := StyleBoxFlat.new()
-	s.bg_color = sw.darkened(0.5 if is_back else 0.3)
+	s.bg_color = sw.darkened(0.5)
 	s.set_corner_radius_all(5); s.border_width_top = 1; s.border_color = sw.darkened(0.2)
 	panel.add_theme_stylebox_override("panel", s)
-
-	if not is_back:
-		var vb := VBoxContainer.new()
-		vb.set_anchors_preset(Control.PRESET_FULL_RECT)
-		vb.add_theme_constant_override("separation", 2)
-		vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		panel.add_child(vb)
-
-		var cost_lbl := Label.new()
-		cost_lbl.text = str(card.cost)
-		cost_lbl.add_theme_font_size_override("font_size", 13)
-		cost_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		vb.add_child(cost_lbl)
-
-		var name_lbl := Label.new()
-		name_lbl.text = card.card_name
-		name_lbl.add_theme_font_size_override("font_size", 9)
-		name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		name_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		name_lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		vb.add_child(name_lbl)
-
-		if not card.description.is_empty():
-			var desc := Label.new()
-			desc.text = card.description
-			desc.add_theme_font_size_override("font_size", 7)
-			desc.add_theme_color_override("font_color", Color(0.85, 0.80, 0.60))
-			desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			desc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-			desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			vb.add_child(desc)
-
-		var stats := Label.new()
-		stats.text = "%d/%d" % [card.attack, card.health] if card.card_type == CardData.CardType.CREATURE else "STRAT"
-		stats.add_theme_font_size_override("font_size", 9)
-		stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		stats.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		vb.add_child(stats)
-
 	return panel
 
 # ── Collection refresh ─────────────────────────────────────────────────────
