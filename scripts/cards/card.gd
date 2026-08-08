@@ -90,6 +90,18 @@ func _ready() -> void:
 		else:
 			_apply_preview_label_offsets()
 		_sync_mesh_visibility()
+		# _process() (below) is what normally places the mesh, but a
+		# freshly-added node's first _process() doesn't fire until next
+		# frame - board.refresh() rebuilds every Card in one synchronous
+		# pass, so without this the new mesh would render for one frame at
+		# its default identity transform (world origin, scale 1) instead of
+		# its hand/board spot, reading as every card flashing/vanishing on
+		# every attack, play, death, or end turn. Deferred (not immediate)
+		# so it runs after the hand/board HBoxContainer's own deferred
+		# layout sort - by the time this fires, wrapper.get_global_rect()
+		# already reflects the post-sort position, and it still lands
+		# before this frame is drawn.
+		call_deferred("_update_mesh_transform", 0.0)
 
 ## Renders the card's text (name, description, mana/stat labels, pilot/
 ## reinforce tokens) into a small SubViewport instead of leaving them as
@@ -151,6 +163,9 @@ func _exit_tree() -> void:
 		_mesh3d = null
 
 func _process(delta: float) -> void:
+	_update_mesh_transform(delta)
+
+func _update_mesh_transform(delta: float) -> void:
 	if _mesh3d == null or not is_instance_valid(_mesh3d) or _layer3d == null:
 		return
 	if not is_visible_in_tree():
