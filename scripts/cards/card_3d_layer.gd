@@ -134,6 +134,8 @@ func acquire_mesh() -> MeshInstance3D:
 	_mesh_root.add_child(mi)
 	_add_text_overlay(mi, CardData.CardColor.GENERIC)
 	_add_dim_overlay(mi, CardData.CardColor.GENERIC)
+	_add_highlight_overlay(mi, CardData.CardColor.GENERIC)
+	_add_attack_outline_overlay(mi, CardData.CardColor.GENERIC)
 	return mi
 
 func release_mesh(mesh: MeshInstance3D) -> void:
@@ -168,6 +170,13 @@ func _add_text_overlay(mesh: MeshInstance3D, color: CardData.CardColor) -> void:
 	# otherwise blank out every card that opts out of the overlay (preview
 	# instances - see Card.use_text_overlay) behind a solid white square.
 	mat.albedo_color = Color(1, 1, 1, 0)
+	# Explicit draw order among the mesh's transparent overlays (text < dim <
+	# highlight, see their own render_priority) - the front-margin Z offsets
+	# below are for depth-testing against the mesh's own opaque surfaces,
+	# but transparent-vs-transparent order isn't reliably resolved by
+	# distance sort alone for near-coplanar quads this close together, so it
+	# needs to be nailed down explicitly instead of left to chance.
+	mat.render_priority = 1
 	overlay.set_surface_override_material(0, mat)
 	mesh.add_child(overlay)
 	_reposition_text_overlay(mesh, color)
@@ -204,6 +213,7 @@ func _add_dim_overlay(mesh: MeshInstance3D, color: CardData.CardColor) -> void:
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mat.albedo_color = Color(0, 0, 0, DIM_OVERLAY_ALPHA)
+	mat.render_priority = 2
 	overlay.set_surface_override_material(0, mat)
 	mesh.add_child(overlay)
 	_reposition_dim_overlay(mesh, color)
@@ -229,6 +239,137 @@ func set_dimmed(mesh: MeshInstance3D, dimmed: bool) -> void:
 	if overlay == null:
 		return
 	overlay.visible = dimmed
+
+## Translucent colored quad shown over a card highlighted as an attack/
+## challenge/stratagem target, an eligible attacker, summoning-sick, or
+## silenced - the 3D equivalent of Card's old card_visual border/panel
+## recolor for those states, which stopped being visible once the mesh
+## (drawn on top of every other 2D visual under it) became the card's actual
+## on-screen body. Same idea as the dim overlay, just a settable color
+## instead of always black, and further forward (HIGHLIGHT_OVERLAY_FRONT_
+## MARGIN > DIM_OVERLAY_FRONT_MARGIN) so it's never accidentally covered.
+const HIGHLIGHT_OVERLAY_ALPHA := 0.45
+const HIGHLIGHT_OVERLAY_FRONT_MARGIN := 0.55
+
+func _add_highlight_overlay(mesh: MeshInstance3D, color: CardData.CardColor) -> void:
+	var overlay := MeshInstance3D.new()
+	overlay.name = "HighlightOverlay"
+	overlay.visible = false
+	var quad := QuadMesh.new()
+	quad.size = _native_size
+	overlay.mesh = quad
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.albedo_color = Color(1, 1, 1, 0)
+	mat.render_priority = 3
+	overlay.set_surface_override_material(0, mat)
+	mesh.add_child(overlay)
+	_reposition_highlight_overlay(mesh, color)
+
+## Re-centers the highlight overlay's forward offset for mesh's current
+## color - same reasoning as _reposition_text_overlay(), called alongside it.
+func _reposition_highlight_overlay(mesh: MeshInstance3D, color: CardData.CardColor) -> void:
+	var overlay := mesh.get_node_or_null("HighlightOverlay") as MeshInstance3D
+	if overlay == null:
+		return
+	var counter_rotation := _stand_basis().inverse()
+	overlay.transform.basis = counter_rotation
+	var front_z: float = _front_z_by_color.get(color, _front_z_by_color.get(CardData.CardColor.GENERIC, 0.0))
+	var offset_amount := front_z * (1.0 + HIGHLIGHT_OVERLAY_FRONT_MARGIN)
+	overlay.position = counter_rotation * Vector3(0, 0, offset_amount)
+
+## Shows/hides a translucent color wash over the whole card - see
+## _add_highlight_overlay(). Pass null to clear. No-op if the mesh has no
+## overlay (stale reference).
+func set_highlight(mesh: MeshInstance3D, color) -> void:
+	if not is_instance_valid(mesh):
+		return
+	var overlay := mesh.get_node_or_null("HighlightOverlay") as MeshInstance3D
+	if overlay == null:
+		return
+	if color == null:
+		overlay.visible = false
+		return
+	overlay.visible = true
+	var mat := overlay.get_surface_override_material(0)
+	if mat is StandardMaterial3D:
+		var c: Color = color
+		(mat as StandardMaterial3D).albedo_color = Color(c.r, c.g, c.b, HIGHLIGHT_OVERLAY_ALPHA)
+
+## A card able to attack gets a border-only outline (not a full color wash
+## like set_highlight()'s other states) - the 2D version was always a
+## transparent-center bordered stylebox, not a filled panel, and a solid
+## wash reads as "this card is disabled" rather than "this card is ready".
+## Drawn via a tiny UV-distance-to-edge shader on its own quad (same size/
+## position scheme as the other overlays) since there's no bordered texture
+## asset to draw instead.
+const ATTACK_OUTLINE_THICKNESS := 0.015
+const ATTACK_OUTLINE_COLOR := Color(1.0, 0.85, 0.2)
+var _attack_outline_shader: Shader = null
+
+func _get_attack_outline_shader() -> Shader:
+	if _attack_outline_shader == null:
+		var shader := Shader.new()
+		shader.code = """
+shader_type spatial;
+render_mode unshaded, cull_disabled, blend_mix, depth_draw_always;
+
+uniform vec4 outline_color : source_color = vec4(1.0, 0.85, 0.2, 1.0);
+uniform float thickness : hint_range(0.0, 0.5) = 0.015;
+
+void fragment() {
+	float edge_dist = min(min(UV.x, 1.0 - UV.x), min(UV.y, 1.0 - UV.y));
+	if (edge_dist > thickness) {
+		discard;
+	}
+	ALBEDO = outline_color.rgb;
+	ALPHA = outline_color.a;
+}
+"""
+		_attack_outline_shader = shader
+	return _attack_outline_shader
+
+func _add_attack_outline_overlay(mesh: MeshInstance3D, color: CardData.CardColor) -> void:
+	var overlay := MeshInstance3D.new()
+	overlay.name = "AttackOutlineOverlay"
+	overlay.visible = false
+	var quad := QuadMesh.new()
+	quad.size = _native_size
+	overlay.mesh = quad
+	var mat := ShaderMaterial.new()
+	mat.shader = _get_attack_outline_shader()
+	mat.set_shader_parameter("outline_color", ATTACK_OUTLINE_COLOR)
+	mat.set_shader_parameter("thickness", ATTACK_OUTLINE_THICKNESS)
+	mat.render_priority = 4
+	overlay.set_surface_override_material(0, mat)
+	mesh.add_child(overlay)
+	_reposition_attack_outline_overlay(mesh, color)
+
+## Re-centers the attack outline's forward offset for mesh's current color -
+## same reasoning as _reposition_text_overlay(), called alongside it. Placed
+## in front of even the highlight overlay so a "can attack" outline never
+## gets covered by another state's wash.
+func _reposition_attack_outline_overlay(mesh: MeshInstance3D, color: CardData.CardColor) -> void:
+	var overlay := mesh.get_node_or_null("AttackOutlineOverlay") as MeshInstance3D
+	if overlay == null:
+		return
+	var counter_rotation := _stand_basis().inverse()
+	overlay.transform.basis = counter_rotation
+	var front_z: float = _front_z_by_color.get(color, _front_z_by_color.get(CardData.CardColor.GENERIC, 0.0))
+	var offset_amount := front_z * (1.0 + HIGHLIGHT_OVERLAY_FRONT_MARGIN + 0.1)
+	overlay.position = counter_rotation * Vector3(0, 0, offset_amount)
+
+## Shows/hides the attack-eligible outline - see _add_attack_outline_overlay().
+## No-op if the mesh has no overlay (stale reference).
+func set_attack_outline(mesh: MeshInstance3D, shown: bool) -> void:
+	if not is_instance_valid(mesh):
+		return
+	var overlay := mesh.get_node_or_null("AttackOutlineOverlay") as MeshInstance3D
+	if overlay == null:
+		return
+	overlay.visible = shown
 
 ## Projects a card's baked text (see Card._setup_text_overlay()) onto its
 ## mesh's text-overlay quad. No-op if the mesh has no overlay - either it's
@@ -263,6 +404,8 @@ func configure_theme(mesh: MeshInstance3D, color: CardData.CardColor, art: Textu
 		mesh.set_surface_override_material(i, null)
 	_reposition_text_overlay(mesh, color)
 	_reposition_dim_overlay(mesh, color)
+	_reposition_highlight_overlay(mesh, color)
+	_reposition_attack_outline_overlay(mesh, color)
 
 ## Tints the whole card (used for damage flash / transform pulses). Pass
 ## null to clear back to the normal per-surface materials.

@@ -93,6 +93,7 @@ func _setup_preview_card() -> void:
 	_preview_card_node = CardScene.instantiate()
 	_preview_card_node.use_text_overlay = false
 	_preview_card_node.render_on_top = true
+	_preview_card_node.extra_mana_pip_offset_y = 10.0
 	_preview_card_node.scale = Vector2(PREVIEW_SCALE, PREVIEW_SCALE)
 	_preview_card_node.position = Vector2(0, 0)
 	_preview_card_node.input_pickable = false
@@ -415,12 +416,15 @@ func _deck_stack(card: CardData, count: int) -> Button:
 	# never tilts here since Card only tilts while is_in_hand (hover) or
 	# _dragging, and this instance is neither (input_pickable is off below).
 	var front: Card = CardScene.instantiate()
+	front.use_text_overlay = false
 	front.scale = Vector2(DECK_W / Card.CARD_SIZE.x, DECK_W / Card.CARD_SIZE.x)
 	front.position = Vector2(0, 0)
 	front.input_pickable = false
 	front.set_process_input(false)
 	btn.add_child(front)
-	front.setup(card)
+	# btn is not yet in the scene tree here (added by the caller after this
+	# returns), so front's @onready vars aren't ready yet - defer setup().
+	front.call_deferred("setup", card)
 	_ignore_control_input(front)
 
 	btn.tooltip_text = "%s (%dx) — click to remove" % [card.card_name, count]
@@ -526,6 +530,7 @@ func _coll_card(card: CardData, in_deck: int, deck_full: bool) -> Dictionary:
 	btn.add_theme_stylebox_override("hover", hover_s)
 
 	var card_node: Card = CardScene.instantiate()
+	card_node.use_text_overlay = false
 	card_node.scale = Vector2(COLL_CARD_SCALE, COLL_CARD_SCALE)
 	card_node.position = Vector2(0, 0)
 	card_node.input_pickable = false

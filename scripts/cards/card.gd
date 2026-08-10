@@ -87,6 +87,14 @@ const CARD_BORDER_COLORS = {
 func _ready() -> void:
 	mana_dots_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	image_size_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	_apply_text_outlines()
+	# Non-overlay cards (deck builder grid/stack, hover previews) skip the 3D
+	# mesh entirely and keep the plain flat 2D background/card_visual/labels -
+	# the baked mesh is tuned for the board's own viewport compositing and
+	# doesn't render right elsewhere, so these instances never acquire one.
+	if not use_text_overlay:
+		_apply_flat_label_offsets()
+		return
 	_layer3d = get_tree().get_first_node_in_group("card_3d_layer")
 	if _layer3d:
 		_mesh3d = _layer3d.acquire_mesh()
@@ -94,32 +102,48 @@ func _ready() -> void:
 		# old 2D background/panel showing double-draws them on top of it.
 		# art_texture stays visible: it's baked into the text overlay
 		# alongside the labels (see _setup_text_overlay()) for baked cards so
-		# it tilts with the card, and for preview cards it's left as a plain
-		# flat 2D layer same as the other labels (previews never tilt).
+		# it tilts with the card.
 		background.hide()
 		card_visual.hide()
 		if data:
 			_layer3d.configure_theme(_mesh3d, data.color, data.art)
-		if use_text_overlay:
-			_setup_text_overlay()
-		else:
-			_apply_preview_label_offsets()
+		_setup_text_overlay()
 		_sync_mesh_visibility()
-		# The call above hides the mesh for now: _mesh_placed
-		# is still false at this point, and stays false until
-		# _update_mesh_transform() below has positioned it at least once.
-		# That's the real fix for every card flashing/vanishing on every
-		# attack/play/death/end-turn - board.refresh() rebuilds every Card
-		# in one synchronous pass, and _process() (which normally places the
-		# mesh) doesn't fire on a freshly-added node until next frame, so
-		# without the visibility gate the new mesh would render for a frame
-		# at its default identity transform (world origin, scale 1) instead
-		# of its hand/board spot. The call below is just an optimization to
-		# skip that hidden frame when possible - deferred so it runs after
-		# the hand/board HBoxContainer's own deferred layout sort, meaning
-		# wrapper.get_global_rect() is usually already correct by the time
-		# it fires - but correctness no longer depends on that timing.
-		call_deferred("_update_mesh_transform", 0.0)
+		# The call above hides the mesh for now: _mesh_placed stays false,
+		# and the mesh stays hidden, until _process()'s first call to
+		# _update_mesh_transform() below positions it - which won't happen
+		# until next frame, since _process() never fires on a freshly-added
+		# node during the frame it was added. That's the fix for every card
+		# flashing/vanishing on every attack/play/death/end-turn -
+		# board.refresh() rebuilds every Card in one synchronous pass, so
+		# without this gate the new mesh would render for a frame at its
+		# default identity transform (world origin, scale 1) instead of its
+		# hand/board spot.
+		#
+		# This used to also fire an immediate call_deferred("_update_mesh_
+		# transform") here to reveal the mesh a frame sooner, gambling that
+		# the hand/board HBoxContainer's own deferred layout sort had already
+		# run by then. When that gamble lost (still-stale, e.g. pre-resort
+		# rect from a board.refresh() fired mid-AI-turn), _mesh_placed still
+		# flipped true off that first wrong placement, revealing the mesh at
+		# the wrong spot for a frame before _process() corrected it next
+		# frame - the actual flash. Waiting for the ordinary _process() tick
+		# guarantees the container has already resorted (its deferred sort
+		# was queued the same frame the card was added, so it flushes before
+		# this card's next-frame _process() ever runs), so the first
+		# placement - and thus the first reveal - is always correct.
+
+## Black outline behind every card text element so it stays legible over
+## busy art or a keyword's own fill color (BBCode [color=] tags only touch
+## fill, not the outline pass, so highlighted keywords get one too).
+## Font size is untouched - outline_size is a separate stroke property.
+const TEXT_OUTLINE_SIZE := 3
+const TEXT_OUTLINE_COLOR := Color.BLACK
+
+func _apply_text_outlines() -> void:
+	for label in [name_label, description_label, attack_label, health_label]:
+		label.add_theme_constant_override("outline_size", TEXT_OUTLINE_SIZE)
+		label.add_theme_color_override("font_outline_color", TEXT_OUTLINE_COLOR)
 
 ## Renders the card's text (name, description, mana/stat labels, pilot/
 ## reinforce tokens) into a small SubViewport instead of leaving them as
@@ -144,14 +168,18 @@ func _setup_text_overlay() -> void:
 func _text_layer_parent() -> Node:
 	return _text_viewport if _text_viewport else self
 
-## Preview cards (use_text_overlay = false) keep their labels as plain flat
-## 2D Controls rather than baking them into the 3D overlay, and read better
-## at the preview panel's larger scale with a different vertical rhythm than
-## Card.tscn's baseline layout (tuned for the baked hand/board cards):
-## mana pips sit lower, and description/stats sit higher - stats more so,
-## since they anchor the bottom edge and have the least room to spare.
-func _apply_preview_label_offsets() -> void:
-	mana_dots_panel.position.y += 10
+## Extra downward nudge for the mana pips, on top of the base flat-layout
+## offset below - opt-in per instance (see deck builder's preview panel)
+## rather than applying to every non-overlay card.
+@export var extra_mana_pip_offset_y: float = 0.0
+
+## Nudges the flat 2D layout (Card.tscn's baseline positions, tuned for the
+## baked hand/board cards) to read better on non-overlay cards: mana pips
+## down away from the top edge, stats up and description up slightly to
+## close the gap it leaves.
+func _apply_flat_label_offsets() -> void:
+	mana_dots_panel.position.y += 10 + extra_mana_pip_offset_y
+	description_label.position.y -= 8
 	stats_row.position.y -= 7
 	attack_label.position.y -= 7
 	health_label.position.y -= 7
@@ -327,10 +355,15 @@ func setup(card_data: CardData) -> void:
 	_apply_color_theme(card_data.color)
 	call_deferred("_fit_text")
 
+func is_target_highlighted() -> bool:
+	return _is_highlighted_as_target
+
 func set_targeted(value: bool) -> void:
 	_is_highlighted_as_target = value
 	if value:
 		card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0.4, 0.1, 0.4, 0.55), Color(0.9, 0.3, 0.9, 1.0), 3))
+		if _mesh3d and _layer3d:
+			_layer3d.set_highlight(_mesh3d, TARGETED_HIGHLIGHT)
 	else:
 		# Restore appropriate state
 		if minion and minion.can_attack():
@@ -377,10 +410,16 @@ func set_playable(value: bool) -> void:
 	if _mesh3d and _layer3d:
 		_layer3d.set_dimmed(_mesh3d, not value)
 
+const SUMMONING_SICK_HIGHLIGHT := Color(0.35, 0.1, 0.5)
+const TARGETED_HIGHLIGHT := Color(0.9, 0.3, 0.9)
+const SILENCED_HIGHLIGHT := Color(0.45, 0.45, 0.50)
+
 func set_summoning_sick(value: bool) -> void:
 	if value:
 		var border = CARD_BORDER_COLORS[data.color]
 		card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0.18, 0.05, 0.28, 0.75), border, 2))
+		if _mesh3d and _layer3d:
+			_layer3d.set_highlight(_mesh3d, SUMMONING_SICK_HIGHLIGHT)
 
 func set_can_attack(value: bool) -> void:
 	if value:
@@ -388,6 +427,8 @@ func set_can_attack(value: bool) -> void:
 		card_visual.add_theme_stylebox_override("panel", s)
 	else:
 		_apply_color_theme(data.color)
+	if _mesh3d and _layer3d:
+		_layer3d.set_attack_outline(_mesh3d, value)
 
 func set_selected(value: bool) -> void:
 	_is_selected = value
@@ -498,6 +539,8 @@ func _apply_silenced_style() -> void:
 	card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0.22, 0.22, 0.25, 0.55), Color(0.45, 0.45, 0.50), 2))
 	name_label.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55))
 	description_label.add_theme_color_override("default_color", Color(0.55, 0.55, 0.55))
+	if _mesh3d and _layer3d:
+		_layer3d.set_highlight(_mesh3d, SILENCED_HIGHLIGHT)
 
 func _update_mana_dots(cost: int) -> void:
 	for child in mana_dots_panel.get_children():
@@ -532,6 +575,14 @@ func _apply_color_theme(color: CardData.CardColor) -> void:
 	background.texture = preload("res://assets/card_template.png")
 	if _mesh3d and _layer3d:
 		_layer3d.configure_theme(_mesh3d, color, data.art if data else null)
+		# Baseline reset for the 3D highlight overlay - setup()/setup_as_minion()
+		# always route through here first, so a card reused across a board
+		# refresh (see board.gd's _reconcile_board_zone) doesn't keep showing a
+		# stale targeted/can-attack/sick/silenced tint from its previous state.
+		# Callers that need a highlight (set_targeted, set_can_attack,
+		# set_summoning_sick, _apply_silenced_style) set it again afterward.
+		_layer3d.set_highlight(_mesh3d, null)
+		_layer3d.set_attack_outline(_mesh3d, false)
 
 func _get_corner_radius() -> int:
 	return 6
@@ -566,6 +617,8 @@ func update_piloted_token(piloted: bool) -> void:
 	label.add_theme_font_override("font", CARD_FONT)
 	label.add_theme_font_size_override("font_size", 9)
 	label.add_theme_color_override("font_color", Color.WHITE)
+	label.add_theme_constant_override("outline_size", TEXT_OUTLINE_SIZE)
+	label.add_theme_color_override("font_outline_color", TEXT_OUTLINE_COLOR)
 	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -595,6 +648,8 @@ func update_reinforce_token(reinforced: bool) -> void:
 	label.add_theme_font_override("font", CARD_FONT)
 	label.add_theme_font_size_override("font_size", 9)
 	label.add_theme_color_override("font_color", Color.WHITE)
+	label.add_theme_constant_override("outline_size", TEXT_OUTLINE_SIZE)
+	label.add_theme_color_override("font_outline_color", TEXT_OUTLINE_COLOR)
 	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER

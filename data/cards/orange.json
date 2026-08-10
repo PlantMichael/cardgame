@@ -112,7 +112,7 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "mech",
-		"description": "When piloted, gain 1+/+1",
+		"description": "Pilotable. When piloted, gain 1+/+1",
 		"attack": 3,
 		"health": 3,
 		"abilities": [
@@ -167,7 +167,7 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "mech",
-		"description": "Rush",
+		"description": "Pilotable. Rush",
 		"attack": 5,
 		"health": 2,
 		"abilities": [
@@ -204,7 +204,7 @@
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "mech",
-		"description": "Cloaked.",
+		"description": "Pilotable. Cloaked.",
 		"attack": 4,
 		"health": 4,
 		"abilities": [
@@ -241,7 +241,7 @@
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "mech",
-		"description": "Guardian",
+		"description": "Pilotable. Guardian",
 		"attack": 3,
 		"health": 7,
 		"abilities": [
@@ -259,7 +259,7 @@
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "mech",
-		"description": "Guardian.",
+		"description": "Pilotable. Guardian.",
 		"attack": 4,
 		"health": 5,
 		"abilities": [
@@ -296,7 +296,7 @@
 		"card_type": "CREATURE",
 		"rarity": "LEGENDARY",
 		"tribe": "mech",
-		"description": "On pilot, gain Rush and Cloaked. When this creature dies, eject the pilot.",
+		"description": "Pilotable. On pilot, gain Rush and Cloaked. When this creature dies, eject the pilot.",
 		"attack": 6,
 		"health": 6,
 		"abilities": [
@@ -354,7 +354,7 @@
 		"card_type": "CREATURE",
 		"rarity": "EPIC",
 		"tribe": "mech",
-		"description": "Rush",
+		"description": "Pilotable. Rush",
 		"attack": 6,
 		"health": 7,
 		"abilities": [
@@ -372,7 +372,7 @@
 		"card_type": "CREATURE",
 		"rarity": "EPIC",
 		"tribe": "mech",
-		"description": "Gain +1/+1 whenever a friendly mech dies.",
+		"description": "Pilotable. Gain +1/+1 whenever a friendly mech dies.",
 		"attack": 9,
 		"health": 8,
 		"abilities": [
@@ -391,7 +391,7 @@
 		"card_type": "CREATURE",
 		"rarity": "EPIC",
 		"tribe": "mech",
-		"description": "Dualstrike",
+		"description": "Pilotable. Dualstrike",
 		"attack": 3,
 		"health": 3,
 		"abilities": [

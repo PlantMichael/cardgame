@@ -555,7 +555,7 @@ func _host_run_on_play(minion: Minion) -> void:
 			var devour_target: Minion = await board.buff_friendly_target_selected
 			if devour_target != null:
 				board.log_action("Your %s devoured %s and gained +%d health" % [
-					minion.data.card_name, devour_target.data.card_name, devour_target.current_health * 2])
+					minion.data.card_name, devour_target.data.card_name, devour_target.current_health])
 				_relay_log("Opponent's %s devoured %s" % [minion.data.card_name, devour_target.data.card_name])
 				game_state.apply_devour_friendly(minion, devour_target, game_state.player)
 				board.refresh()
@@ -666,7 +666,7 @@ func _host_run_guest_on_play(minion: Minion) -> void:
 			if devour_target != null:
 				board.log_action("Opponent's %s devoured %s" % [minion.data.card_name, devour_target.data.card_name])
 				_relay_log("Your %s devoured %s and gained +%d health" % [
-					minion.data.card_name, devour_target.data.card_name, devour_target.current_health * 2])
+					minion.data.card_name, devour_target.data.card_name, devour_target.current_health])
 				game_state.apply_devour_friendly(minion, devour_target, game_state.opponent)
 				board.refresh()
 				_send_state()

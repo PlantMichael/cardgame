@@ -140,3 +140,4 @@ offset_bottom = 760.0
 position = Vector2(0, 40)
 scale = Vector2(1.5, 1.5)
 use_text_overlay = false
+extra_mana_pip_offset_y = 10.0

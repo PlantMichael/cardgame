@@ -27,6 +27,10 @@ var decline_button: Button
 const CardScene = preload("res://scenes/cards/Card.tscn")
 const CardBackScene = preload("res://scenes/cards/CardBack.tscn")
 
+const CURSOR_DEFAULT = preload("res://assets/01.png")
+const CURSOR_TARGET = preload("res://assets/15.png")
+var _using_target_cursor: bool = false
+
 var game_state: GameState
 var selected_attacker: Card = null
 var _dragging_stratagem: bool = false
@@ -499,6 +503,22 @@ func _highlight_board_zone(value: bool) -> void:
 
 # --- Hover preview ---
 
+## Swaps in the crosshair cursor (15.png) while hovering a card currently
+## marked as a valid target (attack, challenge, stratagem, or any other
+## on-play targeting mode - they all flow through Card.set_targeted()),
+## and back to the default cursor (01.png) otherwise.
+func _update_target_cursor(hovered_card: Card) -> void:
+	var should_target := hovered_card != null and is_instance_valid(hovered_card) and hovered_card.is_target_highlighted()
+	if should_target == _using_target_cursor:
+		return
+	_using_target_cursor = should_target
+	if should_target:
+		# 15.png is a symmetric reticle - center its hotspot so it aims from
+		# its middle instead of its top-left corner.
+		Input.set_custom_mouse_cursor(CURSOR_TARGET, Input.CURSOR_ARROW, Vector2(16, 16))
+	else:
+		Input.set_custom_mouse_cursor(CURSOR_DEFAULT, Input.CURSOR_ARROW, Vector2.ZERO)
+
 func _update_hover(mouse_pos: Vector2) -> void:
 	if _modal_open:
 		_hover_card = null
@@ -542,6 +562,8 @@ func _update_hover(mouse_pos: Vector2) -> void:
 					break
 			if found_card != null:
 				break
+
+	_update_target_cursor(found_card)
 
 	if found_card == _hover_card:
 		return # still hovering the same card (or the same empty space) — don't restart the timer
@@ -630,6 +652,25 @@ func _open_modal_overlay() -> CanvasLayer:
 	preview_card.visible = false
 	overlay.tree_exiting.connect(func(): _modal_open = false)
 	return overlay
+
+## Frees `overlay` (a modal picker from _open_modal_overlay() - rummage,
+## graveyard, transform) safely: overlay.queue_free() alone only sets
+## is_queued_for_deletion() on the overlay itself, not on the Card nodes
+## nested inside it, and Card._exit_tree() only releases its 3D mesh when
+## that's true on the Card - so a plain overlay.queue_free() left every
+## picker card's mesh behind as a permanent "ghost" card stuck in the middle
+## of the screen. queue_free()ing each Card directly first makes sure its
+## own is_queued_for_deletion() is set before deletion actually happens.
+func _close_modal_overlay(overlay: CanvasLayer) -> void:
+	_release_cards_in(overlay)
+	overlay.queue_free()
+
+func _release_cards_in(root: Node) -> void:
+	for child in root.get_children():
+		if child is Card:
+			child.queue_free()
+		else:
+			_release_cards_in(child)
 
 func _load_keywords() -> void:
 	var file = FileAccess.open("res://data/keywords.json", FileAccess.READ)
@@ -892,106 +933,157 @@ func _finish_play_stratagem(card: Card, card_data_to_play: CardData, target_mini
 	action_play_stratagem.emit(card_data_to_play, target_minion, target_player_id)
 # --- Refresh ---
 
+## Reconciles player_hand_zone against game_state.player.hand instead of
+## destroying and recreating every hand card on every refresh() - refresh()
+## fires on nearly every action anywhere in a turn, including the AI's, so a
+## full rebuild here meant the player's own hand (which the AI's turn never
+## actually touches) tore down and rebuilt its 3D card meshes - a visible
+## flash - on every single AI action. draw_card() duplicates each drawn
+## CardData into its own unique Resource (see player_state.gd), so reference
+## identity is a stable per-copy key across refreshes. Opponent's face-down
+## hand backs are plain 2D sprites (no 3D mesh to flash) and stay a simple
+## full rebuild below.
 func _refresh_hand() -> void:
-	# queue_free() only defers actual deletion to end-of-frame — get_children()
-	# would keep returning these nodes (and their signal connections) until
-	# then, piling up indefinitely if this runs more than once per frame (easy
-	# during a fast-paced match). remove_child() detaches immediately so every
-	# call starts from a truly empty zone. queue_free() is called first so
-	# is_queued_for_deletion() is already true by the time remove_child()
-	# fires _exit_tree() - Card._exit_tree() only releases its 3D mesh when
-	# that's set, otherwise the mesh is orphaned and stays rendered forever.
-	for c in player_hand_zone.get_children():
-		c.hide()
-		c.queue_free()
-		player_hand_zone.remove_child(c)
-	for c in opponent_hand_zone.get_children():
-		c.hide()
-		c.queue_free()
-		opponent_hand_zone.remove_child(c)
+	var hand: Array[CardData] = game_state.player.hand
 
 	# Hearthstone-style squish: cards keep comfortable spacing until the hand
 	# would overflow the zone, then overlap progressively to keep fitting.
-	var hand_count := game_state.player.hand.size()
 	var wrapper_size := Vector2(168, 243)
 	var base_separation := 12.0
 	var zone_width := 1320.0
 	var separation := base_separation
-	if hand_count > 1:
-		var natural_width: float = hand_count * wrapper_size.x + (hand_count - 1) * base_separation
+	if hand.size() > 1:
+		var natural_width: float = hand.size() * wrapper_size.x + (hand.size() - 1) * base_separation
 		if natural_width > zone_width:
-			separation = maxf((zone_width - hand_count * wrapper_size.x) / (hand_count - 1), -110.0)
+			separation = maxf((zone_width - hand.size() * wrapper_size.x) / (hand.size() - 1), -110.0)
 	player_hand_zone.add_theme_constant_override("separation", int(round(separation)))
 
-	for card_data in game_state.player.hand:
-		var card = CardScene.instantiate()
-		var wrapper = Button.new()
-		wrapper.custom_minimum_size = wrapper_size
-		wrapper.flat = true
-		player_hand_zone.add_child(wrapper)
-		wrapper.add_child(card)
-		card.scale = Card.HAND_SCALE
-		card.is_in_hand = true
-		card.dropped.connect(_on_card_dropped)
-		card.drag_started.connect(_on_card_drag_started)
+	var existing: Dictionary = {}
+	for wrapper in player_hand_zone.get_children():
+		var existing_card := _get_card_child(wrapper)
+		if existing_card:
+			existing[existing_card.data] = wrapper
+
+	var kept: Dictionary = {}
+	for i in hand.size():
+		var card_data: CardData = hand[i]
+		var wrapper = existing.get(card_data)
+		var card: Card
+		if wrapper:
+			card = _get_card_child(wrapper)
+		else:
+			card = CardScene.instantiate()
+			wrapper = Button.new()
+			wrapper.custom_minimum_size = wrapper_size
+			wrapper.flat = true
+			player_hand_zone.add_child(wrapper)
+			wrapper.add_child(card)
+			card.scale = Card.HAND_SCALE
+			card.is_in_hand = true
+			card.dropped.connect(_on_card_dropped)
+			card.drag_started.connect(_on_card_drag_started)
+			wrapper.button_down.connect(card.start_drag)
+		player_hand_zone.move_child(wrapper, i)
 		card.setup(card_data)
 		card.set_playable(game_state.player.can_play_card(card_data))
-		wrapper.button_down.connect(card.start_drag)
+		kept[card_data] = true
 
+	for card_data in existing:
+		if not kept.has(card_data):
+			var wrapper = existing[card_data]
+			wrapper.hide()
+			wrapper.queue_free()
+			player_hand_zone.remove_child(wrapper)
+
+	for c in opponent_hand_zone.get_children():
+		c.hide()
+		c.queue_free()
+		opponent_hand_zone.remove_child(c)
 	for i in game_state.opponent.hand.size():
 		var back = CardBackScene.instantiate()
 		back.scale = Vector2(0.62, 0.62)
-		var wrapper = Control.new()
-		wrapper.custom_minimum_size = Vector2(68, 98)
-		opponent_hand_zone.add_child(wrapper)
-		wrapper.add_child(back)
+		var back_wrapper = Control.new()
+		back_wrapper.custom_minimum_size = Vector2(68, 98)
+		opponent_hand_zone.add_child(back_wrapper)
+		back_wrapper.add_child(back)
+
+## Reconciles `zone`'s existing wrapper/Card children against `minions` (in
+## board order) the same way _refresh_hand() does for the hand - see its
+## comment. Minion.instance_id is the stable per-copy key here. Cards that
+## persist across the refresh get `configure` re-run on them (cheap - just
+## refreshes labels/stats/highlights on the existing node) instead of being
+## destroyed and recreated, so only minions that actually entered or left the
+## board pay the create/destroy (and mesh flash) cost.
+func _reconcile_board_zone(zone: HBoxContainer, minions: Array, wrapper_size: Vector2, card_scale: Vector2, configure: Callable) -> void:
+	var existing: Dictionary = {}
+	for wrapper in zone.get_children():
+		var existing_card := _get_card_child(wrapper)
+		if existing_card and existing_card.minion:
+			existing[existing_card.minion.instance_id] = wrapper
+
+	var kept: Dictionary = {}
+	for i in minions.size():
+		var minion: Minion = minions[i]
+		var wrapper = existing.get(minion.instance_id)
+		var card: Card
+		if wrapper:
+			card = _get_card_child(wrapper)
+			# Interactive highlight/lift state never survives a refresh
+			# (nothing re-establishes it afterward on a passive AI-triggered
+			# refresh) - on a full rebuild this was implicitly cleared by the
+			# node itself being new; a reused node has to be told explicitly.
+			# data/minion are still set from this card's previous refresh, so
+			# it's safe to call before configure below sets them for the
+			# current one - unlike a freshly-created card, which has neither
+			# yet.
+			card.set_targeted(false)
+			card.set_selected(false)
+		else:
+			card = CardScene.instantiate()
+			wrapper = Control.new()
+			wrapper.custom_minimum_size = wrapper_size
+			zone.add_child(wrapper)
+			wrapper.add_child(card)
+			card.scale = card_scale
+			card.position = Vector2(2, 2)
+		zone.move_child(wrapper, i)
+		configure.call(card, minion)
+		kept[minion.instance_id] = true
+
+	for instance_id in existing:
+		if not kept.has(instance_id):
+			var wrapper = existing[instance_id]
+			wrapper.hide()
+			wrapper.queue_free()
+			zone.remove_child(wrapper)
 
 func _refresh_boards() -> void:
-	for c in player_board_zone.get_children():
-		c.hide()
-		c.queue_free()
-		player_board_zone.remove_child(c)
-	for c in opponent_board_zone.get_children():
-		c.hide()
-		c.queue_free()
-		opponent_board_zone.remove_child(c)
-
 	var is_my_turn = game_state.is_local_player_turn()
 
-	for minion in game_state.player.board:
-		var card = CardScene.instantiate()
-		var wrapper = Control.new()
-		wrapper.custom_minimum_size = Vector2(127, 184)
-		player_board_zone.add_child(wrapper)
-		wrapper.add_child(card)
-		card.scale = Vector2(0.57, 0.57)
-		card.position = Vector2(2, 2)
-		card.setup_as_minion(minion)
-		card.set_can_attack(is_my_turn and minion.can_attack())
-		card.set_summoning_sick(minion.is_exhausted)
-		if minion.is_newly_reinforced:
-			minion.is_newly_reinforced = false
-			_blink_card_green(card)
-		if minion.is_newly_transformed:
-			minion.is_newly_transformed = false
-			card.animate_transform()
+	_reconcile_board_zone(player_board_zone, game_state.player.board, Vector2(127, 184), Vector2(0.57, 0.57),
+		func(card: Card, minion: Minion) -> void:
+			card.setup_as_minion(minion)
+			card.set_can_attack(is_my_turn and minion.can_attack())
+			card.set_summoning_sick(minion.is_exhausted)
+			if minion.is_newly_reinforced:
+				minion.is_newly_reinforced = false
+				_blink_card_green(card)
+			if minion.is_newly_transformed:
+				minion.is_newly_transformed = false
+				card.animate_transform()
+	)
 
-	for minion in game_state.opponent.board:
-		var card = CardScene.instantiate()
-		var wrapper = Control.new()
-		wrapper.custom_minimum_size = Vector2(137, 198)
-		opponent_board_zone.add_child(wrapper)
-		wrapper.add_child(card)
-		card.scale = Vector2(0.6125, 0.6125)
-		card.position = Vector2(2, 2)
-		card.setup_as_minion(minion)
-		card.set_can_attack(false)
-		if minion.is_newly_reinforced:
-			minion.is_newly_reinforced = false
-			_blink_card_green(card)
-		if minion.is_newly_transformed:
-			minion.is_newly_transformed = false
-			card.animate_transform()
+	_reconcile_board_zone(opponent_board_zone, game_state.opponent.board, Vector2(137, 198), Vector2(0.6125, 0.6125),
+		func(card: Card, minion: Minion) -> void:
+			card.setup_as_minion(minion)
+			card.set_can_attack(false)
+			if minion.is_newly_reinforced:
+				minion.is_newly_reinforced = false
+				_blink_card_green(card)
+			if minion.is_newly_transformed:
+				minion.is_newly_transformed = false
+				card.animate_transform()
+	)
 
 func _refresh_heroes() -> void:
 	player_hero.set_health(game_state.player.hero_health)
@@ -1114,6 +1206,10 @@ func _clear_selections() -> void:
 	if is_instance_valid(selected_attacker):
 		selected_attacker.set_selected(false)
 	selected_attacker = null
+	# Targeting mode may be ending on the same click that resolves it, with
+	# the mouse never moving off the target afterward - re-check right away
+	# instead of waiting for the next InputEventMouseMotion to revert.
+	_update_target_cursor(null)
 	_highlight_attack_targets(false)
 	_highlight_hero(opponent_hero, false)
 	_highlight_mech_targets(false)
@@ -1336,7 +1432,7 @@ func show_graveyard_picker(options: Array[CardData]) -> CardData:
 	panel.add_child(skip)
 
 	var chosen: CardData = await rummage_card_selected
-	overlay.queue_free()
+	_close_modal_overlay(overlay)
 	return chosen
 
 func _open_graveyard_viewer() -> void:
@@ -1398,7 +1494,7 @@ func _open_graveyard_viewer() -> void:
 	var close_btn := Button.new()
 	close_btn.text = "Close"
 	close_btn.custom_minimum_size = Vector2(100, 34)
-	close_btn.pressed.connect(overlay.queue_free)
+	close_btn.pressed.connect(_close_modal_overlay.bind(overlay))
 	panel.add_child(close_btn)
 
 func show_transform_picker(options: Array[CardData]) -> CardData:
@@ -1451,7 +1547,7 @@ func show_transform_picker(options: Array[CardData]) -> CardData:
 		)
 
 	var chosen: CardData = await transform_choice_selected
-	overlay.queue_free()
+	_close_modal_overlay(overlay)
 	return chosen
 
 func _stratagem_needs_target(data: CardData) -> bool:

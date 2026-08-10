@@ -234,7 +234,7 @@ func apply_swap_friendly_health(minion_a: Minion, minion_b: Minion) -> void:
 	_remove_dead_minions()
 
 func apply_devour_friendly(devourer: Minion, target: Minion, owner: PlayerState) -> void:
-	var gain := target.current_health * 2
+	var gain := target.current_health
 	owner.remove_minion(target)
 	owner.graveyard.append(target.data)
 	devourer.max_health += gain
@@ -458,7 +458,7 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 			if target_minion:
 				var acting := _get_player_by_id(acting_player_id)
 				var enemy := opponent if acting == player else player
-				enemy.hero_health -= target_minion.current_health * card.effect_value
+				enemy.hero_health -= target_minion.current_health / 2
 				acting.remove_minion(target_minion)
 				acting.graveyard.append(target_minion.data)
 				_check_win_condition()

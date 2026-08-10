@@ -63,8 +63,8 @@
 - `ambush` ability: immune to enemy attacks and stratagem targeting until it attacks first; stripped on first attack
 - `enemy_damage_amp_N` parameterized ability: passive aura adding +N to all owner damage vs enemy creatures; stacks across board
 - `on_play_swap_friendly_health` ability: swap current health of two chosen friendlies (Blood Merchant)
-- `on_play_devour_friendly` ability: destroy a friendly, gain double its health (Crypt Lurker)
-- `tainted_blood` stratagem effect: destroy a target friendly creature and deal damage to the enemy hero equal to its health times N (Tainted Blood)
+- `on_play_devour_friendly` ability: destroy a friendly, gain its health (Crypt Lurker)
+- `tainted_blood` stratagem effect: destroy a target friendly creature and deal damage to the enemy hero equal to half its health, rounded down (Tainted Blood)
 - `bloodlet` stratagem effect: heal N to a friendly target (minion or own hero) or deal N damage to an enemy target (Bloodlet)
 - `feast_attendant` ability: at end of owner's turn, give board-adjacent friendly creatures +0/+1 (Feast Attendant)
 - `on_play_devour_all` ability: destroy every other creature on both boards and gain their combined attack and health (Blood Drenched)

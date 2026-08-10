@@ -279,7 +279,7 @@ static func _pick_stratagem_target(card: CardData, gs: GameState, acting_id: Str
 		"tainted_blood":
 			if not friendly_targetable.is_empty():
 				var candidate := AIHeuristics.pick_highest_health(friendly_targetable)
-				var dmg: int = candidate.current_health * card.effect_value
+				var dmg: int = candidate.current_health / 2
 				if friendly_targetable.size() > 1 or dmg >= enemy.hero_health:
 					result["minion"] = candidate
 					result["ready"] = true

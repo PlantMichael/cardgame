@@ -477,7 +477,7 @@
 		"card_type": "STRATAGEM",
 		"rarity": "RARE",
 		"tribe": "",
-		"description": "Destroy target friendly creature, deal damage to opponent based on it's health.",
+		"description": "Destroy target friendly creature, deal damage to opponent based on half it's health rounded down health.",
 		"attack": 0,
 		"health": 0,
 		"abilities": [],

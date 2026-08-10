@@ -238,7 +238,7 @@ func _run_player_on_play(minion: Minion) -> void:
 			if target != null:
 				board.log_action("Your %s devoured %s and gained +%d health" % [
 					minion.data.card_name, target.data.card_name,
-					target.current_health * 2])
+					target.current_health])
 				game_state.apply_devour_friendly(minion, target, game_state.player)
 				board.refresh()
 

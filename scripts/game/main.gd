@@ -3,6 +3,7 @@ extends Node
 const BoardScene = preload("res://scenes/game/Board.tscn")
 const DeckBuilderScene = preload("res://scenes/ui/DeckBuilderScreen.tscn")
 const WallpaperTexture = preload("res://assets/wallapepr.png")
+const CursorDefault = preload("res://assets/01.png")
 
 var _canvas: CanvasLayer
 var _player_deck_ids: Array[String] = []
@@ -40,6 +41,14 @@ var _ranked_search_id: int = 0
 var _ranked_match_found_callable: Callable = Callable()
 
 func _ready() -> void:
+	# Set explicitly here (the actual game entry point) rather than relying
+	# solely on the project.godot mouse_cursor/custom_image setting - that
+	# setting doesn't reliably take effect on every export target (notably
+	# the web/Vercel build this project ships as), so without this the OS
+	# default arrow showed everywhere - including every menu - until
+	# board.gd's own targeting-cursor logic happened to fire its first
+	# Input.set_custom_mouse_cursor() call deep into an actual match.
+	Input.set_custom_mouse_cursor(CursorDefault, Input.CURSOR_ARROW, Vector2.ZERO)
 	if "--mcts-timing" in OS.get_cmdline_user_args():
 		_run_mcts_timing_cli()
 		return
@@ -171,11 +180,11 @@ func _run_haven_test_cli() -> void:
 	gs.player.board.append(m)
 	print("Before: name=%s max_health=%d" % [m.data.card_name, m.max_health])
 	var fodder := Minion.new(card, "a")
-	fodder.current_health = 5  # devour gain = 5*2 = 10, so max_health jumps 3 -> 13, skipping 4 entirely
+	fodder.current_health = 5  # devour gain = 5, so max_health jumps 3 -> 8, skipping 4 entirely
 	gs.player.board.append(fodder)
 	gs.apply_devour_friendly(m, fodder, gs.player)
 	var transformed := m.data.id != card.id
-	print("After devour (3 -> 13, skipping 4): name=%s max_health=%d transformed=%s" % [
+	print("After devour (3 -> 8, skipping 4): name=%s max_health=%d transformed=%s" % [
 		m.data.card_name, m.max_health, transformed])
 	print("RESULT: %s" % ("PASS" if transformed else "FAIL"))
 	get_tree().quit()
