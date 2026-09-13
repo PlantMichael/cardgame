@@ -16,6 +16,22 @@
 		"effect_value": 0
 	},
 	{
+		"id": "b_022",
+		"card_name": "Sludge Scout",
+		"cost": 1,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Recon.",
+		"attack": 1,
+		"health": 2,
+		"abilities": [],
+		"art": "res://assets/black/sludgescout.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "b_008",
 		"card_name": "Slime Launcher",
 		"cost": 2,
@@ -66,6 +82,24 @@
 			"on_play_rummage_buff"
 		],
 		"art": "res://assets/black/trashcollector.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_020",
+		"card_name": "Litter Critter",
+		"cost": 2,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "",
+		"description": "If this minion was rummaged, gain Void Touch",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"on_play_voidtouch_if_rummaged"
+		],
+		"art": "res://assets/black/stinkherder.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -126,6 +160,25 @@
 		"effect_value": 0
 	},
 	{
+		"id": "b_014",
+		"card_name": "Filth Eater",
+		"cost": 3,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "",
+		"description": "Guardian. Whenever you Rummage, this creature gains +0/+1",
+		"attack": 3,
+		"health": 3,
+		"abilities": [
+			"guardian",
+			"rummage_buff"
+		],
+		"art": "res://assets/black/filtheater.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "b_002",
 		"card_name": "Lazy Junker",
 		"cost": 4,
@@ -162,24 +215,6 @@
 		"effect_value": 0
 	},
 	{
-		"id": "b_013",
-		"card_name": "Decaying Junkling",
-		"cost": 5,
-		"color": "BLACK",
-		"card_type": "CREATURE",
-		"rarity": "COMMON",
-		"tribe": "",
-		"description": "On play: Deal 2 damage to all enemy creatures.",
-		"attack": 2,
-		"health": 2,
-		"abilities": [
-			"on_play_aoe_enemy_2"
-		],
-		"art": "res://assets/black/decayingjunkling.png",
-		"effect": "",
-		"effect_value": 0
-	},
-	{
 		"id": "b_004",
 		"card_name": "Dump Scummer",
 		"cost": 4,
@@ -210,10 +245,46 @@
 		"attack": 2,
 		"health": 2,
 		"abilities": [
-			"guardian",
 			"rummage_and_play"
 		],
 		"art": "res://assets/black/greedyjunkling.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_018",
+		"card_name": "Stinkherder",
+		"cost": 4,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "",
+		"description": "Rush. On death, return a non-legendary creature from your graveyard to your hand. Counts as rummaging.",
+		"attack": 3,
+		"health": 2,
+		"abilities": [
+			"rush",
+			"deathrattle_rummage_creature"
+		],
+		"art": "res://assets/black/stinkherder.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_013",
+		"card_name": "Decaying Junkling",
+		"cost": 5,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "On play: Deal 2 damage to all enemy creatures.",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"on_play_aoe_enemy_2"
+		],
+		"art": "res://assets/black/decayingjunkling.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -232,6 +303,25 @@
 			"guardian"
 		],
 		"art": "res://assets/black/junkblockade.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_019",
+		"card_name": "Clutterpunk, the Mad Defiler",
+		"cost": 5,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "LEGENDARY",
+		"tribe": "",
+		"description": "Cloaked. Creatures of an equal cost can be rummaged.",
+		"attack": 5,
+		"health": 5,
+		"abilities": [
+			"cloaked",
+			"rummage_equal_cost"
+		],
+		"art": "res://assets/black/clutterpunk.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -256,21 +346,20 @@
 		"effect_value": 0
 	},
 	{
-		"id": "b_014",
-		"card_name": "Filth Eater",
-		"cost": 3,
+		"id": "b_021",
+		"card_name": "Slopscraper",
+		"cost": 6,
 		"color": "BLACK",
 		"card_type": "CREATURE",
 		"rarity": "EPIC",
 		"tribe": "",
-		"description": "Guardian. Whenever you Rummage, this creature gains +0/+1",
-		"attack": 3,
-		"health": 3,
+		"description": "When this minion attacks, rummage",
+		"attack": 5,
+		"health": 5,
 		"abilities": [
-			"guardian",
-			"rummage_buff"
+			"attack_rummage"
 		],
-		"art": "res://assets/black/filtheater.png",
+		"art": "res://assets/black/debrishauler.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -294,43 +383,6 @@
 		"effect_value": 0
 	},
 	{
-		"id": "b_018",
-		"card_name": "Stinkherder",
-		"cost": 4,
-		"color": "BLACK",
-		"card_type": "CREATURE",
-		"rarity": "EPIC",
-		"tribe": "",
-		"description": "Rush. On death, return a non-legendary creature from your graveyard to your hand. Counts as rummaging.",
-		"attack": 3,
-		"health": 2,
-		"abilities": [
-			"rush",
-			"deathrattle_rummage_creature"
-		],
-		"art": "res://assets/black/stinkherder.png",
-		"effect": "",
-		"effect_value": 0
-	},
-	{
-		"id": "b_020",
-		"card_name": "Litter Critter",
-		"cost": 2,
-		"color": "BLACK",
-		"card_type": "CREATURE",
-		"rarity": "EPIC",
-		"tribe": "",
-		"description": "If this minion was rummaged, gain Void Touch",
-		"attack": 1,
-		"health": 1,
-		"abilities": [
-			"on_play_voidtouch_if_rummaged"
-		],
-		"art": "res://assets/black/stinkherder.png",
-		"effect": "",
-		"effect_value": 0
-	},
-	{
 		"id": "b_017",
 		"card_name": "StinkPile, Lord of Garbage",
 		"cost": 9,
@@ -348,25 +400,6 @@
 			"stinkpile_passive"
 		],
 		"art": "res://assets/black/stinkpile.png",
-		"effect": "",
-		"effect_value": 0
-	},
-	{
-		"id": "b_019",
-		"card_name": "Clutterpunk, the Mad Defiler",
-		"cost": 5,
-		"color": "BLACK",
-		"card_type": "CREATURE",
-		"rarity": "LEGENDARY",
-		"tribe": "",
-		"description": "Cloaked. Creatures of an equal cost can be rummaged.",
-		"attack": 5,
-		"health": 5,
-		"abilities": [
-			"cloaked",
-			"rummage_equal_cost"
-		],
-		"art": "res://assets/black/clutterpunk.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -405,5 +438,21 @@
 		"art": "res://assets/black/hotgarbage.png",
 		"effect": "give_ability",
 		"effect_value": 0
+	},
+	{
+		"id": "b_str_003",
+		"card_name": "Sludge Spray",
+		"cost": 5,
+		"color": "BLACK",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Deal {n} damage to enemy creatures. Whenever this is rummaged, deal 1 more.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"art": "res://assets/black/hotgarbage.png",
+		"effect": "sludge_spray",
+		"effect_value": 2
 	}
 ]

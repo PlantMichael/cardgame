@@ -20,21 +20,14 @@ const TOKEN_GAP := 6.0
 const CARD_SIZE := Vector2(220, 320)
 const MAX_TILT_RAD := 0.21 # ~12 degrees
 
-## Preview-panel instances (board.gd's hover preview, the deck builder's
-## preview) never tilt and get reused across many different cards' data, so
+## Flat 2D instances (deck builder/card list collection grid, rummage
+## picker) never tilt and get reused across many different cards' data, so
 ## they're opted out here (set false before add_child()/in the .tscn) and
 ## keep rendering their text as plain flat 2D labels - unaffected by the 3D
-## text-overlay wiring below.
+## text-overlay wiring below. The large single-card preview panels have
+## their own dedicated scene/script (see CardPreview, card_preview.gd)
+## instead of using this flag.
 @export var use_text_overlay: bool = true
-
-## Hover-preview instances (board.gd, deck builder) share the same global 3D
-## camera/texture as every hand/board card mesh (see card_3d_layer.gd) - their
-## own on-screen rect rarely overlaps another card's, but when it does (e.g. a
-## card sitting near the fixed preview-panel corner), ordinary z_order
-## (get_index()) can lose the depth sort to that other card, letting it render
-## in front of the preview within the shared texture. Forces this instance's
-## mesh to always win that sort instead.
-@export var render_on_top: bool = false
 
 var data: CardData = null
 var _layer3d = null
@@ -84,6 +77,19 @@ const CARD_BORDER_COLORS = {
 	CardData.CardColor.GENERIC:  Color(0.55, 0.55, 0.62),
 }
 
+## 2D fallback background art (see _apply_color_theme()) - one template per
+## color, used by every flat/non-overlay Card instance (deck builder,
+## card list, hover previews). GENERIC has no color-specific template of its
+## own, so it keeps the original neutral template.
+const CARD_TEMPLATES = {
+	CardData.CardColor.GREEN:    preload("res://assets/greencard_2.png"),
+	CardData.CardColor.CRIMSON:  preload("res://assets/crimsoncard.png"),
+	CardData.CardColor.BLACK:    preload("res://assets/blackcard.png"),
+	CardData.CardColor.ORANGE:   preload("res://assets/orangecard.png"),
+	CardData.CardColor.TEAL:     preload("res://assets/tealcard.png"),
+	CardData.CardColor.GENERIC:  preload("res://assets/card_template.png"),
+}
+
 func _ready() -> void:
 	mana_dots_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	image_size_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
@@ -93,7 +99,6 @@ func _ready() -> void:
 	# the baked mesh is tuned for the board's own viewport compositing and
 	# doesn't render right elsewhere, so these instances never acquire one.
 	if not use_text_overlay:
-		_apply_flat_label_offsets()
 		return
 	_layer3d = get_tree().get_first_node_in_group("card_3d_layer")
 	if _layer3d:
@@ -168,22 +173,6 @@ func _setup_text_overlay() -> void:
 func _text_layer_parent() -> Node:
 	return _text_viewport if _text_viewport else self
 
-## Extra downward nudge for the mana pips, on top of the base flat-layout
-## offset below - opt-in per instance (see deck builder's preview panel)
-## rather than applying to every non-overlay card.
-@export var extra_mana_pip_offset_y: float = 0.0
-
-## Nudges the flat 2D layout (Card.tscn's baseline positions, tuned for the
-## baked hand/board cards) to read better on non-overlay cards: mana pips
-## down away from the top edge, stats up and description up slightly to
-## close the gap it leaves.
-func _apply_flat_label_offsets() -> void:
-	mana_dots_panel.position.y += 10 + extra_mana_pip_offset_y
-	description_label.position.y -= 8
-	stats_row.position.y -= 7
-	attack_label.position.y -= 7
-	health_label.position.y -= 7
-
 ## The mesh has no modulate of its own to follow, and preview cards
 ## (board.gd, deck_builder_screen.gd) are shown/hidden by toggling `visible`
 ## rather than being freed - so the mesh needs its own visibility kept in
@@ -241,15 +230,10 @@ func _update_mesh_transform(delta: float) -> void:
 	# camera sits at world Z=10, so a card-count-scale index like get_index()
 	# is a safe, tiny nudge, but the old sentinel of 1000 here became a full
 	# 10.0 world-unit shift, landing the mesh exactly at the camera and
-	# clipping it out of view entirely. 50 (world Z 0.5, dragging) and 100
-	# (world Z 1.0, render_on_top) are still comfortably ahead of any
-	# realistic hand/board index while staying well inside the camera's
-	# near/far planes.
-	var z_order := get_index()
-	if _dragging:
-		z_order = 50
-	elif render_on_top:
-		z_order = 100
+	# clipping it out of view entirely. 50 (world Z 0.5) stays comfortably
+	# ahead of any realistic hand/board index while staying well inside the
+	# camera's near/far planes.
+	var z_order := 50 if _dragging else get_index()
 	_layer3d.place(_mesh3d, rect, _tilt_current, z_order)
 	if not _mesh_placed:
 		_mesh_placed = true
@@ -333,12 +317,24 @@ func _fit_text() -> void:
 	_fit_label_to_width(name_label, 18)
 	_fit_description_to_height(_description_plain_text, 16)
 
+## Solid black stand-in for art_texture on cards with no `art` set - without
+## this, an empty TextureRect draws nothing and the per-color template's own
+## art-window art (a blank white rect baked into the template PNG) shows
+## through instead. Generated once and cached, not per-instance.
+static var _blank_art_texture: ImageTexture = null
+static func _get_blank_art_texture() -> ImageTexture:
+	if _blank_art_texture == null:
+		var img := Image.create(4, 4, false, Image.FORMAT_RGB8)
+		img.fill(Color.BLACK)
+		_blank_art_texture = ImageTexture.create_from_image(img)
+	return _blank_art_texture
+
 func setup(card_data: CardData) -> void:
 	data = card_data
 	name_label.text = card_data.card_name
 	_update_mana_dots(card_data.effective_cost())
-	_description_plain_text = card_data.description
-	description_label.text = "[center]" + _highlight_keywords(card_data.description) + "[/center]"
+	_description_plain_text = card_data.effective_description()
+	description_label.text = "[center]" + _highlight_keywords(card_data.effective_description()) + "[/center]"
 	var is_creature = card_data.card_type == CardData.CardType.CREATURE
 	attack_label.visible = is_creature
 	health_label.visible = is_creature
@@ -351,7 +347,7 @@ func setup(card_data: CardData) -> void:
 		attack_label.add_theme_color_override("font_color", Color.WHITE)
 		health_label.add_theme_color_override("font_color", Color.WHITE)
 	update_piloted_token(false)
-	art_texture.texture = card_data.art
+	art_texture.texture = card_data.art if card_data.art != null else _get_blank_art_texture()
 	_apply_color_theme(card_data.color)
 	call_deferred("_fit_text")
 
@@ -360,10 +356,16 @@ func is_target_highlighted() -> bool:
 
 func set_targeted(value: bool) -> void:
 	_is_highlighted_as_target = value
+	# Set unconditionally (not just in the `if value:` branch) so clearing it
+	# doesn't depend on whichever of the two `else` sub-branches below
+	# happens to run - set_can_attack(true) in particular never touches this
+	# overlay on its own, which used to leave a stale red outline on a card
+	# after it stopped being a valid target if it also happened to be
+	# attack-eligible.
+	if _mesh3d and _layer3d:
+		_layer3d.set_target_outline(_mesh3d, value)
 	if value:
-		card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0.4, 0.1, 0.4, 0.55), Color(0.9, 0.3, 0.9, 1.0), 3))
-		if _mesh3d and _layer3d:
-			_layer3d.set_highlight(_mesh3d, TARGETED_HIGHLIGHT)
+		card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0, 0, 0, 0), Color(0.9, 0.15, 0.15, 1.0), 3))
 	else:
 		# Restore appropriate state
 		if minion and minion.can_attack():
@@ -411,7 +413,6 @@ func set_playable(value: bool) -> void:
 		_layer3d.set_dimmed(_mesh3d, not value)
 
 const SUMMONING_SICK_HIGHLIGHT := Color(0.35, 0.1, 0.5)
-const TARGETED_HIGHLIGHT := Color(0.9, 0.3, 0.9)
 const SILENCED_HIGHLIGHT := Color(0.45, 0.45, 0.50)
 
 func set_summoning_sick(value: bool) -> void:
@@ -488,6 +489,34 @@ func animate_transform() -> void:
 	st.tween_property(swirl, "scale", Vector2.ZERO, 0.65).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	await st.finished
 	swirl.queue_free()
+
+## Magic Arena-style dissolve for a minion that just died - the card fades
+## and eases down to nothing with a soft color-matched glow, instead of
+## crumbling into debris. Caller (board.gd's _reconcile_board_zone() removal
+## loop) awaits this before freeing the card - queue_free()ing it
+## immediately, the way that loop used to, would cut the fade off before it
+## ever played.
+func animate_death() -> void:
+	# Clear any active outline (attack-target red, can-attack gold,
+	# summoning-sick purple, silenced grey, ...) before the dissolve starts.
+	# Going through set_targeted(false)/set_can_attack(false) here instead
+	# risks their own "restore appropriate state" logic re-adding one right
+	# back (set_targeted(false) re-applies the can-attack outline if the
+	# dying minion still structurally can_attack()) - _apply_color_theme()
+	# is the same neutral reset those fall back to when nothing else
+	# applies, called directly so nothing gets re-added.
+	var tint := Color(0.8, 0.85, 1.0)
+	if data:
+		_apply_color_theme(data.color)
+		tint = CARD_BORDER_COLORS.get(data.color, tint)
+
+	const DURATION := 0.4
+	var fade := create_tween().set_parallel(true)
+	fade.tween_property(self, "modulate:a", 0.0, DURATION).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	fade.tween_property(self, "scale", scale * 0.82, DURATION).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	if _mesh3d and _layer3d:
+		fade.tween_method(func(a: float): _layer3d.set_dissolve(_mesh3d, a, tint), 1.0, 0.0, DURATION).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	await fade.finished
 
 func start_drag() -> void:
 	if not is_in_hand:
@@ -568,11 +597,14 @@ func _update_mana_dots(cost: int) -> void:
 func _apply_color_theme(color: CardData.CardColor) -> void:
 	var border = CARD_BORDER_COLORS[color]
 	card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0, 0, 0, 0), border, 2))
-	# background is a 2D fallback for when no Card3DLayer is present (see
-	# _ready()) - every color's actual look now comes from its own baked
-	# model (see card_3d_layer.gd's CARD_MODEL_SCENES), so there's no longer
-	# a per-color texture here.
-	background.texture = preload("res://assets/card_template.png")
+	# background is a 2D fallback for when no Card3DLayer is present, or the
+	# instance opted out via use_text_overlay = false (see _ready()) - the 3D
+	# board/hand cards get their look from their own baked model instead (see
+	# card_3d_layer.gd's CARD_MODEL_SCENES), but every flat 2D card (deck
+	# builder, card list, hover previews) uses this per-color template. All
+	# per-color templates share the same art-frame/text-block layout now, so
+	# no color needs its own position correction.
+	background.texture = CARD_TEMPLATES.get(color, CARD_TEMPLATES[CardData.CardColor.GENERIC])
 	if _mesh3d and _layer3d:
 		_layer3d.configure_theme(_mesh3d, color, data.art if data else null)
 		# Baseline reset for the 3D highlight overlay - setup()/setup_as_minion()
@@ -583,6 +615,7 @@ func _apply_color_theme(color: CardData.CardColor) -> void:
 		# set_summoning_sick, _apply_silenced_style) set it again afterward.
 		_layer3d.set_highlight(_mesh3d, null)
 		_layer3d.set_attack_outline(_mesh3d, false)
+		_layer3d.set_target_outline(_mesh3d, false)
 
 func _get_corner_radius() -> int:
 	return 6

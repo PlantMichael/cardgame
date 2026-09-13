@@ -28,7 +28,25 @@ const SUB_RANKS := ["III", "II", "I"]  # III lowest, I highest within a tier
 const BRACKET_COUNT := 21  # TIER_NAMES.size() * SUB_RANKS.size()
 
 const LEGEND_TIER_NAMES := ["Superluminal", "Celestial", "Universal"]
-const LEGEND_TIER_SPAN := 1000  # rating points per legend tier name; Universal has no cap
+const LEGEND_TIER_SPAN := 500  # rating points per legend tier name; Universal has no cap
+
+## One color per TIER_NAMES entry, dull->vivid low-to-high, for the small
+## rank badge shown on the profile bar (see main.gd's _build_rank_badge).
+const TIER_COLORS := [
+	Color(0.55, 0.52, 0.48), # Orbital
+	Color(0.55, 0.62, 0.68), # Lunar
+	Color(0.35, 0.62, 0.35), # Planetary
+	Color(0.85, 0.65, 0.20), # Solar
+	Color(0.55, 0.35, 0.75), # Nebular
+	Color(0.25, 0.55, 0.85), # Galactic
+	Color(0.85, 0.25, 0.25), # Cosmic
+]
+## One color per LEGEND_TIER_NAMES entry.
+const LEGEND_TIER_COLORS := [
+	Color(0.85, 0.85, 0.95), # Superluminal
+	Color(1.0, 0.84, 0.0),   # Celestial
+	Color(0.95, 0.35, 0.85), # Universal
+]
 
 ## LP economy for the bracketed ladder — keep in sync with relay.js's
 ## RANK_LP_* constants, which are authoritative.
@@ -71,6 +89,23 @@ static func _legend_tier_name(rating: int) -> String:
 	var idx := rating / LEGEND_TIER_SPAN
 	idx = mini(idx, LEGEND_TIER_NAMES.size() - 1)
 	return LEGEND_TIER_NAMES[idx]
+
+## Color for the compact rank badge (profile bar, nameplates) - one flat
+## color per tier, no LP/sub-rank granularity.
+static func get_tier_color(bracket_index: int, in_legend: bool, legend_rating: int) -> Color:
+	if in_legend:
+		var idx := mini(legend_rating / LEGEND_TIER_SPAN, LEGEND_TIER_COLORS.size() - 1)
+		return LEGEND_TIER_COLORS[idx]
+	var tier := bracket_index / SUB_RANKS.size()
+	return TIER_COLORS[tier]
+
+## Short text for the same badge: "3"/"2"/"1" (worst->best sub-rank within a
+## bracketed tier, i.e. III/II/I spelled as a digit) or a star once in Legend.
+static func get_badge_text(bracket_index: int, in_legend: bool) -> String:
+	if in_legend:
+		return "*"
+	var sub := bracket_index % SUB_RANKS.size()
+	return str(SUB_RANKS.size() - sub)
 
 ## Fake opponent names for the AI-fallback path when ranked matchmaking finds
 ## no human within the ~10s search window (see main.gd's ranked flow) — the

@@ -18,6 +18,25 @@
 		"effect_value": 0
 	},
 	{
+		"id": "cr_010",
+		"card_name": "Crypt Runt",
+		"cost": 1,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "bat",
+		"description": "On play: Transform into a 1/1 bat.",
+		"attack": 1,
+		"health": 2,
+		"abilities": [
+			"on_play_transform"
+		],
+		"transform_into": "cr_008t",
+		"art": "res://assets/crimson/moonchild.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "cr_018",
 		"card_name": "Fletchling",
 		"cost": 2,
@@ -73,6 +92,24 @@
 			"rush"
 		],
 		"art": "res://assets/crimson/sanguinebat.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_020",
+		"card_name": "Blood Merchant",
+		"cost": 2,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "On play: swap the healths of two friendly minions",
+		"attack": 1,
+		"health": 3,
+		"abilities": [
+			"on_play_swap_friendly_health"
+		],
+		"art": "res://assets/crimson/bloodmerchant.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -224,6 +261,60 @@
 		"effect_value": 0
 	},
 	{
+		"id": "cr_019",
+		"card_name": "Delos, the Crypt Priest",
+		"cost": 4,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "LEGENDARY",
+		"tribe": "",
+		"description": "When this creature gains health, lose it and draw a card.",
+		"attack": 2,
+		"health": 3,
+		"abilities": [
+			"heal_to_draw"
+		],
+		"art": "res://assets/crimson/delosthecryptpriest.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_024",
+		"card_name": "Coven Supplier",
+		"cost": 4,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "On play: give all friendly minions +0/+1",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"on_play_buff_all_friendly_health"
+		],
+		"art": "res://assets/crimson/cryptlurker.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_025",
+		"card_name": "Feast Attendant",
+		"cost": 4,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "At the end of your turn, give adjacent creatures +0/+1",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"feast_attendant"
+		],
+		"art": "res://assets/crimson/cryptlurker.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "cr_023",
 		"card_name": "Broodtender",
 		"cost": 5,
@@ -314,60 +405,6 @@
 		"effect_value": 0
 	},
 	{
-		"id": "cr_019",
-		"card_name": "Delos, the Crypt Priest",
-		"cost": 4,
-		"color": "CRIMSON",
-		"card_type": "CREATURE",
-		"rarity": "LEGENDARY",
-		"tribe": "",
-		"description": "When this creature gains health, lose it and draw a card.",
-		"attack": 2,
-		"health": 3,
-		"abilities": [
-			"heal_to_draw"
-		],
-		"art": "res://assets/crimson/delosthecryptpriest.png",
-		"effect": "",
-		"effect_value": 0
-	},
-	{
-		"id": "cr_026",
-		"card_name": "Blood drenched, the fuckening",
-		"cost": 10,
-		"color": "CRIMSON",
-		"card_type": "CREATURE",
-		"rarity": "LEGENDARY",
-		"tribe": "",
-		"description": "Destroy all other creatures on the field. gain stats equal to the stats of the destroyed creatures.",
-		"attack": 1,
-		"health": 1,
-		"abilities": [
-			"on_play_devour_all"
-		],
-		"art": "res://assets/crimson/delosthecryptpriest.png",
-		"effect": "",
-		"effect_value": 0
-	},
-	{
-		"id": "cr_020",
-		"card_name": "Blood Merchant",
-		"cost": 2,
-		"color": "CRIMSON",
-		"card_type": "CREATURE",
-		"rarity": "RARE",
-		"tribe": "",
-		"description": "On play: swap the healths of two friendly minions",
-		"attack": 1,
-		"health": 3,
-		"abilities": [
-			"on_play_swap_friendly_health"
-		],
-		"art": "res://assets/crimson/bloodmerchant.png",
-		"effect": "",
-		"effect_value": 0
-	},
-	{
 		"id": "cr_022",
 		"card_name": "Crypt Lurker",
 		"cost": 9,
@@ -386,38 +423,20 @@
 		"effect_value": 0
 	},
 	{
-		"id": "cr_024",
-		"card_name": "Coven Supplier",
-		"cost": 4,
+		"id": "cr_026",
+		"card_name": "Blood drenched, the fuckening",
+		"cost": 10,
 		"color": "CRIMSON",
 		"card_type": "CREATURE",
-		"rarity": "RARE",
+		"rarity": "LEGENDARY",
 		"tribe": "",
-		"description": "On play: give all friendly minions +0/+1",
-		"attack": 2,
-		"health": 2,
+		"description": "Destroy all other creatures on the field. gain stats equal to the stats of the destroyed creatures.",
+		"attack": 1,
+		"health": 1,
 		"abilities": [
-			"on_play_buff_all_friendly_health"
+			"on_play_devour_all"
 		],
-		"art": "res://assets/crimson/cryptlurker.png",
-		"effect": "",
-		"effect_value": 0
-	},
-	{
-		"id": "cr_025",
-		"card_name": "Feast Attendant",
-		"cost": 4,
-		"color": "CRIMSON",
-		"card_type": "CREATURE",
-		"rarity": "RARE",
-		"tribe": "",
-		"description": "At the end of your turn, give adjacent creatures +0/+1",
-		"attack": 2,
-		"health": 2,
-		"abilities": [
-			"feast_attendant"
-		],
-		"art": "res://assets/crimson/cryptlurker.png",
+		"art": "res://assets/crimson/delosthecryptpriest.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -647,6 +666,24 @@
 		"abilities": [
 			"guardian"
 		],
+		"transform_into": "",
+		"is_token": true,
+		"art": "res://assets/crimson/wardinggargoyle.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_008t",
+		"card_name": "Fledgeling Scout",
+		"cost": 1,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "monstrosity",
+		"description": "",
+		"attack": 1,
+		"health": 1,
+		"abilities": [],
 		"transform_into": "",
 		"is_token": true,
 		"art": "res://assets/crimson/wardinggargoyle.png",

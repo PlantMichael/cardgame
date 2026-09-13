@@ -126,6 +126,18 @@ static func pick_best_pilot_target(mechs: Array[Minion], pilot: Minion = null) -
 			best = m
 	return best
 
+## Mulligan heuristic for the AI's opening hand: swap out anything costing 5
+## or more mana - a simple stand-in for "keep a low curve" without pulling in
+## full hand-evaluation logic just for this one-time decision.
+const MULLIGAN_COST_THRESHOLD := 5
+
+static func pick_mulligan_swaps(hand: Array[CardData]) -> Array[CardData]:
+	var swaps: Array[CardData] = []
+	for card in hand:
+		if card.effective_cost() >= MULLIGAN_COST_THRESHOLD:
+			swaps.append(card)
+	return swaps
+
 static func pick_strongest(minions: Array[Minion]) -> Minion:
 	return minions.reduce(func(a, b): return a if a.current_attack > b.current_attack else b)
 

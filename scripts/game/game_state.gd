@@ -20,7 +20,20 @@ var pending_tank_specialist_buffs: Array[String] = []
 var pending_on_reinforce_damages: Array[Dictionary] = []
 var temp_shielded: Array[Dictionary] = []
 var growvin_granted: Array[Dictionary] = []
+## Campaign mode only (see campaign_state.gd): battlefield-wide ability
+## granted to every creature either side plays, e.g. "ambush" for a Dunes
+## node. Empty outside Campaign matches.
+var node_modifier_ability: String = ""
 var _opening_hand_dealt: bool = false
+## player_id -> true once that player has completed their very first turn -
+## see _begin_turn(). Neither player draws a card on their first turn
+## (they've already got their opening hand); tracked per-player rather than
+## derived from turn_number, since turn_number only increments when control
+## returns to `player` (see end_turn()) and so reads as 1 for BOTH sides'
+## first turns when `player` goes first, but jumps to 2 before `player`'s
+## own first turn if `opponent` went first instead - not a reliable "is this
+## anyone's first turn" check on its own.
+var _first_turn_taken: Dictionary = {}
 
 func _init(local_player_id: String, opponent_player_id: String,
 		   player_deck: Array[CardData], opponent_deck: Array[CardData]) -> void:
@@ -35,18 +48,47 @@ func start_game(first_player_id: String) -> void:
 	for i in 3:
 		player.draw_card()
 		opponent.draw_card()
+	# Going first gives tempo (acts on an empty board before the other player
+	# gets to do anything), so the second player draws a compensating 4th
+	# opening card instead of the usual 3.
+	var second_player := opponent if first_player_id == player.player_id else player
+	second_player.draw_card()
 	_begin_turn()
 	_opening_hand_dealt = true
+
+## Mulligan: swaps each of cards_to_swap out of acting player's hand, back
+## into their deck, and draws a same-count replacement. Called at most once
+## per player right after start_game() - the caller's own UI (one modal,
+## closed for good after a single confirm) is what enforces "each card can
+## only be mulliganed once", not anything here. Silently skips any card no
+## longer in hand (stale reference).
+func mulligan_swap(acting_player_id: String, cards_to_swap: Array[CardData]) -> void:
+	var acting := _get_player_by_id(acting_player_id)
+	var swapped_count := 0
+	for card in cards_to_swap:
+		if card not in acting.hand:
+			continue
+		acting.hand.erase(card)
+		acting.deck.append(card)
+		swapped_count += 1
+	if swapped_count == 0:
+		return
+	acting.deck.shuffle()
+	for i in swapped_count:
+		acting.draw_card()
 
 func _begin_turn() -> void:
 	var active = _get_active_player()
 	active.gain_mana_crystal()
-	var was_deck_empty: bool = active.deck.is_empty()
-	var drawn := active.draw_card()
-	if was_deck_empty:
-		pending_fatigue_damage.append(active.player_id)
-	elif _opening_hand_dealt and drawn != null and active.player_id == player.player_id:
-		pending_drawn_cards.append(drawn)
+	if not _first_turn_taken.get(active.player_id, false):
+		_first_turn_taken[active.player_id] = true
+	else:
+		var was_deck_empty: bool = active.deck.is_empty()
+		var drawn := active.draw_card()
+		if was_deck_empty:
+			pending_fatigue_damage.append(active.player_id)
+		elif _opening_hand_dealt and drawn != null and active.player_id == player.player_id:
+			pending_drawn_cards.append(drawn)
 	active.reset_for_new_turn()
 	_check_win_condition()
 
@@ -65,12 +107,19 @@ func end_turn() -> void:
 
 # --- Actions ---
 
-func play_creature(acting_player_id: String, card: CardData) -> Minion:
+func play_creature(acting_player_id: String, card: CardData, at_index: int = -1) -> Minion:
 	var acting = _get_player_by_id(acting_player_id)
 	if not acting.play_card_from_hand(card):
 		return null
 	var minion = Minion.new(card, acting_player_id)
-	acting.place_minion(minion)
+	if not node_modifier_ability.is_empty() and not minion.has_ability(node_modifier_ability):
+		minion.abilities.append(node_modifier_ability)
+		# Granting Rush this way has to also clear is_exhausted itself, same
+		# as _apply_stratagem's "give_ability" effect - see that comment for
+		# why (Minion._init() only reads starting abilities for this).
+		if node_modifier_ability == Abilities.RUSH:
+			minion.is_exhausted = false
+	acting.place_minion(minion, at_index)
 	Abilities.fire_on_play(minion, acting, self)
 	if minion.has_ability(Abilities.MECH) and minion in acting.board:
 		var has_growvin := false
@@ -100,14 +149,32 @@ func apply_heal_buff(target: Minion, amount: int) -> void:
 
 func apply_tank_specialist_buff(target: Minion) -> void:
 	target.current_attack += 1
+	var pre := target.current_health
 	target.current_health += 2
 	target.max_health += 2
+	_try_heal_to_draw(target, target.current_health - pre)
 	_try_apothecary_bonus(target.owner_id, target)
 	_try_health_transform(target)
 
+## Silences the target: strips abilities and reverts attack/health to the
+## card's printed base stats (damage already taken carries over, clamped so
+## the revert itself can't kill the minion, matching apply_transform_choice's
+## convention). If the target is a piloted mech, the pilot is killed outright
+## (sent to the graveyard, not ejected alive like apply_eject_pilot) since its
+## bonuses are wiped along with everything else.
 func apply_null(target: Minion) -> void:
+	if target.is_piloted and target.piloted_by != null:
+		_get_player_by_id(target.owner_id).graveyard.append(target.piloted_by)
+		target.is_piloted = false
+		target.piloted_by = null
+		target.pilot_atk_bonus = 0
+		target.pilot_hp_bonus = 0
 	target.abilities.clear()
 	target.is_nulled = true
+	var damage_taken := target.max_health - target.current_health
+	target.current_attack = target.data.attack
+	target.max_health = target.data.health
+	target.current_health = max(1, target.data.health - damage_taken)
 
 func play_stratagem(acting_player_id: String, card: CardData,
 					target_minion: Minion = null, target_player_id: String = "") -> bool:
@@ -197,8 +264,10 @@ func apply_challenge(challenger: Minion, target: Minion) -> void:
 		for m in owner.board:
 			if m.has_ability(Abilities.ON_YETI_CHALLENGE_BUFF):
 				challenger.current_attack += 1
+				var pre := challenger.current_health
 				challenger.current_health += 1
 				challenger.max_health += 1
+				_try_heal_to_draw(challenger, challenger.current_health - pre)
 				_try_apothecary_bonus(owner_id, challenger)
 				_try_health_transform(challenger)
 				break
@@ -237,8 +306,10 @@ func apply_devour_friendly(devourer: Minion, target: Minion, owner: PlayerState)
 	var gain := target.current_health
 	owner.remove_minion(target)
 	owner.graveyard.append(target.data)
+	var pre := devourer.current_health
 	devourer.max_health += gain
 	devourer.current_health += gain
+	_try_heal_to_draw(devourer, devourer.current_health - pre)
 	_try_health_transform(devourer)
 
 func apply_on_play_damage(target: Minion, damage: int, source_player_id: String = "") -> void:
@@ -247,13 +318,21 @@ func apply_on_play_damage(target: Minion, damage: int, source_player_id: String 
 	_remove_dead_minions()
 	_check_win_condition()
 
-func apply_pilot(pilot_minion: Minion, target_mech: Minion, pilot_owner: PlayerState) -> void:
+## consume_pilot: false leaves pilot_minion on the board instead of sending it
+## to the graveyard after applying its buff - used for Newt Nano's free
+## on-play pilot (see ON_PLAY_PILOT_MECH callers), which shouldn't cost the
+## card itself. A later *manual* use of the same minion's own pilot ability
+## still consumes it as normal - callers pick true/false per call site, not
+## per-card, since it's the trigger (on-play vs. manual) that differs.
+func apply_pilot(pilot_minion: Minion, target_mech: Minion, pilot_owner: PlayerState, consume_pilot: bool = true) -> void:
 	for ability in pilot_minion.abilities:
 		if Abilities.is_pilot(ability):
 			target_mech.current_attack += Abilities.get_pilot_attack(ability)
 			var hp_bonus = Abilities.get_pilot_health(ability)
+			var pre := target_mech.current_health
 			target_mech.current_health += hp_bonus
 			target_mech.max_health += hp_bonus
+			_try_heal_to_draw(target_mech, target_mech.current_health - pre)
 			target_mech.is_piloted = true
 			target_mech.piloted_by = pilot_minion.data
 			target_mech.pilot_atk_bonus = Abilities.get_pilot_attack(ability)
@@ -277,20 +356,22 @@ func apply_pilot(pilot_minion: Minion, target_mech: Minion, pilot_owner: PlayerS
 					target_mech.abilities.append(Abilities.GUARDIAN)
 			if target_mech.has_ability(Abilities.ON_PILOTED_STAT_BOOST):
 				target_mech.current_attack += 1
+				var pre_boost := target_mech.current_health
 				target_mech.current_health += 1
 				target_mech.max_health += 1
+				_try_heal_to_draw(target_mech, target_mech.current_health - pre_boost)
 			if hp_bonus > 0:
 				_try_apothecary_bonus(target_mech.owner_id, target_mech)
 			_try_health_transform(target_mech)
 			break
-	pilot_owner.remove_minion(pilot_minion)
-	pilot_owner.graveyard.append(pilot_minion.data)
-	for m in pilot_owner.board:
-		if m.has_ability(Abilities.ON_FRIENDLY_PILOT_DRAW):
-			var drawn = pilot_owner.draw_card()
-			if drawn != null and pilot_owner.player_id == player.player_id:
-				pending_drawn_cards.append(drawn)
-			break
+	if consume_pilot:
+		pilot_owner.remove_minion(pilot_minion)
+		pilot_owner.graveyard.append(pilot_minion.data)
+		for m in pilot_owner.board:
+			if m.has_ability(Abilities.ON_FRIENDLY_PILOT_DRAW):
+				var drawn = pilot_owner.draw_card()
+				if drawn != null and pilot_owner.player_id == player.player_id:
+					pending_drawn_cards.append(drawn)
 
 func apply_eject_pilot(target_mech: Minion, owner: PlayerState) -> Minion:
 	if not target_mech.is_piloted or target_mech.piloted_by == null:
@@ -388,14 +469,18 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 		"buff_creature":
 			if target_minion:
 				target_minion.current_attack += card.effect_value
+				var pre := target_minion.current_health
 				target_minion.current_health += card.effect_value
 				target_minion.max_health += card.effect_value
+				_try_heal_to_draw(target_minion, target_minion.current_health - pre)
 				_try_apothecary_bonus(target_minion.owner_id, target_minion)
 				_try_health_transform(target_minion)
 		"buff_health":
 			if target_minion:
+				var pre := target_minion.current_health
 				target_minion.current_health += card.effect_value
 				target_minion.max_health += card.effect_value
+				_try_heal_to_draw(target_minion, target_minion.current_health - pre)
 				_try_apothecary_bonus(target_minion.owner_id, target_minion)
 				_try_health_transform(target_minion)
 		"give_ability":
@@ -403,6 +488,17 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 				var ability: String = card.abilities[0]
 				if ability not in target_minion.abilities:
 					target_minion.abilities.append(ability)
+					# Granting Rush this way (e.g. Hot Garbage) has to also
+					# clear is_exhausted itself, same as every other place
+					# that grants it (apply_pilot(), apply_transform_choice(),
+					# ...) - it's only ever set once, at Minion._init(), off
+					# whatever abilities the minion started with, so a rush
+					# grant that arrives later never gets picked up on its
+					# own. Without this the target could still not attack
+					# this turn even after "gaining" rush, making the card
+					# look like it doesn't do anything.
+					if ability == Abilities.RUSH:
+						target_minion.is_exhausted = false
 		"destroy_all_creatures":
 			for p in [player, opponent]:
 				for minion in p.board.duplicate():
@@ -422,11 +518,30 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 				minion.take_damage(card.effect_value + amp)
 			_remove_dead_minions()
 			_check_win_condition()
+		"sludge_spray":
+			var acting := _get_player_by_id(acting_player_id)
+			var enemy := opponent if acting == player else player
+			var amp := _get_enemy_damage_amp(acting_player_id) if acting_player_id != "" else 0
+			var dmg := card.effect_value + card.rummage_count
+			for minion in enemy.board.duplicate():
+				minion.take_damage(dmg + amp)
+			_remove_dead_minions()
+			_check_win_condition()
 		"buff_all_friendly_attack":
 			if acting_player_id != "":
 				var acting = _get_player_by_id(acting_player_id)
 				for m in acting.board:
 					m.current_attack += card.effect_value
+		"buff_all_friendly_health":
+			if acting_player_id != "":
+				var acting := _get_player_by_id(acting_player_id)
+				for m in acting.board:
+					var pre := m.current_health
+					m.current_health += card.effect_value
+					m.max_health += card.effect_value
+					_try_heal_to_draw(m, m.current_health - pre)
+				for m in acting.board.duplicate():
+					_try_apothecary_bonus(acting_player_id, m)
 		"poke_bear":
 			if target_minion:
 				target_minion.take_damage(card.effect_value)
@@ -450,8 +565,10 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 		"blood_boil":
 			if target_minion:
 				var gain := target_minion.current_health * card.effect_value
+				var pre := target_minion.current_health
 				target_minion.current_health += gain
 				target_minion.max_health += gain
+				_try_heal_to_draw(target_minion, target_minion.current_health - pre)
 				_try_apothecary_bonus(target_minion.owner_id, target_minion)
 				_try_health_transform(target_minion)
 		"tainted_blood":
@@ -618,7 +735,9 @@ func duplicate_for_sim() -> GameState:
 	gs.pending_on_reinforce_damages = pending_on_reinforce_damages.duplicate(true)
 	gs.temp_shielded = temp_shielded.duplicate(true)
 	gs.growvin_granted = growvin_granted.duplicate(true)
+	gs.node_modifier_ability = node_modifier_ability
 	gs._opening_hand_dealt = _opening_hand_dealt
+	gs._first_turn_taken = _first_turn_taken.duplicate()
 	return gs
 
 func to_net_dict() -> Dictionary:
@@ -729,8 +848,10 @@ func _try_mirror_transform(new_data: CardData, transforming: Minion, owner: Play
 		for m in owner.board:
 			if m != transforming and m.has_ability(Abilities.ON_FRIENDLY_TRANSFORM_BUFF_SELF):
 				m.current_attack += 1
+				var pre := m.current_health
 				m.current_health += 1
 				m.max_health += 1
+				_try_heal_to_draw(m, m.current_health - pre)
 				_try_apothecary_bonus(owner.player_id, m)
 				_try_health_transform(m)
 
@@ -762,8 +883,10 @@ func _apply_feast_attendant(player_id: String) -> void:
 			if j < 0 or j >= owner.board.size():
 				continue
 			var neighbor: Minion = owner.board[j]
+			var pre := neighbor.current_health
 			neighbor.current_health += 1
 			neighbor.max_health += 1
+			_try_heal_to_draw(neighbor, neighbor.current_health - pre)
 			_try_apothecary_bonus(player_id, neighbor)
 			_try_health_transform(neighbor)
 

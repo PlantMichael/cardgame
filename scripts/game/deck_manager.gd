@@ -93,6 +93,7 @@ const ARCHETYPE_TAG_WEIGHTS := {
 		"deathrattle_draw_card": 2.0, "deathrattle_draw_yeti": 2.0, "deathrattle_draw_tank": 2.0,
 		"deathrattle_return_stratagem": 2.0, "deathrattle_rummage_creature": 2.0,
 		"destroy_all_creatures": 2.0, "deal_damage_all_enemy": 2.0, "null": 2.0,
+		"attack_rummage": 2.0, "sludge_spray": 2.0,
 		"give_mech_shielded_temp": 2.0, "combat_immune": 2.0, "apothecary": 1.0,
 		"blood_transfusion": 2.0, "sanguine": 2.0,
 		# Health-gain *enablers* (not just the payoffs that consume them) — without
@@ -126,6 +127,7 @@ const ARCHETYPE_TAG_PREFIXES := {
 		"on_play_aoe_enemy_": 2.0,
 		"on_reinforce_damage_": 1.5,
 		"on_any_reinforce_shot_": 1.5,
+		"deathrattle_damage_all_except_mech_": 2.0,
 	},
 }
 

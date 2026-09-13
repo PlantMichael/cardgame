@@ -18,20 +18,20 @@
 		"effect_value": 0
 	},
 	{
-		"id": "t_003",
-		"card_name": "Inyuite Infantry",
-		"cost": 2,
+		"id": "t_023",
+		"card_name": "Yeti scout",
+		"cost": 1,
 		"color": "TEAL",
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
-		"tribe": "",
-		"description": "On play: If you control a yeti, gain +2/+1",
-		"attack": 2,
-		"health": 3,
+		"tribe": "yeti",
+		"description": "Recon",
+		"attack": 1,
+		"health": 1,
 		"abilities": [
-			"on_play_buff_if_yeti"
+			"recon"
 		],
-		"art": "res://assets/teal/inyuiteinfantry.png",
+		"art": "res://assets/teal/yetiscout.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -50,6 +50,24 @@
 			"on_yeti_challenge_attack"
 		],
 		"art": "res://assets/teal/lostyetiling.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_003",
+		"card_name": "Inyuite Infantry",
+		"cost": 2,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "On play: If you control a yeti, gain +2/+1",
+		"attack": 2,
+		"health": 3,
+		"abilities": [
+			"on_play_buff_if_yeti"
+		],
+		"art": "res://assets/teal/inyuiteinfantry.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -109,6 +127,60 @@
 		"effect_value": 0
 	},
 	{
+		"id": "t_007",
+		"card_name": "Yeti Rancher",
+		"cost": 3,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "On Death: Draw a random Yeti from your deck.",
+		"attack": 1,
+		"health": 2,
+		"abilities": [
+			"deathrattle_draw_yeti"
+		],
+		"art": "res://assets/teal/yetirancher.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_012",
+		"card_name": "Yeti Poker",
+		"cost": 3,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "On play select a yeti you control to challenge.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"on_play_yeti_challenge"
+		],
+		"art": "res://assets/teal/yetipoker.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_020",
+		"card_name": "Iceskimmer",
+		"cost": 3,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "yeti",
+		"description": "Ambush",
+		"attack": 1,
+		"health": 3,
+		"abilities": [
+			"ambush"
+		],
+		"art": "res://assets/teal/sereneyeti_t_019.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "t_001",
 		"card_name": "Rallying Yetiling",
 		"cost": 4,
@@ -124,24 +196,6 @@
 			"on_play_buff_friendly_yeti_attack"
 		],
 		"art": "res://assets/teal/yetiling.jpg",
-		"effect": "",
-		"effect_value": 0
-	},
-	{
-		"id": "t_007",
-		"card_name": "Yeti Rancher",
-		"cost": 3,
-		"color": "TEAL",
-		"card_type": "CREATURE",
-		"rarity": "COMMON",
-		"tribe": "",
-		"description": "On Death: Draw a random Yeti from your deck.",
-		"attack": 1,
-		"health": 2,
-		"abilities": [
-			"deathrattle_draw_yeti"
-		],
-		"art": "res://assets/teal/yetirancher.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -164,21 +218,39 @@
 		"effect": "",
 		"effect_value": 0
 	},
-	{
-		"id": "t_012",
-		"card_name": "Yeti Poker",
-		"cost": 3,
+{
+		"id": "t_022",
+		"card_name": "Wrangling crew",
+		"cost": 4,
 		"color": "TEAL",
 		"card_type": "CREATURE",
-		"rarity": "COMMON",
+		"rarity": "EPIC",
 		"tribe": "",
-		"description": "On play select a yeti you control to challenge.",
-		"attack": 1,
-		"health": 1,
+		"description": "When a friendly yeti challenges, attack the same target right after.",
+		"attack": 4,
+		"health": 5,
 		"abilities": [
-			"on_play_yeti_challenge"
+			"on_yeti_challenge_attack"
 		],
-		"art": "res://assets/teal/yetipoker.png",
+		"art": "res://assets/teal/recoverysled.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_019",
+		"card_name": "Serene Yeti",
+		"cost": 4,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "yeti",
+		"description": "Ambush",
+		"attack": 2,
+		"health": 4,
+		"abilities": [
+			"ambush"
+		],
+		"art": "res://assets/teal/sereneyeti_t_019.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -295,42 +367,6 @@
 		"effect_value": 0
 	},
 	{
-		"id": "t_019",
-		"card_name": "Serene Yeti",
-		"cost": 4,
-		"color": "TEAL",
-		"card_type": "CREATURE",
-		"rarity": "EPIC",
-		"tribe": "yeti",
-		"description": "Ambush",
-		"attack": 2,
-		"health": 4,
-		"abilities": [
-			"ambush"
-		],
-		"art": "res://assets/teal/sereneyeti_t_019.png",
-		"effect": "",
-		"effect_value": 0
-	},
-	{
-		"id": "t_020",
-		"card_name": "Iceskimmer",
-		"cost": 3,
-		"color": "TEAL",
-		"card_type": "CREATURE",
-		"rarity": "EPIC",
-		"tribe": "yeti",
-		"description": "Ambush",
-		"attack": 1,
-		"health": 3,
-		"abilities": [
-			"ambush"
-		],
-		"art": "res://assets/teal/sereneyeti_t_019.png",
-		"effect": "",
-		"effect_value": 0
-	},
-	{
 		"id": "t_016",
 		"card_name": "Mother Yeti",
 		"cost": 10,
@@ -365,6 +401,22 @@
 		"art": "res://assets/teal/abominusprimalwraith.png",
 		"effect": "",
 		"effect_value": 0
+	},
+	{
+		"id": "t_str_001",
+		"card_name": "Avalanche",
+		"cost": 3,
+		"color": "TEAL",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Deal 3 damage to all creatures.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"art": "res://assets/teal/icewhip.png",
+		"effect": "deal_damage_all_creatures",
+		"effect_value": 3
 	},
 	{
 		"id": "t_str_002",

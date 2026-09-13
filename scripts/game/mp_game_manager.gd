@@ -15,14 +15,28 @@ var _is_host: bool
 ## whether game-over reports a ladder result and moves matchmaking Elo.
 var is_ranked: bool = false
 var _opponent_rating: int = -1
+## Set when this match is one node of a PvP Campaign run (see main.gd's
+## _start_campaign_pvp_match) — drives whether game-over shows the
+## "Continue" (campaign_continue_requested) button instead of "Play Again".
+var is_campaign: bool = false
 
 # ── Entry points ──────────────────────────────────────────────────────────
 
+## node_modifier_ability/grant_bonus_self/grant_bonus_opponent are Campaign-
+## PvP-only (see main.gd's _start_campaign_pvp_match / campaign_state.gd): a
+## battlefield-wide ability granted to every creature played this match, and
+## a one-time extra starting mana crystal for whichever side is down 2+ node
+## wins (mirrors game_manager.gd's local-game grant_catchup_mana). Only the
+## host's game_state actually drives gameplay (the guest's copy is a mirror
+## refreshed via _apply_state), so these only need to be set here.
 func start_as_host(board_node: Board, player_deck: Array[CardData], opp_deck: Array[CardData],
-					opponent_name: String = "", ranked: bool = false, opponent_rating: int = -1) -> void:
+					opponent_name: String = "", ranked: bool = false, opponent_rating: int = -1,
+					node_modifier_ability: String = "", grant_bonus_self: bool = false,
+					grant_bonus_opponent: bool = false, campaign: bool = false) -> void:
 	board = board_node
 	board.is_online = true
 	is_ranked = ranked
+	is_campaign = campaign
 	_opponent_rating = opponent_rating
 	if not opponent_name.is_empty():
 		board.set_opponent_name(opponent_name)
@@ -40,9 +54,18 @@ func start_as_host(board_node: Board, player_deck: Array[CardData], opp_deck: Ar
 	board.end_turn_pressed.connect(_host_on_end_turn)
 
 	game_state = GameState.new(HOST_ID, GUEST_ID, player_deck, opp_deck)
+	game_state.node_modifier_ability = node_modifier_ability
 
 	var first := HOST_ID if randi() % 2 == 0 else GUEST_ID
 	game_state.start_game(first)
+	if grant_bonus_self:
+		game_state.player.max_mana += 1
+		if first == HOST_ID:
+			game_state.player.current_mana += 1
+	if grant_bonus_opponent:
+		game_state.opponent.max_mana += 1
+		if first == GUEST_ID:
+			game_state.opponent.current_mana += 1
 	board.setup(game_state)
 
 	Net.relay({"type": "coinflip", "first": first})
@@ -50,6 +73,7 @@ func start_as_host(board_node: Board, player_deck: Array[CardData], opp_deck: Ar
 
 	await board.show_coinflip_result(first == HOST_ID)
 	board.refresh()
+	await _run_host_mulligan()
 	await _host_announce_pending_draws()
 
 	if first == HOST_ID:
@@ -58,11 +82,38 @@ func start_as_host(board_node: Board, player_deck: Array[CardData], opp_deck: Ar
 		board.log_action("--- Opponent Turn %d ---" % game_state.turn_number)
 		await _host_run_guest_turn()
 
+## Mulligan phase: runs the host's own mulligan screen, then waits for the
+## guest's picks (relayed as "action_mulligan" once the guest finishes its
+## own screen - the guest is doing this concurrently on its own client, not
+## waiting for the host first). Applies both sides to the authoritative
+## game_state before turn 1 is allowed to start. card_ids are matched
+## against a shrinking local pool rather than re-searching the full hand
+## each time, so two copies of the same card in the guest's hand can both be
+## swapped instead of the first match being found twice.
+func _run_host_mulligan() -> void:
+	var host_swaps: Array[CardData] = await board.show_mulligan_screen(game_state.player.hand.duplicate())
+	game_state.mulligan_swap(HOST_ID, host_swaps)
+
+	var msg: Dictionary = await Net.await_relay_of_type("action_mulligan")
+	var guest_hand_pool: Array[CardData] = game_state.opponent.hand.duplicate()
+	var guest_swaps: Array[CardData] = []
+	for cid in msg.get("card_ids", []):
+		for c in guest_hand_pool:
+			if c.id == str(cid):
+				guest_swaps.append(c)
+				guest_hand_pool.erase(c)
+				break
+	game_state.mulligan_swap(GUEST_ID, guest_swaps)
+
+	board.refresh()
+	_send_state()
+
 func start_as_guest(board_node: Board, opponent_name: String = "", ranked: bool = false,
-					 opponent_rating: int = -1) -> void:
+					 opponent_rating: int = -1, campaign: bool = false) -> void:
 	board = board_node
 	board.is_online = true
 	is_ranked = ranked
+	is_campaign = campaign
 	_opponent_rating = opponent_rating
 	if not opponent_name.is_empty():
 		board.set_opponent_name(opponent_name)
@@ -87,6 +138,12 @@ func start_as_guest(board_node: Board, opponent_name: String = "", ranked: bool 
 	var first: String = str(cf_msg["first"])
 	await board.show_coinflip_result(first == GUEST_ID)
 	board.refresh()
+
+	var guest_swaps: Array[CardData] = await board.show_mulligan_screen(game_state.player.hand.duplicate())
+	Net.relay({"type": "action_mulligan", "card_ids": guest_swaps.map(func(c): return c.id)})
+	var post_mulligan_msg: Dictionary = await Net.await_relay_of_type("state_update")
+	_apply_state(post_mulligan_msg["state"])
+
 	await _guest_announce_pending_draws()
 
 	if first == GUEST_ID:
@@ -126,12 +183,26 @@ func _relay_animate_attack(attacker_id: String, attacker_player_id: String, targ
 func _relay_animate_challenge(challenger_id: String, challenger_player_id: String, target_id: String) -> void:
 	Net.relay({"type": "animate_challenge", "challenger_id": challenger_id, "challenger_player_id": challenger_player_id, "target_id": target_id})
 
+func _relay_announce_card(card_id: String) -> void:
+	Net.relay({"type": "announce_card", "card_id": card_id})
+
+## Hearthstone-style pause: shows card_data big on this client's screen and
+## relays the same announce to the other client, so both players see the
+## card before it resolves - awaited by the host BEFORE the state-mutating
+## play_creature/play_stratagem call so the pause lands ahead of resolution.
+func _announce_both(card_data: CardData) -> void:
+	_relay_announce_card(card_data.id)
+	await board.announce_card(card_data)
+
 # ── Host: action handlers ─────────────────────────────────────────────────
 
-func _host_on_play_card(card_data: CardData) -> void:
+func _host_on_play_card(card_data: CardData, at_index: int) -> void:
 	if not game_state.is_local_player_turn():
 		return
-	var minion := game_state.play_creature(HOST_ID, card_data)
+	await _announce_both(card_data)
+	if not is_instance_valid(board):
+		return
+	var minion := game_state.play_creature(HOST_ID, card_data, at_index)
 	if minion == null:
 		return
 	board.log_action("You played %s" % card_data.card_name)
@@ -139,6 +210,12 @@ func _host_on_play_card(card_data: CardData) -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	board.refresh()
+	# See game_manager.gd's identical wait on this same call chain for why:
+	# an on-play prompt below (a rummage picker, etc.) shouldn't race the
+	# just-played card's own landing animation.
+	await board.await_slam_landed(board.player_board_zone)
+	if not is_instance_valid(board):
+		return
 	_send_state()
 	await _host_process_pending()
 	await _host_run_on_play(minion)
@@ -170,6 +247,9 @@ func _host_on_attack(attacker_id: String, target_type: String, target_id: String
 
 func _host_on_play_stratagem(card_data: CardData, target_minion: Minion, target_player_id: String) -> void:
 	if not game_state.is_local_player_turn():
+		return
+	await _announce_both(card_data)
+	if not is_instance_valid(board):
 		return
 	if not game_state.play_stratagem(HOST_ID, card_data, target_minion, target_player_id):
 		board.refresh()
@@ -236,11 +316,26 @@ func _host_run_guest_turn() -> void:
 			var card = _find_card_in_hand(GUEST_ID, str(action.get("card_id", "")))
 			if card == null:
 				continue
-			var minion := game_state.play_creature(GUEST_ID, card)
+			var at_index: int = int(action.get("at_index", -1))
+			# Registered before the announce pause rather than right before
+			# game_state.play_creature() - see ai_controller.gd's identical
+			# comment on this same call for why (avoids a stutter right at
+			# the moment the slam animation is meant to start).
+			board.play_opponent_card_with_slam(card)
+			await _announce_both(card)
+			if not is_instance_valid(board):
+				return
+			var minion := game_state.play_creature(GUEST_ID, card, at_index)
 			if minion:
 				board.log_action("Opponent played %s" % card.card_name)
 				_relay_log("You played %s" % card.card_name)
 				board.refresh()
+				# See game_manager.gd's identical wait on this same call
+				# chain for why: an on-play effect below shouldn't race the
+				# just-played card's own landing animation.
+				await board.await_slam_landed(board.opponent_board_zone)
+				if not is_instance_valid(board):
+					return
 				_send_state()
 				await _host_process_pending()
 				await _host_run_guest_on_play(minion)
@@ -282,6 +377,9 @@ func _host_run_guest_turn() -> void:
 			if tmid != "":
 				target_minion = _find_minion_anywhere(tmid)
 			var target_player_id: String = str(action.get("target_player_id", ""))
+			await _announce_both(card)
+			if not is_instance_valid(board):
+				return
 			if not game_state.play_stratagem(GUEST_ID, card, target_minion, target_player_id):
 				continue
 			board.log_action("Opponent played %s" % card.card_name)
@@ -614,7 +712,7 @@ func _host_run_on_play(minion: Minion) -> void:
 			board.start_on_play_pilot_targeting(minion)
 			var target: Minion = await board.on_play_pilot_target_selected
 			if target != null:
-				game_state.apply_pilot(minion, target, game_state.player)
+				game_state.apply_pilot(minion, target, game_state.player, false)
 				board.refresh()
 				_send_state()
 	if minion.has_ability(Abilities.ON_PLAY_CHALLENGE_WIN_BUFF) and not game_state.opponent.board.is_empty():
@@ -628,8 +726,10 @@ func _host_run_on_play(minion: Minion) -> void:
 			_send_state()
 			if minion in game_state.player.board and target not in game_state.opponent.board:
 				minion.current_attack += 1
+				var pre := minion.current_health
 				minion.current_health += 1
 				minion.max_health += 1
+				game_state._try_heal_to_draw(minion, minion.current_health - pre)
 				game_state._try_apothecary_bonus(HOST_ID, minion)
 				board.refresh()
 				_send_state()
@@ -713,7 +813,7 @@ func _host_run_guest_on_play(minion: Minion) -> void:
 			var resp: Dictionary = await Net.await_relay_of_type("response_on_play_pilot")
 			var target := _find_minion(GUEST_ID, str(resp.get("target_id", "")))
 			if target != null:
-				game_state.apply_pilot(minion, target, game_state.opponent)
+				game_state.apply_pilot(minion, target, game_state.opponent, false)
 				board.refresh()
 				_send_state()
 	if minion.has_ability(Abilities.ON_PLAY_CHALLENGE_WIN_BUFF) and not game_state.player.board.is_empty():
@@ -729,8 +829,10 @@ func _host_run_guest_on_play(minion: Minion) -> void:
 			_send_state()
 			if minion in game_state.opponent.board and target not in game_state.player.board:
 				minion.current_attack += 1
+				var pre := minion.current_health
 				minion.current_health += 1
 				minion.max_health += 1
+				game_state._try_heal_to_draw(minion, minion.current_health - pre)
 				game_state._try_apothecary_bonus(GUEST_ID, minion)
 				board.refresh()
 				_send_state()
@@ -749,8 +851,10 @@ func _host_stratagem_followup(card_data: CardData, target_minion: Minion) -> voi
 				_relay_animate_challenge(target_minion.instance_id, HOST_ID, target.instance_id)
 				if card_data.effect_value > 0 and target.is_dead() and target_minion in game_state.player.board:
 					target_minion.current_attack += card_data.effect_value
+					var pre := target_minion.current_health
 					target_minion.current_health += card_data.effect_value
 					target_minion.max_health += card_data.effect_value
+					game_state._try_heal_to_draw(target_minion, target_minion.current_health - pre)
 					game_state._try_apothecary_bonus(HOST_ID, target_minion)
 				board.refresh()
 				_send_state()
@@ -792,8 +896,10 @@ func _host_stratagem_followup_for_guest(card_data: CardData, target_minion: Mini
 				_relay_animate_challenge(target_minion.instance_id, GUEST_ID, t.instance_id)
 				if card_data.effect_value > 0 and t.is_dead() and target_minion in game_state.opponent.board:
 					target_minion.current_attack += card_data.effect_value
+					var pre := target_minion.current_health
 					target_minion.current_health += card_data.effect_value
 					target_minion.max_health += card_data.effect_value
+					game_state._try_heal_to_draw(target_minion, target_minion.current_health - pre)
 				board.refresh()
 				_send_state()
 	if card_data.effect == "blood_transfusion" and target_minion != null and not game_state.opponent.board.is_empty():
@@ -817,10 +923,10 @@ func _host_stratagem_followup_for_guest(card_data: CardData, target_minion: Mini
 
 # ── Guest: send actions ────────────────────────────────────────────────────
 
-func _guest_send_play_card(card_data: CardData) -> void:
+func _guest_send_play_card(card_data: CardData, at_index: int) -> void:
 	if not game_state.is_local_player_turn():
 		return
-	Net.relay({"type": "action_play_card", "card_id": card_data.id})
+	Net.relay({"type": "action_play_card", "card_id": card_data.id, "at_index": at_index})
 
 func _guest_send_attack(attacker_id: String, target_type: String, target_id: String) -> void:
 	Net.relay({"type": "action_attack", "attacker_id": attacker_id, "target_type": target_type, "target_id": target_id})
@@ -858,6 +964,13 @@ func _guest_drain_queue() -> bool:
 		if prompt != null:
 			Net._relay_queue.erase(prompt)
 			await _guest_respond_to_prompt(prompt)
+			continue
+
+		var announce = Net.pop_of_type("announce_card")
+		if announce != null:
+			var announced_card := CardDatabase.get_card(str(announce.get("card_id", "")))
+			if announced_card != null:
+				await board.announce_card(announced_card)
 			continue
 
 		var log_msg = Net.pop_of_type("log")
@@ -1040,5 +1153,7 @@ func _report_and_show_game_over(won: bool) -> void:
 		var old_legend_rating := Auth.rank_legend_rating
 		Auth.report_ranked_result(won, _opponent_rating)
 		board.show_game_over(won, true, old_bracket, old_in_legend, old_legend_rating)
+	elif is_campaign:
+		board.show_game_over(won, false, 0, false, 0, true)
 	else:
 		board.show_game_over(won)

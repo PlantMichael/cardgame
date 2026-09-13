@@ -1,0 +1,38 @@
+[
+  {
+    "id": "dunes",
+    "name": "Dunes",
+    "description": "All creatures have Ambush.",
+    "ability": "ambush"
+  },
+  {
+    "id": "bastion",
+    "name": "Bastion",
+    "description": "All creatures have Guardian.",
+    "ability": "guardian"
+  },
+  {
+    "id": "ironhold",
+    "name": "Ironhold",
+    "description": "All creatures have Shielded 1.",
+    "ability": "shielded_1"
+  },
+  {
+    "id": "overgrowth",
+    "name": "Overgrowth",
+    "description": "All creatures have Rejuvenate 1.",
+    "ability": "rejuvenate_1"
+  },
+  {
+    "id": "fogmire",
+    "name": "Fogmire",
+    "description": "All creatures have Cloaked.",
+    "ability": "cloaked"
+  },
+  {
+    "id": "warzone",
+    "name": "Warzone",
+    "description": "All creatures have Rush.",
+    "ability": "rush"
+  }
+]

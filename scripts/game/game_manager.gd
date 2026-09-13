@@ -4,6 +4,12 @@ var game_state: GameState
 var board: Board
 var ai_controller: AIController
 var is_ranked: bool = false
+var is_campaign: bool = false
+## Guards _on_end_turn() against overlapping runs (e.g. End Turn getting
+## pressed again before the previous press's await chain finishes) - without
+## this, a second run reassigns turn/phase mid-flight and can double up draws
+## or skip them, draining a hand over the course of several turns.
+var _end_turn_in_progress: bool = false
 
 const LOCAL_PLAYER_ID = "player_1"
 const OPPONENT_PLAYER_ID = "player_2"
@@ -12,13 +18,27 @@ func _ready() -> void:
 	ai_controller = AIController.new()
 	add_child(ai_controller)
 
+## node_modifier_ability/grant_catchup_mana are Campaign-mode-only (see
+## campaign_state.gd / main.gd's _start_campaign_match): a battlefield-wide
+## ability granted to every creature played this match, and a one-time extra
+## starting mana crystal for the local player when they're down 2+ node wins.
 func start_local_game(board_node: Board, player_deck: Array[CardData], opponent_deck: Array[CardData],
-					   ai_level: int = 5, ranked: bool = false) -> void:
+					   ai_level: int = 5, ranked: bool = false, campaign: bool = false,
+					   node_modifier_ability: String = "", grant_catchup_mana: bool = false) -> void:
 	board = board_node
 	board.is_online = false
 	ai_controller.ai_level = ai_level
 	is_ranked = ranked
+	is_campaign = campaign
+	# GameManagerAutoload is a singleton that outlives any one match - reset
+	# per-match guards explicitly rather than assuming the previous match's
+	# _on_end_turn() coroutine always reached one of its own reset points
+	# (e.g. quitting to the menu mid-AI-turn frees `board` and abandons it
+	# there instead), or a rematch into this same singleton would find the
+	# guard already stuck true and End Turn would silently do nothing.
+	_end_turn_in_progress = false
 	game_state = GameState.new(LOCAL_PLAYER_ID, OPPONENT_PLAYER_ID, player_deck, opponent_deck)
+	game_state.node_modifier_ability = node_modifier_ability
 	board.action_play_card.connect(_on_play_card)
 	board.action_play_stratagem.connect(_on_play_stratagem)
 	board.action_attack.connect(_on_attack)
@@ -28,8 +48,16 @@ func start_local_game(board_node: Board, player_deck: Array[CardData], opponent_
 	board.player_hero.player_id = LOCAL_PLAYER_ID
 	var first_player_id = LOCAL_PLAYER_ID if randf() < 0.5 else OPPONENT_PLAYER_ID
 	game_state.start_game(first_player_id)
+	if grant_catchup_mana:
+		game_state.player.max_mana += 1
+		if game_state.is_local_player_turn():
+			game_state.player.current_mana += 1
 	board.setup(game_state)
 	await board.show_coinflip_result(first_player_id == LOCAL_PLAYER_ID)
+	game_state.mulligan_swap(OPPONENT_PLAYER_ID, AIHeuristics.pick_mulligan_swaps(game_state.opponent.hand))
+	var player_swaps: Array[CardData] = await board.show_mulligan_screen(game_state.player.hand.duplicate())
+	game_state.mulligan_swap(LOCAL_PLAYER_ID, player_swaps)
+	board.refresh()
 	if not game_state.is_local_player_turn():
 		board.log_action("--- Opponent Turn %d ---" % game_state.turn_number)
 		await ai_controller.take_turn(game_state, board)
@@ -59,15 +87,22 @@ func start_local_game(board_node: Board, player_deck: Array[CardData], opponent_
 			return
 		board.log_action("--- Your Turn %d ---" % game_state.turn_number)
 
-func _on_play_card(card_data: CardData) -> void:
+func _on_play_card(card_data: CardData, at_index: int) -> void:
 	if not game_state.is_local_player_turn():
 		return
-	var minion = game_state.play_creature(LOCAL_PLAYER_ID, card_data)
+	var minion = game_state.play_creature(LOCAL_PLAYER_ID, card_data, at_index)
 	if minion:
 		board.log_action("You played %s" % card_data.card_name)
 		await get_tree().process_frame
 		await get_tree().process_frame
 		board.refresh()
+		# Waits out the just-played card's own slam-landing animation (see
+		# board.gd's await_slam_landed()) before any on-play prompt below (a
+		# rummage picker, tank shot target, ...) can open - otherwise the
+		# two race, and a card with a heavier/longer landing (e.g. a
+		# legendary - see legendary_animations.gd) could have its own
+		# prompt pop up mid-animation.
+		await board.await_slam_landed(board.player_board_zone)
 		await _process_pending_tank_shots()
 		await _process_pending_rummages()
 		await _process_pending_nulls()
@@ -188,7 +223,7 @@ func _run_player_on_play(minion: Minion) -> void:
 			var target: Minion = await board.on_play_pilot_target_selected
 			if target != null:
 				board.log_action("Your %s piloted %s" % [minion.data.card_name, target.data.card_name])
-				game_state.apply_pilot(minion, target, game_state.player)
+				game_state.apply_pilot(minion, target, game_state.player, false)
 				board.refresh()
 	if minion.has_ability(Abilities.ON_PLAY_CHALLENGE_WIN_BUFF) and not game_state.opponent.board.is_empty():
 		board.start_challenge_targeting(minion)
@@ -200,8 +235,10 @@ func _run_player_on_play(minion: Minion) -> void:
 			board.refresh()
 			if minion in game_state.player.board and target not in game_state.opponent.board:
 				minion.current_attack += 1
+				var pre := minion.current_health
 				minion.current_health += 1
 				minion.max_health += 1
+				game_state._try_heal_to_draw(minion, minion.current_health - pre)
 				game_state._try_apothecary_bonus(LOCAL_PLAYER_ID, minion)
 				board.log_action("Your %s won and gained +1/+1!" % minion.data.card_name)
 				board.refresh()
@@ -592,8 +629,10 @@ func _on_play_stratagem(card_data: CardData, target_minion: Minion, target_playe
 					if card_data.effect_value > 0 and target.is_dead() and target_minion in game_state.player.board:
 						var win_buff: int = card_data.effect_value
 						target_minion.current_attack += win_buff
+						var pre := target_minion.current_health
 						target_minion.current_health += win_buff
 						target_minion.max_health += win_buff
+						game_state._try_heal_to_draw(target_minion, target_minion.current_health - pre)
 						game_state._try_apothecary_bonus(LOCAL_PLAYER_ID, target_minion)
 						board.log_action("Your %s won and gained +%d/+%d!" % [target_minion.data.card_name, win_buff, win_buff])
 						board.refresh()
@@ -633,11 +672,22 @@ func _on_play_stratagem(card_data: CardData, target_minion: Minion, target_playe
 		_handle_game_over()
 
 func _on_end_turn() -> void:
+	if _end_turn_in_progress:
+		return
+	_end_turn_in_progress = true
 	game_state.end_turn()
 	board.refresh()
 	board.log_action("--- Opponent Turn %d ---" % game_state.turn_number)
 	if not game_state.is_local_player_turn():
 		await ai_controller.take_turn(game_state, board)
+		# Quitting to the main menu mid-AI-turn reloads the scene and frees
+		# `board` out from under this suspended coroutine (see the same check
+		# in ai_controller.gd's take_turn) - bail instead of touching it, and
+		# make sure the guard above doesn't get stuck true for whatever game
+		# starts next.
+		if not is_instance_valid(board):
+			_end_turn_in_progress = false
+			return
 		await _announce_pending_draws()
 		await _process_pending_tank_shots()
 		await _process_pending_rummages()
@@ -648,6 +698,7 @@ func _on_end_turn() -> void:
 		await _process_pending_overwatch_challenges()
 		if game_state.current_phase == GameState.Phase.GAME_OVER:
 			_handle_game_over()
+			_end_turn_in_progress = false
 			return
 		game_state.end_turn()
 		board.refresh()
@@ -661,8 +712,10 @@ func _on_end_turn() -> void:
 		await _process_pending_overwatch_challenges()
 		if game_state.current_phase == GameState.Phase.GAME_OVER:
 			_handle_game_over()
+			_end_turn_in_progress = false
 			return
 		board.log_action("--- Your Turn %d ---" % game_state.turn_number)
+	_end_turn_in_progress = false
 
 func _find_minion(player_id: String, instance_id: String) -> Minion:
 	var p = game_state.player if player_id == LOCAL_PLAYER_ID else game_state.opponent
@@ -673,11 +726,18 @@ func _find_minion(player_id: String, instance_id: String) -> Minion:
 
 func _handle_game_over() -> void:
 	var won := game_state.winner_id == LOCAL_PLAYER_ID
+	if won:
+		# Server dedups this to once per calendar day regardless of how many
+		# wins are reported after the first (see relay.js's claim_earn_reward
+		# handler) - safe to call unconditionally on every winning match.
+		Economy.claim_earn_reward("daily_first_win")
 	if is_ranked:
 		var old_bracket := Auth.rank_bracket
 		var old_in_legend := Auth.rank_in_legend
 		var old_legend_rating := Auth.rank_legend_rating
 		Auth.report_ranked_result(won)
 		board.show_game_over(won, true, old_bracket, old_in_legend, old_legend_rating)
+	elif is_campaign:
+		board.show_game_over(won, false, 0, false, 0, true)
 	else:
 		board.show_game_over(won)

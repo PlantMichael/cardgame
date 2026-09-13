@@ -256,7 +256,11 @@ static func _pick_stratagem_target(card: CardData, gs: GameState, acting_id: Str
 			result["ready"] = not enemy.board.is_empty()
 		"deal_damage_all_enemy":
 			result["ready"] = not enemy.board.is_empty()
+		"sludge_spray":
+			result["ready"] = not enemy.board.is_empty()
 		"buff_all_friendly_attack":
+			result["ready"] = not acting.board.is_empty()
+		"buff_all_friendly_health":
 			result["ready"] = not acting.board.is_empty()
 		"blood_transfusion":
 			if not enemy_targetable.is_empty():
@@ -346,8 +350,10 @@ static func _apply_stratagem_secondary(card: CardData, target: Minion, gs: GameS
 					if card.effect == "force_challenge" and card.effect_value > 0 \
 							and tgt not in enemy.board and yeti in acting.board:
 						yeti.current_attack += card.effect_value
+						var pre := yeti.current_health
 						yeti.current_health += card.effect_value
 						yeti.max_health += card.effect_value
+						gs._try_heal_to_draw(yeti, yeti.current_health - pre)
 
 # --- On-play effect resolution (ported from SimRunner._sim_handle_on_play) ---
 
@@ -404,8 +410,10 @@ static func _handle_on_play(m: Minion, gs: GameState) -> void:
 			gs.apply_challenge(m, tgt)
 			if m in friendly.board and tgt not in enemy.board:
 				m.current_attack += 1
+				var pre := m.current_health
 				m.current_health += 1
 				m.max_health += 1
+				gs._try_heal_to_draw(m, m.current_health - pre)
 		if gs.current_phase == GameState.Phase.GAME_OVER:
 			return
 
@@ -475,7 +483,7 @@ static func _handle_on_play(m: Minion, gs: GameState) -> void:
 				if bm != m and bm.has_ability(Abilities.MECH) and not bm.is_piloted:
 					mechs.append(bm)
 			if not mechs.is_empty():
-				gs.apply_pilot(m, AIHeuristics.pick_best_pilot_target(mechs, m), friendly)
+				gs.apply_pilot(m, AIHeuristics.pick_best_pilot_target(mechs, m), friendly, false)
 			break
 
 # --- Pending-queue resolution (ported from SimRunner._resolve_pending) ---

@@ -1,0 +1,21 @@
+[
+	{
+		"pack_id": "standard_pack",
+		"display_name": "Standard Pack",
+		"price": 100,
+		"card_count": 5,
+		"rarity_weights": {
+			"COMMON": 70,
+			"RARE": 22,
+			"EPIC": 6,
+			"LEGENDARY": 2
+		},
+		"guaranteed_rare_or_better": true,
+		"dust_value": {
+			"COMMON": 5,
+			"RARE": 20,
+			"EPIC": 100,
+			"LEGENDARY": 400
+		}
+	}
+]

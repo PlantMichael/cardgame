@@ -18,6 +18,24 @@
 		"effect_value": 0
 	},
 	{
+		"id": "g_020",
+		"card_name": "Logi Runner",
+		"cost": 1,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Rush",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"rush"
+		],
+		"art": "res://assets/green/logirunner.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "g_002",
 		"card_name": "Cocky Commando",
 		"cost": 2,
@@ -32,24 +50,6 @@
 			"reinforce"
 		],
 		"art": "res://assets/green/cockycommando.png",
-		"effect": "",
-		"effect_value": 0
-	},
-	{
-		"id": "g_008",
-		"card_name": "Sapien Infantry",
-		"cost": 4,
-		"color": "GREEN",
-		"card_type": "CREATURE",
-		"rarity": "RARE",
-		"tribe": "",
-		"description": "Reinforce",
-		"attack": 3,
-		"health": 2,
-		"abilities": [
-			"reinforce"
-		],
-		"art": "res://assets/green/sapieninfantry.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -69,6 +69,40 @@
 		],
 		"art": "res://assets/green/paratroopers.png",
 		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_024",
+		"card_name": "Sapien Platoon",
+		"cost": 3,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Recon.",
+		"attack": 3,
+		"health": 4,
+		"abilities": [],
+		"art": "res://assets/green/paratroopers.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_009",
+		"card_name": "SS4 Blackwidow",
+		"cost": 3,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "",
+		"description": "Ambush.",
+		"attack": 5,
+		"health": 3,
+		"abilities": [
+			"ambush"
+		],
+		"art": "",
+		"effect": "res://assets/green/ss4blackwidow.png",
 		"effect_value": 0
 	},
 	{
@@ -116,8 +150,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "On play: do 2 damage",
-		"attack": 2,
-		"health": 2,
+		"attack": 3,
+		"health": 1,
 		"abilities": [
 			"on_play_damage_2"
 		],
@@ -140,6 +174,42 @@
 			"rush"
 		],
 		"art": "res://assets/green/flankingrifleman.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_018",
+		"card_name": "Stealth Jet",
+		"cost": 3,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "tank",
+		"description": "Whenever an enemy creature takes damage, it takes 1 more.",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"enemy_damage_amp_1"
+		],
+		"art": "res://assets/green/stealthjet.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_008",
+		"card_name": "Sapien Infantry",
+		"cost": 4,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Reinforce",
+		"attack": 3,
+		"health": 2,
+		"abilities": [
+			"reinforce"
+		],
+		"art": "res://assets/green/sapieninfantry.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -306,25 +376,7 @@
 		"abilities": [
 			"on_play_damage_8"
 		],
-		"art": "res://assets/green/bigberthathehailmary.png",
-		"effect": "",
-		"effect_value": 0
-	},
-	{
-		"id": "g_018",
-		"card_name": "Stealth Jet",
-		"cost": 3,
-		"color": "GREEN",
-		"card_type": "CREATURE",
-		"rarity": "RARE",
-		"tribe": "tank",
-		"description": "Whenever an enemy creature takes damage, it takes 1 more.",
-		"attack": 2,
-		"health": 2,
-		"abilities": [
-			"enemy_damage_amp_1"
-		],
-		"art": "res://assets/green/stealthjet.png",
+		"art": "res://assets/green/bigbertha.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -363,7 +415,7 @@
 	{
 		"id": "g_str_003",
 		"card_name": "Commanding Shout",
-		"cost": 4,
+		"cost": 3,
 		"color": "GREEN",
 		"card_type": "STRATAGEM",
 		"rarity": "COMMON",
@@ -374,6 +426,22 @@
 		"abilities": [],
 		"art": "res://assets/green/commandingshout.png",
 		"effect": "buff_all_friendly_attack",
+		"effect_value": 1
+	},
+	{
+		"id": "g_str_004",
+		"card_name": "Tactical retreat",
+		"cost": 2,
+		"color": "GREEN",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Give each friendly creature +0/+1.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"art": "res://assets/green/commandingshout.png",
+		"effect": "buff_all_friendly_health",
 		"effect_value": 1
 	}
 ]

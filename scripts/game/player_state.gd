@@ -56,8 +56,15 @@ func play_card_from_hand(card: CardData) -> bool:
 	spend_mana(card.effective_cost())
 	return true
 
-func place_minion(minion: Minion) -> void:
-	board.append(minion)
+## at_index lets a caller (see Board's drag-and-drop - board.gd's
+## _board_insert_index_for_x()) choose where in the row the minion lands
+## instead of always appending at the end; out-of-range values (including
+## the default -1) fall back to appending.
+func place_minion(minion: Minion, at_index: int = -1) -> void:
+	if at_index < 0 or at_index >= board.size():
+		board.append(minion)
+	else:
+		board.insert(at_index, minion)
 
 func remove_minion(minion: Minion) -> void:
 	board.erase(minion)

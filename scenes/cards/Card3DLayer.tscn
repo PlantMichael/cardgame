@@ -5,7 +5,7 @@
 [sub_resource type="Environment" id="Environment_1"]
 ambient_light_source = 2
 ambient_light_color = Color(1, 1, 1, 1)
-ambient_light_energy = 0.9
+ambient_light_energy = 0.6
 tonemap_mode = 2
 
 [node name="Card3DLayer" type="SubViewportContainer"]
@@ -27,7 +27,7 @@ far = 20.0
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="SubViewport"]
 transform = Transform3D(0.906308, 0.271654, -0.323744, 0, 0.766044, 0.642788, 0.422618, -0.582563, 0.694272, 0, 0, 10)
-light_energy = 1.1
+light_energy = 0.85
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="SubViewport"]
 environment = SubResource("Environment_1")

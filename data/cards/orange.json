@@ -18,6 +18,22 @@
 		"effect_value": 0
 	},
 	{
+		"id": "o_025",
+		"card_name": "Scouter",
+		"cost": 1,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "mech",
+		"description": "Pilotable.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [],
+		"art": "res://assets/orange/scraprummager.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "o_021",
 		"card_name": "Sweeper",
 		"cost": 2,
@@ -141,6 +157,43 @@
 		"effect_value": 0
 	},
 	{
+		"id": "o_004",
+		"card_name": "Veteran Pilot",
+		"cost": 3,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Recon. Pilot 3/4",
+		"attack": 3,
+		"health": 2,
+		"abilities": [
+			"pilot_3_4",
+			"recon"
+		],
+		"art": "res://assets/orange/veteranpilot.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "o_019",
+		"card_name": "Jab bot",
+		"cost": 3,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "",
+		"description": "Dualstrike",
+		"attack": 3,
+		"health": 3,
+		"abilities": [
+			"dual_strike"
+		],
+		"art": "res://assets/orange/jabbot.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "o_005",
 		"card_name": "Gundari Engineer",
 		"cost": 4,
@@ -215,21 +268,21 @@
 		"effect_value": 0
 	},
 	{
-		"id": "o_004",
-		"card_name": "Veteran Pilot",
-		"cost": 3,
+		"id": "o_017",
+		"card_name": "Newt Nano, the Cunning",
+		"cost": 4,
 		"color": "ORANGE",
 		"card_type": "CREATURE",
-		"rarity": "COMMON",
-		"tribe": "",
-		"description": "Recon. Pilot 3/4",
-		"attack": 3,
-		"health": 2,
+		"rarity": "LEGENDARY",
+		"tribe": "mech",
+		"description": "Pilot 2/2. On play: Pilot a mech for free.",
+		"attack": 2,
+		"health": 3,
 		"abilities": [
-			"pilot_3_4",
-			"recon"
+			"pilot_2_2",
+			"on_play_pilot_mech"
 		],
-		"art": "res://assets/orange/veteranpilot.png",
+		"art": "res://assets/orange/newtnanothecunning.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -252,20 +305,21 @@
 		"effect_value": 0
 	},
 	{
-		"id": "o_010",
-		"card_name": "Kestrel",
-		"cost": 6,
+		"id": "o_024",
+		"card_name": "Organic Vapeorizor",
+		"cost": 5,
 		"color": "ORANGE",
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "mech",
-		"description": "Pilotable. Guardian.",
-		"attack": 4,
-		"health": 5,
+		"description": "Guardian. On death: deal 3 damage to all creatures except mechs.",
+		"attack": 0,
+		"health": 6,
 		"abilities": [
-			"guardian"
+			"guardian",
+			"deathrattle_damage_all_except_mech_3"
 		],
-		"art": "res://assets/orange/kestrel.png",
+		"art": "res://assets/orange/0sprey.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -289,6 +343,24 @@
 		"effect_value": 0
 	},
 	{
+		"id": "o_010",
+		"card_name": "Kestrel",
+		"cost": 6,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "mech",
+		"description": "Pilotable. Guardian.",
+		"attack": 4,
+		"health": 5,
+		"abilities": [
+			"guardian"
+		],
+		"art": "res://assets/orange/kestrel.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "o_016",
 		"card_name": "Qu3tzalcoatl, the Serpent",
 		"cost": 6,
@@ -306,25 +378,6 @@
 			"on_piloted_gain_rush"
 		],
 		"art": "res://assets/orange/qu3tzalcoatltheserpent.png",
-		"effect": "",
-		"effect_value": 0
-	},
-	{
-		"id": "o_017",
-		"card_name": "Newt Nano, the Cunning",
-		"cost": 4,
-		"color": "ORANGE",
-		"card_type": "CREATURE",
-		"rarity": "LEGENDARY",
-		"tribe": "mech",
-		"description": "Pilot 2/2. On play: Pilot a mech for free.",
-		"attack": 2,
-		"health": 3,
-		"abilities": [
-			"pilot_2_2",
-			"on_play_pilot_mech"
-		],
-		"art": "res://assets/orange/newtnanothecunning.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -380,24 +433,6 @@
 			"on_friendly_mech_death_buff"
 		],
 		"art": "res://assets/orange/griff1n.png",
-		"effect": "",
-		"effect_value": 0
-	},
-	{
-		"id": "o_019",
-		"card_name": "Jab bot",
-		"cost": 3,
-		"color": "ORANGE",
-		"card_type": "CREATURE",
-		"rarity": "EPIC",
-		"tribe": "mech",
-		"description": "Pilotable. Dualstrike",
-		"attack": 3,
-		"health": 3,
-		"abilities": [
-			"dual_strike"
-		],
-		"art": "res://assets/orange/jabbot.png",
 		"effect": "",
 		"effect_value": 0
 	},

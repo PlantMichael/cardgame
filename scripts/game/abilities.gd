@@ -13,6 +13,7 @@ const RUMMAGE               = "rummage"
 const RUMMAGE_ON_DEATH      = "rummage_on_death"
 const RUMMAGE_MECH_ON_DEATH = "rummage_mech_on_death"
 const RUMMAGE_SPELL         = "rummage_spell"
+const ATTACK_RUMMAGE        = "attack_rummage"
 const PILOT                 = "pilot"
 const MECH                  = "mech"
 const ON_PLAY_YETI_CHALLENGE = "on_play_yeti_challenge"
@@ -61,6 +62,7 @@ const DEFINITIONS: Dictionary = {
 	RUMMAGE_ON_DEATH:      { "display": "On Death:",    "color": Color(0.50, 0.20, 0.60) },
 	RUMMAGE_MECH_ON_DEATH: { "display": "On Death:",    "color": Color(0.50, 0.20, 0.60) },
 	RUMMAGE_SPELL:         { "display": "Spell Rummage","color": Color(0.30, 0.08, 0.42) },
+	ATTACK_RUMMAGE:        { "display": "On Attack:",    "color": Color(0.30, 0.08, 0.42) },
 	MECH:                  { "display": "Mech",         "color": Color(0.60, 0.38, 0.08) },
 	ON_PLAY_YETI_CHALLENGE: { "display": "On Play:",    "color": Color(0.20, 0.55, 0.75) },
 	CLOAKED:                { "display": "Cloaked",     "color": Color(0.20, 0.50, 0.80) },
@@ -75,6 +77,7 @@ const DEFINITIONS: Dictionary = {
 	ON_YETI_DEATH_CHALLENGE:      { "display": "Overwatch",       "color": Color(0.20, 0.55, 0.75) },
 	COMBAT_IMMUNE:                { "display": "Ethereal",        "color": Color(0.55, 0.75, 0.95) },
 	ON_PLAY_TRANSFORM_CHOICE:     { "display": "On Play: Morph",  "color": Color(0.80, 0.25, 0.10) },
+	ON_PLAY_TRANSFORM:            { "display": "On Play: Morph",  "color": Color(0.80, 0.25, 0.10) },
 	ON_PLAY_BUFF_FRIENDLY_HEALTH: { "display": "On Play:",        "color": Color(0.20, 0.55, 0.75) },
 	WHEN_ATTACKED_BUFF_FRIENDLY:  { "display": "Lifegift",        "color": Color(0.70, 0.25, 0.45) },
 	APOTHECARY:                   { "display": "Apothecary",      "color": Color(0.25, 0.65, 0.35) },
@@ -125,6 +128,7 @@ const TRANSFORM                  = "transform"
 const TRANSFORM_AT_MAX_HEALTH    = "transform_at_max_health"
 const COMBAT_IMMUNE              = "combat_immune"
 const ON_PLAY_TRANSFORM_CHOICE   = "on_play_transform_choice"
+const ON_PLAY_TRANSFORM          = "on_play_transform"
 const ON_PLAY_BUFF_FRIENDLY_HEALTH = "on_play_buff_friendly_health"
 const WHEN_ATTACKED_BUFF_FRIENDLY  = "when_attacked_buff_friendly"
 const APOTHECARY                   = "apothecary"
@@ -151,6 +155,7 @@ const ON_PLAY_BUFF_ALL_FRIENDLY_HEALTH  = "on_play_buff_all_friendly_health"
 const ON_PLAY_VOIDTOUCH_IF_RUMMAGED     = "on_play_voidtouch_if_rummaged"
 const FEAST_ATTENDANT                   = "feast_attendant"
 const ON_PLAY_DEVOUR_ALL                = "on_play_devour_all"
+const DEATHRATTLE_DAMAGE_ALL_EXCEPT_MECH = "deathrattle_damage_all_except_mech"
 
 const TRIBES: Array = [YETI, MECH, TANK, SPRITE, MONSTROSITY]
 
@@ -190,6 +195,14 @@ func is_rejuvenate(ability: String) -> bool:
 func get_rejuvenate_value(ability: String) -> int:
 	if is_rejuvenate(ability):
 		return int(ability.substr(REJUVENATE.length() + 1))
+	return 0
+
+func is_deathrattle_damage_all_except_mech(ability: String) -> bool:
+	return ability.begins_with(DEATHRATTLE_DAMAGE_ALL_EXCEPT_MECH + "_")
+
+func get_deathrattle_damage_all_except_mech_value(ability: String) -> int:
+	if is_deathrattle_damage_all_except_mech(ability):
+		return int(ability.substr(DEATHRATTLE_DAMAGE_ALL_EXCEPT_MECH.length() + 1))
 	return 0
 
 func is_keyword_tooltip(ability: String) -> bool:
@@ -238,6 +251,8 @@ func get_display(ability: String) -> String:
 		return "Amplify +%d" % get_enemy_damage_amp_value(ability)
 	if is_rejuvenate(ability):
 		return "Rejuvenate %d" % get_rejuvenate_value(ability)
+	if is_deathrattle_damage_all_except_mech(ability):
+		return "On Death: %d to all except mechs" % get_deathrattle_damage_all_except_mech_value(ability)
 	if is_transform(ability):
 		return "Transform: %d" % get_transform_threshold(ability)
 	if is_transform_at_max_health(ability):
@@ -263,6 +278,8 @@ func get_color(ability: String) -> Color:
 		return Color(0.70, 0.20, 0.20)
 	if is_rejuvenate(ability):
 		return REJUVENATE_COLOR
+	if is_deathrattle_damage_all_except_mech(ability):
+		return Color(0.50, 0.20, 0.60)
 	if is_transform(ability):
 		return TRANSFORM_COLOR
 	if is_transform_at_max_health(ability):
@@ -339,14 +356,6 @@ func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 				var drawn = owner.draw_card()
 				if drawn != null and owner.player_id == gs.player.player_id:
 					gs.pending_drawn_cards.append(drawn)
-			TANK:
-				var _has_opd := false
-				for _ab in minion.abilities:
-					if is_on_play_damage(_ab):
-						_has_opd = true
-						break
-				if not _has_opd:
-					gs.pending_tank_shots.append(owner.player_id)
 			RUMMAGE:
 				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": minion.data.cost, "type_filter": ""})
 			RUMMAGE_AND_PLAY:
@@ -355,13 +364,18 @@ func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": -1, "type_filter": "stratagem"})
 			NULL:
 				gs.pending_nulls.append({"player_id": owner.player_id, "source": minion.data.card_name})
+			ON_PLAY_TRANSFORM:
+				if not minion.data.transform_into.is_empty():
+					gs.apply_transform_choice(minion, minion.data.transform_into)
 			ON_PLAY_BUFF_FRIENDLY_HEALTH:
 				gs.pending_buff_friendly_health.append(owner.player_id)
 			ON_PLAY_RUMMAGE_BUFF:
 				if minion.data.rummage_count > 0:
 					minion.current_attack += minion.data.rummage_count
+					var pre := minion.current_health
 					minion.current_health += minion.data.rummage_count
 					minion.max_health += minion.data.rummage_count
+					gs._try_heal_to_draw(minion, minion.current_health - pre)
 					gs._try_apothecary_bonus(owner.player_id, minion)
 			ON_PLAY_BUFF_FRIENDLY_YETI_ATK:
 				for m in owner.board:
@@ -371,8 +385,10 @@ func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 				for m in owner.board:
 					if m != minion and m.has_ability(YETI):
 						minion.current_attack += 2
+						var pre := minion.current_health
 						minion.current_health += 1
 						minion.max_health += 1
+						gs._try_heal_to_draw(minion, minion.current_health - pre)
 						gs._try_apothecary_bonus(owner.player_id, minion)
 						break
 			GROWVIN_AURA:
@@ -381,8 +397,10 @@ func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 						gs._apply_growvin_aura_to_mech(m, owner.player_id)
 			ON_PLAY_BUFF_ALL_FRIENDLY_HEALTH:
 				for m in owner.board:
+					var pre := m.current_health
 					m.current_health += 1
 					m.max_health += 1
+					gs._try_heal_to_draw(m, m.current_health - pre)
 				for m in owner.board.duplicate():
 					gs._try_apothecary_bonus(owner.player_id, m)
 			ON_PLAY_VOIDTOUCH_IF_RUMMAGED:
@@ -401,8 +419,10 @@ func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 				gs._remove_dead_minions()
 				if minion in owner.board:
 					minion.current_attack += total_atk
+					var pre := minion.current_health
 					minion.current_health += total_hp
 					minion.max_health += total_hp
+					gs._try_heal_to_draw(minion, minion.current_health - pre)
 					gs._try_apothecary_bonus(owner.player_id, minion)
 				gs._check_win_condition()
 	for ability in minion.abilities:
@@ -420,18 +440,24 @@ func fire_on_attack(attacker: Minion, owner: PlayerState, gs: GameState) -> void
 		match ability:
 			ATTACK_BUFF_FRIENDLY_HEALTH:
 				if not owner.board.is_empty():
-					var target = owner.board[randi() % owner.board.size()]
+					var target := owner.board[randi() % owner.board.size()]
+					var pre := target.current_health
 					target.current_health += 1
 					target.max_health += 1
+					gs._try_heal_to_draw(target, target.current_health - pre)
 					gs._try_apothecary_bonus(owner.player_id, target)
+			ATTACK_RUMMAGE:
+				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": attacker.data.cost, "type_filter": ""})
 
 func fire_on_defend(defender: Minion, owner: PlayerState, gs: GameState) -> void:
 	for ability in defender.abilities:
 		match ability:
 			WHEN_ATTACKED_BUFF_FRIENDLY:
 				for m in owner.board:
+					var pre := m.current_health
 					m.current_health += 1
 					m.max_health += 1
+					gs._try_heal_to_draw(m, m.current_health - pre)
 				for m in owner.board.duplicate():
 					gs._try_apothecary_bonus(owner.player_id, m)
 
@@ -448,8 +474,6 @@ func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 				for m in owner.board:
 					if m != copy and m.has_ability(TACTICAL_OFFICER):
 						copy.current_attack += 1
-				if copy.has_ability(TANK) and enemy != null:
-					tank_shots += 1
 				for ab in minion.abilities:
 					if is_on_reinforce_damage(ab):
 						gs.pending_on_reinforce_damages.append({"player_id": owner.player_id, "damage": get_on_reinforce_damage_value(ab), "source": minion.data.card_name})
@@ -500,11 +524,22 @@ func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 						owner.hand.append(minion.piloted_by)
 			GROWVIN_AURA:
 				gs._remove_growvin_aura(owner.player_id)
+	for ability in minion.abilities:
+		if is_deathrattle_damage_all_except_mech(ability):
+			var damage = get_deathrattle_damage_all_except_mech_value(ability)
+			for p in [gs.player, gs.opponent]:
+				for m in p.board:
+					if m.has_ability(MECH):
+						continue
+					m.take_damage(damage)
+			break
 	if YETI in minion.abilities:
 		for watcher in owner.board:
 			if watcher.has_ability(ON_FRIENDLY_YETI_DEATH_BUFF):
+				var pre := watcher.current_health
 				watcher.current_health += 2
 				watcher.max_health += 2
+				gs._try_heal_to_draw(watcher, watcher.current_health - pre)
 				gs._try_apothecary_bonus(owner.player_id, watcher)
 		for watcher in owner.board:
 			if watcher.has_ability(ON_YETI_DEATH_CHALLENGE):
@@ -514,16 +549,20 @@ func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 		for watcher in owner.board:
 			if watcher.has_ability(ON_FRIENDLY_MECH_DEATH_BUFF):
 				watcher.current_attack += 1
+				var pre := watcher.current_health
 				watcher.current_health += 1
 				watcher.max_health += 1
+				gs._try_heal_to_draw(watcher, watcher.current_health - pre)
 				gs._try_apothecary_bonus(owner.player_id, watcher)
 	return {"drawn": drawn, "tank_shots": tank_shots}
 
 func fire_on_rummage(owner: PlayerState, gs: GameState) -> void:
 	for m in owner.board:
 		if m.has_ability(RUMMAGE_BUFF):
+			var pre := m.current_health
 			m.current_health += 1
 			m.max_health += 1
+			gs._try_heal_to_draw(m, m.current_health - pre)
 			gs._try_apothecary_bonus(owner.player_id, m)
 	for m in owner.board:
 		if m.has_ability(RUMMAGE_DRAW):

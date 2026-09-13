@@ -20,8 +20,14 @@ signal login_result(success: bool, message: String, profile: Dictionary)
 signal logged_out
 signal ranked_result_received(success: bool, profile: Dictionary)
 signal ranked_match_found(lobby_id: String, role: String, opponent_name: String, opponent_rating: int)
+signal campaign_match_found(lobby_id: String, role: String, opponent_name: String, size: int)
 signal save_deck_result(success: bool, message: String, deck_name: String)
 signal delete_deck_result(success: bool, message: String, deck_name: String)
+signal set_pfp_result(success: bool, message: String, pfp_id: String)
+signal economy_state_result(success: bool, currency: int, dust: int, owned_cards: Dictionary)
+signal purchase_pack_result(success: bool, message: String, currency: int, dust: int, pack_id: String, cards: Array, dust_awarded: int)
+signal craft_card_result(success: bool, message: String, dust: int, card_id: String, dust_needed: int)
+signal claim_earn_reward_result(success: bool, message: String, currency: int, dust: int, amount_awarded: int, reason: String)
 signal _queue_updated
 
 func connect_to_relay() -> void:
@@ -77,12 +83,58 @@ func _handle_incoming(msg: Dictionary) -> void:
 			save_deck_result.emit(bool(msg.get("success", false)), str(msg.get("message", "")), str(msg.get("name", "")))
 		"delete_deck_result":
 			delete_deck_result.emit(bool(msg.get("success", false)), str(msg.get("message", "")), str(msg.get("name", "")))
+		"set_pfp_result":
+			set_pfp_result.emit(bool(msg.get("success", false)), str(msg.get("message", "")), str(msg.get("pfp_id", "")))
+		"economy_state_result":
+			var success := bool(msg.get("success", false))
+			economy_state_result.emit(
+				success,
+				int(msg.get("currency", 0)),
+				int(msg.get("dust", 0)),
+				_owned_cards_from(msg.get("owned_cards", []))
+			)
+		"purchase_pack_result":
+			var success := bool(msg.get("success", false))
+			var result: Dictionary = msg.get("result", {})
+			purchase_pack_result.emit(
+				success,
+				str(msg.get("message", "")),
+				int(msg.get("currency", 0)),
+				int(msg.get("dust", 0)),
+				str(result.get("pack_id", "")),
+				result.get("cards", []),
+				int(result.get("dust_awarded", 0))
+			)
+		"craft_card_result":
+			craft_card_result.emit(
+				bool(msg.get("success", false)),
+				str(msg.get("message", "")),
+				int(msg.get("dust", 0)),
+				str(msg.get("card_id", "")),
+				int(msg.get("dust_needed", 0))
+			)
+		"claim_earn_reward_result":
+			claim_earn_reward_result.emit(
+				bool(msg.get("success", false)),
+				str(msg.get("message", "")),
+				int(msg.get("currency", 0)),
+				int(msg.get("dust", 0)),
+				int(msg.get("amount_awarded", 0)),
+				str(msg.get("reason", ""))
+			)
 		"ranked_match_found":
 			ranked_match_found.emit(
 				str(msg.get("lobby_id", "")),
 				str(msg.get("role", "")),
 				str(msg.get("opponent_name", "")),
 				int(msg.get("opponent_rating", 1000))
+			)
+		"campaign_match_found":
+			campaign_match_found.emit(
+				str(msg.get("lobby_id", "")),
+				str(msg.get("role", "")),
+				str(msg.get("opponent_name", "")),
+				int(msg.get("size", 0))
 			)
 		"relay":
 			var payload = msg.get("payload", {})
@@ -131,11 +183,32 @@ func queue_ranked(token: String) -> void:
 func cancel_ranked_queue(token: String) -> void:
 	send({"type": "cancel_ranked_queue", "token": token})
 
+func queue_campaign(token: String, size: int) -> void:
+	send({"type": "queue_campaign", "token": token, "size": size})
+
+func cancel_campaign_queue(token: String) -> void:
+	send({"type": "cancel_campaign_queue", "token": token})
+
 func save_deck(token: String, deck_name: String, faction_idx: int, card_ids: Array) -> void:
 	send({"type": "save_deck", "token": token, "name": deck_name, "faction_idx": faction_idx, "card_ids": card_ids})
 
 func delete_deck(token: String, deck_name: String) -> void:
 	send({"type": "delete_deck", "token": token, "name": deck_name})
+
+func set_pfp(token: String, pfp_id: String) -> void:
+	send({"type": "set_pfp", "token": token, "pfp_id": pfp_id})
+
+func get_economy_state(token: String) -> void:
+	send({"type": "get_economy_state", "token": token})
+
+func purchase_pack(token: String, pack_id: String) -> void:
+	send({"type": "purchase_pack", "token": token, "pack_id": pack_id})
+
+func craft_card(token: String, card_id: String) -> void:
+	send({"type": "craft_card", "token": token, "card_id": card_id})
+
+func claim_earn_reward(token: String, reason: String) -> void:
+	send({"type": "claim_earn_reward", "token": token, "reason": reason})
 
 func _profile_from(msg: Dictionary) -> Dictionary:
 	var d := {
@@ -144,6 +217,7 @@ func _profile_from(msg: Dictionary) -> Dictionary:
 		"wins": int(msg.get("wins", 0)),
 		"losses": int(msg.get("losses", 0)),
 		"rating": int(msg.get("rating", 0)),
+		"pfp_id": str(msg.get("pfp_id", "")),
 		"decks": _decks_from(msg),
 	}
 	d.merge(_rank_fields_from(msg))
@@ -163,6 +237,16 @@ func _decks_from(msg: Dictionary) -> Array[Dictionary]:
 			"card_ids": card_ids,
 			"is_starter": false,
 		})
+	return out
+
+## Server sends owned_cards as an array of {card_id, quantity}; the client
+## uses a card_id -> quantity Dictionary instead since every lookup site
+## (collection checks, deck builder) wants "how many of this card" directly.
+func _owned_cards_from(raw: Array) -> Dictionary:
+	var out := {}
+	for entry in raw:
+		if entry is Dictionary:
+			out[str(entry.get("card_id", ""))] = int(entry.get("quantity", 0))
 	return out
 
 func _rank_fields_from(msg: Dictionary) -> Dictionary:

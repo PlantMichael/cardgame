@@ -4,6 +4,7 @@ extends Control
 signal back_pressed
 
 const CardScene := preload("res://scenes/cards/Card.tscn")
+const CardPreviewScene := preload("res://scenes/cards/CardPreview.tscn")
 
 const COLL_CARD_SCALE := 0.5
 const COLL_W := 110
@@ -23,13 +24,17 @@ var _faction_idx: int = -1
 var _deck_ids: Array[String] = []
 var _deck_name: String = "My Deck"
 var _original_deck_name: String = ""
+## Snapshot of name/contents as of the last load or save - compared against
+## live state in _has_unsaved_changes() to decide whether Back should prompt.
+var _saved_deck_name: String = ""
+var _saved_deck_ids: Array[String] = []
 var _search_text: String = ""
 var _color_filter: int = 0  # 0 = all, 1 = faction only, 2 = generic only
 var _filter_btns: Array[Button] = []
 var _filter_box: HBoxContainer = null
 var _delete_btn: Button = null
 var _keywords: Dictionary = {}
-var _preview_card_node: Card = null
+var _preview_card_node: CardPreview = null
 var _hide_preview_scheduled: bool = false
 
 # ── Hub page ───────────────────────────────────────────────────────────────
@@ -65,7 +70,7 @@ func _ready() -> void:
 	$HubPage/Toolbar/HBoxContainer/BackButton.pressed.connect(func(): back_pressed.emit())
 	$HubPage/Toolbar/HBoxContainer/NewDeckButton.pressed.connect(_show_faction_page)
 	$FactionPage/Toolbar/HBoxContainer/BackButton.pressed.connect(_show_hub_page)
-	$EditorPage/TopSection/EditorToolbar/HBoxContainer/BackButton.pressed.connect(_show_hub_page)
+	$EditorPage/TopSection/EditorToolbar/HBoxContainer/BackButton.pressed.connect(_on_editor_back_pressed)
 	$EditorPage/TopSection/EditorToolbar/HBoxContainer/SaveButton.pressed.connect(_do_save)
 	$EditorPage/TopSection/EditorToolbar/HBoxContainer/ClearButton.pressed.connect(func():
 		_deck_ids.clear()
@@ -90,10 +95,7 @@ func _load_keywords() -> void:
 		_keywords = result
 
 func _setup_preview_card() -> void:
-	_preview_card_node = CardScene.instantiate()
-	_preview_card_node.use_text_overlay = false
-	_preview_card_node.render_on_top = true
-	_preview_card_node.extra_mana_pip_offset_y = 10.0
+	_preview_card_node = CardPreviewScene.instantiate()
 	_preview_card_node.scale = Vector2(PREVIEW_SCALE, PREVIEW_SCALE)
 	_preview_card_node.position = Vector2(0, 0)
 	_preview_card_node.input_pickable = false
@@ -148,29 +150,22 @@ func _setup_filter_box() -> void:
 	strip_hbox.move_child(_filter_box, 1)
 
 func _build_faction_buttons() -> void:
+	# A single wide child in a fixed-width HBoxContainer sized for the old
+	# 5-button row would otherwise hug the left edge instead of centering.
+	_faction_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+
+	var faction_names: Array[String] = []
+	var faction_colors: Array[Color] = []
 	for i in DeckManager.FACTION_NAMES.size():
-		var sw: Color = DeckManager.FACTION_SWATCHES[i]
-		var btn := Button.new()
-		btn.text = DeckManager.FACTION_NAMES[i]
-		btn.custom_minimum_size = Vector2(0, 80)
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.add_theme_font_size_override("font_size", 18)
+		faction_names.append(DeckManager.FACTION_NAMES[i])
+		faction_colors.append(DeckManager.FACTION_SWATCHES[i])
 
-		var bns := StyleBoxFlat.new()
-		bns.bg_color = sw.darkened(0.3); bns.set_corner_radius_all(10)
-		bns.border_width_bottom = 4; bns.border_color = sw.darkened(0.15)
-		btn.add_theme_stylebox_override("normal", bns)
-		var bhs := StyleBoxFlat.new()
-		bhs.bg_color = sw.lightened(0.1); bhs.set_corner_radius_all(10)
-		bhs.border_width_bottom = 4; bhs.border_color = sw
-		btn.add_theme_stylebox_override("hover", bhs)
-		var bps := StyleBoxFlat.new()
-		bps.bg_color = sw.darkened(0.2); bps.set_corner_radius_all(10)
-		btn.add_theme_stylebox_override("pressed", bps)
-
-		_faction_hbox.add_child(btn)
-		var idx := i
-		btn.pressed.connect(func(): _show_editor_page(idx, "My Deck", []))
+	var pie := FactionPieChart.new()
+	pie.custom_minimum_size = Vector2(420, 420)
+	pie.names = faction_names
+	pie.colors = faction_colors
+	pie.slice_selected.connect(func(idx: int): _show_editor_page(idx, "My Deck", []))
+	_faction_hbox.add_child(pie)
 
 # ── Page switching ─────────────────────────────────────────────────────────
 
@@ -195,6 +190,8 @@ func _show_editor_page(faction_idx: int, deck_name: String, initial_ids: Array[S
 	_deck_ids = initial_ids.duplicate()
 	_search_text = ""
 	_color_filter = 0
+	_saved_deck_name = deck_name
+	_saved_deck_ids = initial_ids.duplicate()
 
 	_hub_page.visible = false
 	_faction_page.visible = false
@@ -654,11 +651,106 @@ func _ignore_control_input(node: Node) -> void:
 
 # ── Save / Delete ──────────────────────────────────────────────────────────
 
-func _do_save() -> void:
+func _do_save() -> bool:
 	var name := _name_edit.text.strip_edges()
-	if name.is_empty(): return
+	if name.is_empty(): return false
 	_deck_name = name
 	DeckManager.save_deck(_deck_name, _faction_idx, _deck_ids)
+	_saved_deck_name = _deck_name
+	_saved_deck_ids = _deck_ids.duplicate()
+	return true
+
+## True if the name or card contents differ from the last load/save - used
+## to decide whether leaving the editor should prompt to save first.
+func _has_unsaved_changes() -> bool:
+	if _name_edit.text.strip_edges() != _saved_deck_name:
+		return true
+	if _deck_ids.size() != _saved_deck_ids.size():
+		return true
+	var current_counts: Dictionary = {}
+	for id in _deck_ids:
+		current_counts[id] = current_counts.get(id, 0) + 1
+	var saved_counts: Dictionary = {}
+	for id in _saved_deck_ids:
+		saved_counts[id] = saved_counts.get(id, 0) + 1
+	return current_counts != saved_counts
+
+func _on_editor_back_pressed() -> void:
+	if _has_unsaved_changes():
+		_show_unsaved_changes_dialog()
+	else:
+		_show_hub_page()
+
+## "Save before exiting?" confirmation shown by _on_editor_back_pressed()
+## when the editor has unsaved changes - same hand-built overlay pattern as
+## board.gd's pause menu / game-over screen (no built-in dialogs elsewhere
+## in this project's UI).
+func _show_unsaved_changes_dialog() -> void:
+	var overlay := CanvasLayer.new()
+	overlay.layer = 20
+	add_child(overlay)
+
+	var bg := ColorRect.new()
+	bg.color = Color(0, 0, 0, 0.72)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(bg)
+
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
+
+	var panel := PanelContainer.new()
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.12, 0.10, 0.09)
+	panel_style.set_corner_radius_all(10)
+	panel_style.content_margin_left = 30; panel_style.content_margin_right = 30
+	panel_style.content_margin_top = 24; panel_style.content_margin_bottom = 24
+	panel.add_theme_stylebox_override("panel", panel_style)
+	center.add_child(panel)
+
+	var inner := VBoxContainer.new()
+	inner.alignment = BoxContainer.ALIGNMENT_CENTER
+	inner.add_theme_constant_override("separation", 20)
+	panel.add_child(inner)
+
+	var label := Label.new()
+	label.text = "Save before exiting?"
+	label.add_theme_font_size_override("font_size", 26)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	inner.add_child(label)
+
+	var btn_row := HBoxContainer.new()
+	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_row.add_theme_constant_override("separation", 14)
+	inner.add_child(btn_row)
+
+	var save_btn := Button.new()
+	save_btn.text = "Save"
+	save_btn.custom_minimum_size = Vector2(110, 44)
+	save_btn.pressed.connect(func():
+		if _do_save():
+			overlay.queue_free()
+			_show_hub_page()
+		# Empty name: leave the dialog up so they can go fix it instead of
+		# silently discarding on their behalf.
+	)
+	btn_row.add_child(save_btn)
+
+	var discard_btn := Button.new()
+	discard_btn.text = "Discard"
+	discard_btn.custom_minimum_size = Vector2(110, 44)
+	discard_btn.pressed.connect(func():
+		overlay.queue_free()
+		_show_hub_page()
+	)
+	btn_row.add_child(discard_btn)
+
+	var cancel_btn := Button.new()
+	cancel_btn.text = "Cancel"
+	cancel_btn.custom_minimum_size = Vector2(110, 44)
+	cancel_btn.pressed.connect(func(): overlay.queue_free())
+	btn_row.add_child(cancel_btn)
 
 func _do_delete() -> void:
 	if _original_deck_name.is_empty():

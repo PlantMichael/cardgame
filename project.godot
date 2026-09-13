@@ -18,14 +18,20 @@ config/icon="res://icon.svg"
 [autoload]
 
 CardDatabase="*res://scripts/cards/card_database.gd"
+CampaignModifiers="*res://scripts/game/campaign_modifiers.gd"
 DeckManager="*res://scripts/game/deck_manager.gd"
 GameManagerAutoload="*res://scripts/game/game_manager.gd"
 Abilities="*res://scripts/game/abilities.gd"
 Net="*res://scripts/game/net.gd"
 Auth="*res://scripts/game/auth.gd"
+Economy="*res://scripts/game/economy.gd"
 
 [display]
 
 window/size/viewport_width=1920
 window/size/viewport_height=1080
 window/stretch/mode="canvas_items"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/brackeys_particle_controls/plugin.cfg")

@@ -50,17 +50,39 @@ func _apply_action(action: Dictionary, game_state: GameState, board: Board) -> v
 # --- Card playing ---
 
 func _play_creature_action(card: CardData, game_state: GameState, board: Board) -> void:
+	# Registered here (well before the slam itself starts) rather than right
+	# before game_state.play_creature() below - instantiating a Card is not
+	# free (it allocates a whole SubViewport for its text overlay - see
+	# card.gd's _setup_text_overlay()), and paying that cost synchronously at
+	# the exact moment the flight animation is meant to start read as a stutter
+	# right at kickoff. Doing it now lets that cost land during the THINK_DELAY/
+	# announce_card pause below instead, which the player already reads as a
+	# beat, not a hitch.
+	board.play_opponent_card_with_slam(card)
 	await get_tree().create_timer(THINK_DELAY).timeout
+	if not is_instance_valid(board):
+		return
+	await board.announce_card(card)
 	if not is_instance_valid(board):
 		return
 	var new_minion = game_state.play_creature(game_state.opponent.player_id, card)
 	board.log_action("Opponent played %s" % card.card_name)
 	board.refresh()
+	# See game_manager.gd's identical wait on this same call chain (there,
+	# for the player's own play) for why: an on-play effect below (a laser-
+	# kill animation, etc.) shouldn't race the just-played card's own
+	# landing animation.
+	await board.await_slam_landed(board.opponent_board_zone)
+	if not is_instance_valid(board):
+		return
 	if new_minion:
 		await _handle_on_play_effects(new_minion, game_state, board)
 
 func _play_stratagem_action(card: CardData, minion: Minion, target_player_id: String, game_state: GameState, board: Board) -> void:
 	await get_tree().create_timer(THINK_DELAY).timeout
+	if not is_instance_valid(board):
+		return
+	await board.announce_card(card)
 	if not is_instance_valid(board):
 		return
 	if not game_state.play_stratagem(game_state.opponent.player_id, card, minion, target_player_id):
@@ -94,8 +116,10 @@ func _play_stratagem_action(card: CardData, minion: Minion, target_player_id: St
 				if card.effect == "force_challenge" and card.effect_value > 0 and challenge_target.is_dead() and yeti in game_state.opponent.board:
 					var win_buff: int = card.effect_value
 					yeti.current_attack += win_buff
+					var pre := yeti.current_health
 					yeti.current_health += win_buff
 					yeti.max_health += win_buff
+					game_state._try_heal_to_draw(yeti, yeti.current_health - pre)
 					board.log_action("Opponent's %s won and gained +%d/+%d!" % [yeti.data.card_name, win_buff, win_buff])
 					board.refresh()
 
@@ -175,8 +199,10 @@ func _handle_on_play_effects(new_minion: Minion, game_state: GameState, board: B
 			board.refresh()
 		if target != null and new_minion in game_state.opponent.board and target not in game_state.player.board:
 			new_minion.current_attack += 1
+			var pre := new_minion.current_health
 			new_minion.current_health += 1
 			new_minion.max_health += 1
+			game_state._try_heal_to_draw(new_minion, new_minion.current_health - pre)
 			board.log_action("Opponent's %s won and gained +1/+1!" % new_minion.data.card_name)
 			board.refresh()
 
@@ -225,7 +251,7 @@ func _handle_on_play_effects(new_minion: Minion, game_state: GameState, board: B
 				if not is_instance_valid(board):
 					return
 				board.log_action("Opponent's %s piloted %s" % [new_minion.data.card_name, mech_target.data.card_name])
-				game_state.apply_pilot(new_minion, mech_target, game_state.opponent)
+				game_state.apply_pilot(new_minion, mech_target, game_state.opponent, false)
 				board.refresh()
 			break
 

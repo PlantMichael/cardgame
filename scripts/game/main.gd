@@ -4,23 +4,18 @@ const BoardScene = preload("res://scenes/game/Board.tscn")
 const DeckBuilderScene = preload("res://scenes/ui/DeckBuilderScreen.tscn")
 const WallpaperTexture = preload("res://assets/wallapepr.png")
 const CursorDefault = preload("res://assets/01.png")
+const MenuFont = preload("res://assets/fonts/Orbitron.ttf")
+# Explicit preloads (rather than relying on global class_name resolution)
+# for scripts new in this session - Godot's global script class cache is
+# only rebuilt when the editor scans the project, which hasn't happened yet
+# for these, so the bare class names aren't resolvable from a --headless run.
+const PackOpenerScript = preload("res://scripts/game/pack_opener.gd")
+const ShopScreenScript = preload("res://scripts/ui/shop_screen.gd")
+const PackOpenScreenScript = preload("res://scripts/ui/pack_open_screen.gd")
 
 var _canvas: CanvasLayer
 var _player_deck_ids: Array[String] = []
 var _opponent_deck_ids: Array[String] = []
-
-# Simulation state
-var _sim_running: bool = false
-var _sim_runner: SimRunner = null
-var _sim_deck_mode: SimRunner.DeckMode = SimRunner.DeckMode.RANDOM
-var _sim_ai_level: int = 5  # Medium by default — level 10 on both sides is much slower
-var _sim_stat_labels: Dictionary = {}
-var _sim_totals_lbl: Label = null
-var _sim_status_lbl: Label = null
-var _sim_game_start_ms: int = 0
-var _sim_gps_count: int = 0
-var _sim_gps_display: float = 0.0
-var _sim_card_grid: GridContainer = null
 
 # Multiplayer state
 var _mp_name: String = ""
@@ -32,13 +27,40 @@ var _mp_manager: MpGameManager = null
 
 # Ranked matchmaking state
 const RANKED_SEARCH_TIMEOUT_SEC := 10.0
-const RANKED_MATCH_CONFIRM_SEC := 1.5
+const RANKED_MATCH_COUNTDOWN_SEC := 5
 # Bumped on every begin/cancel/resolve so a stale timer or match-found signal
 # left over from a cancelled or already-resolved search (e.g. Cancel then
 # immediately Start again) can tell it's no longer current and no-op instead
 # of hijacking whatever search is active now.
 var _ranked_search_id: int = 0
 var _ranked_match_found_callable: Callable = Callable()
+var _ranked_searching: bool = false
+# Separate top-layer CanvasLayer (sibling of _canvas, not a child of it) so
+# the "Searching for opponent..."/"Searching for campaign opponent..."
+# indicator survives _clear_screen() calls and stays visible while the
+# player freely navigates menus/card list/deck builder during a search.
+# Shared by Ranked and Campaign matchmaking (see _show_queue_overlay) - only
+# one of the two can ever be searching at a time in practice.
+var _queue_layer: CanvasLayer = null
+
+# Campaign mode state
+var _campaign_state: CampaignState = null
+var _campaign_ai_level: int = 5
+var _campaign_opponent_deck_ids: Array[String] = []
+var _campaign_opponent_deck_faction: CardData.CardColor = CardData.CardColor.GREEN
+var _campaign_player_faction: CardData.CardColor = CardData.CardColor.GREEN
+var _campaign_opponent_name: String = ""
+var _campaign_searching: bool = false
+var _campaign_search_id: int = 0
+var _campaign_match_found_callable: Callable = Callable()
+const CAMPAIGN_SEARCH_TIMEOUT_SEC := 10.0
+## True for a PvP campaign run (matched with a human via Ranked-style
+## matchmaking - see _start_campaign_pvp) rather than the local-AI fallback;
+## drives whether each node is started via MpGameManager or
+## GameManagerAutoload, and whether modifier picks need to be relayed.
+var _campaign_pvp: bool = false
+var _campaign_pvp_role: String = ""
+const CAMPAIGN_OPPONENT_NAME := "Rival Warlord"
 
 func _ready() -> void:
 	# Set explicitly here (the actual game entry point) rather than relying
@@ -61,11 +83,17 @@ func _ready() -> void:
 	if "--haven-test" in OS.get_cmdline_user_args():
 		_run_haven_test_cli()
 		return
-	if "--sim-test" in OS.get_cmdline_user_args():
-		_run_sim_test_cli()
-		return
 	if "--live-ai-test" in OS.get_cmdline_user_args():
 		_run_live_ai_test_cli()
+		return
+	if "--campaign-test" in OS.get_cmdline_user_args():
+		_run_campaign_test_cli()
+		return
+	if "--tank-test" in OS.get_cmdline_user_args():
+		_run_tank_test_cli()
+		return
+	if "--shop-test" in OS.get_cmdline_user_args():
+		_run_shop_test_cli()
 		return
 
 	_create_canvas()
@@ -133,19 +161,6 @@ func _run_mcts_timing_cli() -> void:
 		var action := await engine.choose_action(gs)
 		var elapsed := Time.get_ticks_msec() - start_ms
 		print("Level %d: %d ms, chose %s" % [level, elapsed, action["type"]])
-	get_tree().quit()
-
-## Dev-only smoke test for SimRunner's MCTS-level-10-both-sides turn driver:
-##   godot --headless --path <project> -- --sim-test
-func _run_sim_test_cli() -> void:
-	print("Running 1 SimRunner game per deck mode (both sides MCTS level 10)...")
-	for mode in [SimRunner.DeckMode.RANDOM, SimRunner.DeckMode.ARCHETYPE]:
-		var start_ms := Time.get_ticks_msec()
-		var runner := SimRunner.new(mode)
-		await runner.run_batch(1)
-		var elapsed := Time.get_ticks_msec() - start_ms
-		print("[%s] done in %d ms. total_games=%d stats=%s" % [
-			SimRunner.DeckMode.keys()[mode], elapsed, runner.total_games, runner.stats])
 	get_tree().quit()
 
 ## Dev-only one-shot check of the fatigue math (both players start with an
@@ -233,6 +248,232 @@ func _run_live_ai_test_cli() -> void:
 	print("RESULT: INCONCLUSIVE - loop ended without a clear stall or game over")
 	get_tree().quit()
 
+## Dev-only headless sanity check for Campaign mode (campaign_state.gd /
+## GameState.node_modifier_ability): verifies node counts, that a node's
+## modifier ability actually lands on played creatures for both sides, and
+## that reporting results drives the campaign to completion. godot --headless
+## --path <project> -- --campaign-test
+func _run_campaign_test_cli() -> void:
+	var ok := true
+
+	var small := CampaignState.new(CampaignState.Size.SMALL)
+	if small.total_nodes != 3 or small.wins_needed() != 2:
+		print("FAIL: Small campaign should be best of 3 (wins_needed=2), got total_nodes=%d wins_needed=%d" % [small.total_nodes, small.wins_needed()])
+		ok = false
+
+	var large := CampaignState.new(CampaignState.Size.LARGE)
+	if large.total_nodes != 7 or large.wins_needed() != 4:
+		print("FAIL: Large campaign should be best of 7 (wins_needed=4), got total_nodes=%d wins_needed=%d" % [large.total_nodes, large.wins_needed()])
+		ok = false
+
+	# Exactly 4 of Large's 7 nodes should be flagged as modified - some may
+	# already be resolved (index 0, see CampaignState._init), others are
+	# lazily resolved later via current_node_needs_choice()/
+	# resolve_current_node_modifier(), so check both rather than assuming
+	# any particular index is pre-resolved (that's randomized per campaign).
+	var flagged_count := 0
+	var modifier: Dictionary = {}
+	for i in large.total_nodes:
+		large.current_node_index = i
+		if not large.current_node().is_empty():
+			flagged_count += 1
+			modifier = large.current_node()
+		elif large.current_node_needs_choice():
+			flagged_count += 1
+			if modifier.is_empty():
+				var choices := large.get_modifier_choices()
+				if not choices.is_empty():
+					large.resolve_current_node_modifier(choices[0])
+					modifier = choices[0]
+	large.current_node_index = 0
+	if flagged_count != 4:
+		print("FAIL: expected 4 modified nodes on a Large campaign, found %d" % flagged_count)
+		ok = false
+	if modifier.is_empty():
+		print("FAIL: expected at least one modified node on a Large campaign")
+		ok = false
+	else:
+		var gs := GameState.new("a", "b", [], [])
+		gs.node_modifier_ability = str(modifier["ability"])
+		var card := CardDatabase.get_card("cr_003")
+		gs.player.max_mana = 10
+		gs.player.current_mana = 0
+		gs.opponent.max_mana = 10
+		gs.opponent.current_mana = 0
+		gs.player.hand.append(card)
+		gs.opponent.hand.append(card)
+		var m1 := gs.play_creature("a", card)
+		var m2 := gs.play_creature("b", card)
+		if m1 == null or not m1.has_ability(modifier["ability"]):
+			print("FAIL: node modifier '%s' not granted to player's creature" % modifier["ability"])
+			ok = false
+		if m2 == null or not m2.has_ability(modifier["ability"]):
+			print("FAIL: node modifier '%s' not granted to opponent's creature" % modifier["ability"])
+			ok = false
+
+	# Drive a Small campaign to completion and check the final tally.
+	small.current_node_index = 0
+	small.player_wins = 0
+	small.opponent_wins = 0
+	small.report_node_result(true)
+	if small.is_over():
+		print("FAIL: campaign shouldn't be over after 1-0 in a best of 3")
+		ok = false
+	small.report_node_result(true)
+	if not small.is_over() or not small.player_won_campaign() or small.score_string() != "2 - 0":
+		print("FAIL: expected player to win 2-0, got is_over=%s won=%s score=%s" % [small.is_over(), small.player_won_campaign(), small.score_string()])
+		ok = false
+
+	print("RESULT: %s" % ("PASS" if ok else "FAIL"))
+	get_tree().quit()
+
+## Dev-only headless regression check for the "tank tribe silently pings 1
+## damage" bug (T12 Serpent / Stealth Jet dealing unintended damage - fixed
+## by removing abilities.gd's fire_on_play TANK case and fire_on_death's
+## reinforce TANK check, which fired off of card_database.gd's tribe->
+## abilities auto-append rather than an actual printed ability). Verifies
+## tribe-only tank cards no longer queue a phantom tank shot on play or on
+## reinforce, while tank cards with a real printed on-play damage ability
+## are untouched. godot --headless --path <project> -- --tank-test
+func _run_tank_test_cli() -> void:
+	var ok := true
+
+	var gs := GameState.new("a", "b", [], [])
+	gs.player.max_mana = 10
+	gs.player.current_mana = 0
+
+	# Stealth Jet: tribe "tank", no printed on-play damage - must not queue
+	# a tank shot just for being Tank-tribe.
+	var stealth_jet := CardDatabase.get_card("g_018")
+	gs.player.hand.append(stealth_jet)
+	gs.play_creature("a", stealth_jet)
+	if not gs.pending_tank_shots.is_empty():
+		print("FAIL: Stealth Jet queued a phantom on-play tank shot")
+		ok = false
+
+	# T12 Serpent: tribe "tank" + reinforce, no printed on-play damage either
+	# - same check, then verify reinforcing it doesn't queue one either.
+	var serpent := CardDatabase.get_card("g_007")
+	gs.player.hand.append(serpent)
+	var serpent_minion := gs.play_creature("a", serpent)
+	if not gs.pending_tank_shots.is_empty():
+		print("FAIL: T12 Serpent queued a phantom on-play tank shot")
+		ok = false
+	serpent_minion.current_health = 0
+	gs._remove_dead_minions()
+	if not gs.pending_tank_shots.is_empty():
+		print("FAIL: T12 Serpent's reinforce queued a phantom tank shot")
+		ok = false
+
+	# T8 Tigershark: tribe "tank" but *does* print its own on-play damage -
+	# that real ability should still fire (via pending_on_play prompts, not
+	# pending_tank_shots either way, but confirm it still has the ability).
+	var tigershark := CardDatabase.get_card("g_005")
+	if not tigershark.abilities.has("on_play_damage_2"):
+		print("FAIL: T8 Tigershark lost its printed on_play_damage_2 ability")
+		ok = false
+
+	print("RESULT: %s" % ("PASS" if ok else "FAIL"))
+	get_tree().quit()
+
+## Dev-only headless sanity check for PackOpener (currency/shop/pack-
+## unboxing feature): verifies rarity-weighted rolling, the guaranteed-
+## rare-or-better rule (FR-008), duplicate-pulls-convert-to-dust (FR-012,
+## both pre-owned and within a single pack), Legendary's 1-copy limit, and
+## token exclusion. Uses tiny synthetic card pools with skewed weights so
+## every assertion is deterministic - no reliance on true RNG luck.
+##
+## This only exercises the pure client-side roll (pack_opener.gd), which is
+## what the headless dev-hook pattern can reach without a Node process/
+## Postgres instance. The server-authoritative purchase/craft/earn
+## endpoints (relay.js) and the Shop/PackOpenScreen UI are covered by
+## specs/001-currency-pack-shop/quickstart.md's manual playtest instead.
+## godot --headless --path <project> -- --shop-test
+func _run_shop_test_cli() -> void:
+	var ok := true
+
+	var common_card := CardData.new()
+	common_card.id = "test_common"
+	common_card.card_name = "Test Common"
+	common_card.rarity = CardData.CardRarity.COMMON
+
+	var rare_card := CardData.new()
+	rare_card.id = "test_rare"
+	rare_card.card_name = "Test Rare"
+	rare_card.rarity = CardData.CardRarity.RARE
+
+	var legendary_card := CardData.new()
+	legendary_card.id = "test_legendary"
+	legendary_card.card_name = "Test Legendary"
+	legendary_card.rarity = CardData.CardRarity.LEGENDARY
+
+	var token_card := CardData.new()
+	token_card.id = "test_token"
+	token_card.rarity = CardData.CardRarity.COMMON
+	token_card.is_token = true
+
+	# 1. A single-card COMMON pool, pack_count=3: the first 2 pulls should be
+	# new (DeckManager's non-Legendary max is 2), the 3rd should convert to
+	# dust - proves within-pack duplicate detection, not just pre-owned.
+	var dup_pack := {"card_count": 3, "rarity_weights": {"COMMON": 1.0}, "guaranteed_rare_or_better": false, "dust_value": {"COMMON": 5}}
+	var dup_result: Dictionary = PackOpenerScript.roll_pack(dup_pack, [common_card], {})
+	var new_count := 0
+	for c in dup_result["cards"]:
+		if c["was_new"]:
+			new_count += 1
+	if dup_result["cards"].size() != 3:
+		print("FAIL: expected 3 cards in a 3-card pack, got %d" % dup_result["cards"].size())
+		ok = false
+	if new_count != 2:
+		print("FAIL: expected exactly 2 new copies before hitting the copy limit, got %d" % new_count)
+		ok = false
+	if int(dup_result["dust_awarded"]) != 5:
+		print("FAIL: expected 5 dust from the one over-limit duplicate, got %d" % int(dup_result["dust_awarded"]))
+		ok = false
+
+	# 2. RARE weighted at 0 so the natural roll always lands COMMON, but
+	# guaranteed_rare_or_better must still force a Rare-or-better result.
+	var guarantee_pack := {"card_count": 3, "rarity_weights": {"COMMON": 1.0, "RARE": 0.0}, "guaranteed_rare_or_better": true, "dust_value": {"COMMON": 5, "RARE": 20}}
+	var guarantee_result: Dictionary = PackOpenerScript.roll_pack(guarantee_pack, [common_card, rare_card], {})
+	var has_rare_or_better := false
+	for c in guarantee_result["cards"]:
+		if c["rarity"] != "COMMON":
+			has_rare_or_better = true
+	if not has_rare_or_better:
+		print("FAIL: guaranteed_rare_or_better pack contained no Rare-or-better card")
+		ok = false
+
+	# 3. A card already owned at its copy limit before the pack is opened
+	# should convert straight to dust.
+	var preowned_pack := {"card_count": 1, "rarity_weights": {"COMMON": 1.0}, "guaranteed_rare_or_better": false, "dust_value": {"COMMON": 5}}
+	var preowned_result: Dictionary = PackOpenerScript.roll_pack(preowned_pack, [common_card], {"test_common": 2})
+	if bool(preowned_result["cards"][0]["was_new"]):
+		print("FAIL: expected an already-owned-at-max card to convert to dust, not a new copy")
+		ok = false
+	if int(preowned_result["dust_awarded"]) != 5:
+		print("FAIL: expected 5 dust for the pre-owned pull, got %d" % int(preowned_result["dust_awarded"]))
+		ok = false
+
+	# 4. Legendary's copy limit is 1 (DeckManager.max_copies_for), not 2.
+	var legendary_pack := {"card_count": 2, "rarity_weights": {"LEGENDARY": 1.0}, "guaranteed_rare_or_better": false, "dust_value": {"LEGENDARY": 400}}
+	var legendary_result: Dictionary = PackOpenerScript.roll_pack(legendary_pack, [legendary_card], {})
+	if not bool(legendary_result["cards"][0]["was_new"]) or bool(legendary_result["cards"][1]["was_new"]):
+		print("FAIL: expected Legendary's 2nd pull to convert to dust (copy limit 1), got %s" % [legendary_result["cards"]])
+		ok = false
+	if int(legendary_result["dust_awarded"]) != 400:
+		print("FAIL: expected 400 dust from the 2nd Legendary pull, got %d" % int(legendary_result["dust_awarded"]))
+		ok = false
+
+	# 5. Tokens are never pack-eligible.
+	var token_pack := {"card_count": 1, "rarity_weights": {"COMMON": 1.0}, "guaranteed_rare_or_better": false, "dust_value": {"COMMON": 5}}
+	var token_result: Dictionary = PackOpenerScript.roll_pack(token_pack, [token_card], {})
+	if not token_result["cards"].is_empty():
+		print("FAIL: a token-only pool should yield no pack contents")
+		ok = false
+
+	print("RESULT: %s" % ("PASS" if ok else "FAIL"))
+	get_tree().quit()
+
 func _run_mcts_benchmark_cli() -> void:
 	print("Running MCTS benchmark...")
 	var r1 := await MCTSBenchmark.run(6, MCTSBenchmark.mcts(3), MCTSBenchmark.mcts(1))
@@ -244,27 +485,7 @@ func _run_mcts_benchmark_cli() -> void:
 # ── Main menu ──────────────────────────────────────────────────────────
 
 func _show_main_menu() -> void:
-	var account_bar := HBoxContainer.new()
-	account_bar.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	account_bar.position = Vector2(-220, 16)
-	account_bar.add_theme_constant_override("separation", 10)
-	_canvas.add_child(account_bar)
-
-	var account_lbl := Label.new()
-	account_lbl.text = "Logged in as %s" % Auth.username if Auth.is_logged_in else "Offline (Editor)"
-	account_lbl.add_theme_font_size_override("font_size", 14)
-	account_bar.add_child(_bg_cell(account_lbl))
-
-	if Auth.is_logged_in:
-		var logout_btn := Button.new()
-		logout_btn.text = "Log Out"
-		logout_btn.add_theme_font_size_override("font_size", 14)
-		logout_btn.pressed.connect(func():
-			Auth.logout()
-			_clear_screen()
-			_require_login_then(_show_main_menu, false)
-		)
-		account_bar.add_child(logout_btn)
+	_build_profile_bar()
 
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -272,12 +493,15 @@ func _show_main_menu() -> void:
 
 	var vbox := VBoxContainer.new()
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	vbox.add_theme_constant_override("separation", 18)
+	vbox.add_theme_constant_override("separation", 26)
 	center.add_child(vbox)
 
 	var title := Label.new()
 	title.text = "CARDGAME"
+	title.add_theme_font_override("font", MenuFont)
 	title.add_theme_font_size_override("font_size", 60)
+	title.add_theme_constant_override("outline_size", 4)
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
 
@@ -285,45 +509,394 @@ func _show_main_menu() -> void:
 	gap.custom_minimum_size = Vector2(0, 28)
 	vbox.add_child(gap)
 
-	var mp_btn := _menu_btn("MULTIPLAYER")
+	var mp_btn := _menu_text_btn("MULTIPLAYER")
 	mp_btn.pressed.connect(_on_multiplayer_pressed)
 	vbox.add_child(mp_btn)
 
-	var play_btn := _menu_btn("VS AI")
+	var play_btn := _menu_text_btn("VS AI")
 	play_btn.pressed.connect(_on_play_pressed)
 	vbox.add_child(play_btn)
 
-	var ranked_btn := _menu_btn("RANKED")
+	var ranked_btn := _menu_text_btn("RANKED")
 	ranked_btn.pressed.connect(_on_ranked_pressed)
 	vbox.add_child(ranked_btn)
 
-	var build_btn := _menu_btn("DECK BUILDER")
+	var campaign_btn := _menu_text_btn("CAMPAIGN")
+	campaign_btn.pressed.connect(_on_campaign_pressed)
+	vbox.add_child(campaign_btn)
+
+	var shop_btn := _menu_text_btn("SHOP")
+	shop_btn.pressed.connect(_on_shop_pressed)
+	vbox.add_child(shop_btn)
+
+	var build_btn := _menu_text_btn("DECK BUILDER")
 	build_btn.pressed.connect(_on_deck_builder_pressed)
 	vbox.add_child(build_btn)
 
-	var sim_btn := _menu_btn("SIMULATION")
-	sim_btn.pressed.connect(_on_simulation_pressed)
-	vbox.add_child(sim_btn)
+	var card_list_btn := _menu_text_btn("CARD LIST")
+	card_list_btn.pressed.connect(_on_card_list_pressed)
+	vbox.add_child(card_list_btn)
 
-## Wraps a label in a translucent dark panel so it stays legible over the background art.
-func _bg_cell(label: Control) -> PanelContainer:
-	var panel := PanelContainer.new()
+## ── Profile bar (main menu, top right) ───────────────────────────────────
+## Player pfp (with a rank-tier badge clipped onto its corner), name, and
+## gold/dust counters - Hearthstone-style. Profile pictures are user-supplied
+## art dropped into PFP_DIR (see assets/pfps/README.txt); the picker below
+## auto-scans that folder instead of hardcoding filenames, so adding more
+## later needs no code change.
+const PFP_DIR := "res://assets/pfps/"
+const PFP_SIZE := 52.0
+const PFP_BADGE_SIZE := 20.0
+## Every account with no explicit choice yet (Auth.selected_pfp == "") shows
+## this one - not just whichever file happens to sort first in PFP_DIR.
+const DEFAULT_PFP_ID := "pfp_planet.png"
+
+var _profile_bar: Control = null
+var _pfp_texture_rect: TextureRect = null
+var _circle_mask_material: ShaderMaterial = null
+var _default_pfp_texture: ImageTexture = null
+
+func _build_profile_bar() -> void:
+	if is_instance_valid(_profile_bar):
+		_profile_bar.queue_free()
+
+	_profile_bar = PanelContainer.new()
+	_profile_bar.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_profile_bar.position = Vector2(-380, 14)
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.06, 0.07, 0.10, 0.78)
-	style.set_corner_radius_all(4)
+	style.bg_color = Color(0.05, 0.06, 0.09, 0.85)
+	style.set_corner_radius_all(28)
 	style.content_margin_left = 6
-	style.content_margin_right = 6
-	style.content_margin_top = 1
-	style.content_margin_bottom = 1
-	panel.add_theme_stylebox_override("panel", style)
-	panel.add_child(label)
-	return panel
+	style.content_margin_right = 16
+	style.content_margin_top = 6
+	style.content_margin_bottom = 6
+	_profile_bar.add_theme_stylebox_override("panel", style)
+	_canvas.add_child(_profile_bar)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	_profile_bar.add_child(row)
+
+	if not Auth.is_logged_in:
+		var offline_lbl := Label.new()
+		offline_lbl.text = "Offline (Editor)"
+		offline_lbl.add_theme_font_size_override("font_size", 14)
+		row.add_child(offline_lbl)
+		return
+
+	row.add_child(_build_pfp_control())
+
+	var name_lbl := Label.new()
+	name_lbl.text = Auth.username
+	name_lbl.add_theme_font_override("font", MenuFont)
+	name_lbl.add_theme_font_size_override("font_size", 16)
+	name_lbl.add_theme_color_override("font_color", Color(0.92, 0.92, 0.96))
+	row.add_child(name_lbl)
+
+	row.add_child(VSeparator.new())
+	row.add_child(_currency_cell(_glimmer_icon(), "dust"))
+	row.add_child(_currency_cell(_cyllats_icon(), "gold"))
+
+	var logout_btn := Button.new()
+	logout_btn.text = "Log Out"
+	logout_btn.add_theme_font_size_override("font_size", 13)
+	logout_btn.pressed.connect(func():
+		Auth.logout()
+		_clear_screen()
+		_require_login_then(_show_main_menu, false)
+	)
+	row.add_child(logout_btn)
+
+## pfp circle (click to open the picker) with a rank-tier badge overlapping
+## its bottom-left corner, both wrapped so the badge can overhang the pfp's
+## own bounds without getting clipped by it.
+func _build_pfp_control() -> Control:
+	var wrap := Control.new()
+	wrap.custom_minimum_size = Vector2(PFP_SIZE + 8, PFP_SIZE + 8)
+
+	var btn := Button.new()
+	btn.position = Vector2(4, 4)
+	btn.custom_minimum_size = Vector2(PFP_SIZE, PFP_SIZE)
+	btn.flat = true
+	var empty := StyleBoxEmpty.new()
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		btn.add_theme_stylebox_override(state, empty)
+	btn.pressed.connect(_show_pfp_picker)
+	wrap.add_child(btn)
+
+	var ring := Panel.new()
+	ring.position = Vector2(4, 4)
+	ring.custom_minimum_size = Vector2(PFP_SIZE, PFP_SIZE)
+	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var ring_style := StyleBoxFlat.new()
+	ring_style.bg_color = Color(0, 0, 0, 0)
+	ring_style.border_width_left = 3
+	ring_style.border_width_top = 3
+	ring_style.border_width_right = 3
+	ring_style.border_width_bottom = 3
+	ring_style.border_color = Color(0.75, 0.62, 0.32)
+	ring_style.set_corner_radius_all(int(PFP_SIZE / 2))
+	ring.add_theme_stylebox_override("panel", ring_style)
+	wrap.add_child(ring)
+
+	_pfp_texture_rect = TextureRect.new()
+	_pfp_texture_rect.position = Vector2(7, 7)
+	_pfp_texture_rect.custom_minimum_size = Vector2(PFP_SIZE - 6, PFP_SIZE - 6)
+	_pfp_texture_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_pfp_texture_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_pfp_texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pfp_texture_rect.material = _get_circle_mask_material()
+	_pfp_texture_rect.texture = _load_current_pfp_texture()
+	wrap.add_child(_pfp_texture_rect)
+
+	var badge := _build_rank_badge()
+	badge.position = Vector2(-2, PFP_SIZE - PFP_BADGE_SIZE + 6)
+	wrap.add_child(badge)
+
+	return wrap
+
+func _build_rank_badge() -> Control:
+	var badge := Panel.new()
+	badge.custom_minimum_size = Vector2(PFP_BADGE_SIZE, PFP_BADGE_SIZE)
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var st := StyleBoxFlat.new()
+	st.bg_color = RankedProgress.get_tier_color(Auth.rank_bracket, Auth.rank_in_legend, Auth.rank_legend_rating)
+	st.set_corner_radius_all(int(PFP_BADGE_SIZE / 2))
+	st.border_width_left = 2
+	st.border_width_top = 2
+	st.border_width_right = 2
+	st.border_width_bottom = 2
+	st.border_color = Color(0.05, 0.05, 0.07)
+	badge.add_theme_stylebox_override("panel", st)
+
+	var lbl := Label.new()
+	lbl.text = RankedProgress.get_badge_text(Auth.rank_bracket, Auth.rank_in_legend)
+	lbl.add_theme_font_size_override("font_size", 11)
+	lbl.add_theme_color_override("font_color", Color.WHITE)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	badge.add_child(lbl)
+	return badge
+
+## `kind` is "gold" or "dust" - just picks which Economy field this cell
+## tracks, both display-wise and when Economy.balance_changed fires.
+func _currency_cell(icon: Control, kind: String) -> Control:
+	var cell := HBoxContainer.new()
+	cell.add_theme_constant_override("separation", 4)
+	cell.add_child(icon)
+	var lbl := Label.new()
+	lbl.add_theme_font_size_override("font_size", 15)
+	lbl.add_theme_color_override("font_color", Color(0.92, 0.92, 0.96))
+	cell.add_child(lbl)
+	var update: Callable
+	update = func():
+		if not is_instance_valid(lbl):
+			Economy.balance_changed.disconnect(update)
+			return
+		lbl.text = str(Economy.dust if kind == "dust" else Economy.currency)
+	Economy.balance_changed.connect(update)
+	update.call()
+	return cell
+
+const GLIMMER_ICON := preload("res://assets/icons/glimmer.png")
+const CYLLATS_ICON := preload("res://assets/icons/cyllats.png")
+## Glimmer's art is a plain black silhouette (a colorable mask, not a
+## finished-color icon like Cyllats') - tinted here rather than left black.
+## `self_modulate` can't do this: it multiplies, and black * any color is
+## still black, so the tint shader below replaces the RGB outright and keeps
+## only the source alpha as the shape mask.
+const GLIMMER_TINT := Color(0.75, 0.88, 1.0)
+
+var _icon_tint_shader: Shader = null
+
+func _glimmer_icon() -> Control:
+	var t := TextureRect.new()
+	t.texture = GLIMMER_ICON
+	t.custom_minimum_size = Vector2(16, 16)
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	t.material = _make_icon_tint_material(GLIMMER_TINT)
+	return t
+
+## Cyllats' art is already a finished colored icon - shown as-is.
+func _cyllats_icon() -> Control:
+	var t := TextureRect.new()
+	t.texture = CYLLATS_ICON
+	t.custom_minimum_size = Vector2(16, 16)
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	return t
+
+func _make_icon_tint_material(color: Color) -> ShaderMaterial:
+	if _icon_tint_shader == null:
+		_icon_tint_shader = Shader.new()
+		_icon_tint_shader.code = "shader_type canvas_item;\nuniform vec4 tint_color : source_color = vec4(1.0);\nvoid fragment() {\n\tCOLOR = vec4(tint_color.rgb, texture(TEXTURE, UV).a * tint_color.a);\n}"
+	var mat := ShaderMaterial.new()
+	mat.shader = _icon_tint_shader
+	mat.set_shader_parameter("tint_color", color)
+	return mat
+
+## Discards fragment outside the unit circle so a square TextureRect reads as
+## a circular portrait - built at runtime rather than as a .gdshader asset
+## since it's tiny, has no parameters, and is only ever used here.
+func _get_circle_mask_material() -> ShaderMaterial:
+	if _circle_mask_material == null:
+		var shader := Shader.new()
+		shader.code = "shader_type canvas_item;\nvoid fragment() {\n\tif (length(UV - vec2(0.5)) > 0.5) {\n\t\tdiscard;\n\t}\n\tCOLOR = texture(TEXTURE, UV);\n}"
+		_circle_mask_material = ShaderMaterial.new()
+		_circle_mask_material.shader = shader
+	return _circle_mask_material
+
+## Flat gray square (the circle mask crops it to a disc) shown until the
+## player picks a real picture, or if PFP_DIR is still empty.
+func _get_default_pfp_texture() -> ImageTexture:
+	if _default_pfp_texture == null:
+		var img := Image.create(64, 64, false, Image.FORMAT_RGB8)
+		img.fill(Color(0.32, 0.34, 0.40))
+		_default_pfp_texture = ImageTexture.create_from_image(img)
+	return _default_pfp_texture
+
+func _pfp_path(pfp_id: String) -> String:
+	return PFP_DIR + pfp_id
+
+## Filenames (not full paths) of every image dropped into PFP_DIR, sorted for
+## a stable picker order. Works the same way in an exported build as in the
+## editor - res:// listing still sees each imported image at its logical
+## path, same as how card art (CardData.art) is loaded by path elsewhere.
+func _list_pfp_files() -> Array[String]:
+	var out: Array[String] = []
+	var dir := DirAccess.open(PFP_DIR)
+	if dir == null:
+		return out
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name != "":
+		if not dir.current_is_dir():
+			var lower := file_name.to_lower()
+			if lower.ends_with(".png") or lower.ends_with(".jpg") or lower.ends_with(".jpeg") or lower.ends_with(".webp"):
+				out.append(file_name)
+		file_name = dir.get_next()
+	dir.list_dir_end()
+	out.sort()
+	return out
+
+func _load_current_pfp_texture() -> Texture2D:
+	var wanted_id := Auth.selected_pfp if not Auth.selected_pfp.is_empty() else DEFAULT_PFP_ID
+	var tex = load(_pfp_path(wanted_id))
+	if tex is Texture2D:
+		return tex
+	# DEFAULT_PFP_ID missing (or an old/removed selection) - fall back to
+	# whatever's first alphabetically rather than showing nothing.
+	var files := _list_pfp_files()
+	if not files.is_empty():
+		var tex2 = load(_pfp_path(files[0]))
+		if tex2 is Texture2D:
+			return tex2
+	return _get_default_pfp_texture()
+
+## Full-screen grid modal for picking among every image in PFP_DIR - same
+## overlay-in-_canvas shape as the rest of main.gd's screens, so it's torn
+## down automatically by _clear_screen() if the player navigates away.
+func _show_pfp_picker() -> void:
+	var files := _list_pfp_files()
+
+	var overlay := ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0.78)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	_canvas.add_child(overlay)
+
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	var pstyle := StyleBoxFlat.new()
+	pstyle.bg_color = Color(0.08, 0.09, 0.12, 0.96)
+	pstyle.set_corner_radius_all(10)
+	pstyle.content_margin_left = 24
+	pstyle.content_margin_right = 24
+	pstyle.content_margin_top = 20
+	pstyle.content_margin_bottom = 20
+	panel.add_theme_stylebox_override("panel", pstyle)
+	overlay.add_child(panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 14)
+	panel.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "Choose a Profile Picture"
+	title.add_theme_font_size_override("font_size", 20)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(title)
+
+	if files.is_empty():
+		var empty_lbl := Label.new()
+		empty_lbl.text = "No profile pictures found in assets/pfps/ yet."
+		vbox.add_child(empty_lbl)
+	else:
+		var grid := GridContainer.new()
+		grid.columns = 6
+		grid.add_theme_constant_override("h_separation", 10)
+		grid.add_theme_constant_override("v_separation", 10)
+		vbox.add_child(grid)
+		for pfp_id in files:
+			var tex: Texture2D = load(_pfp_path(pfp_id))
+			if tex == null:
+				continue
+			var btn := TextureButton.new()
+			btn.custom_minimum_size = Vector2(72, 72)
+			btn.texture_normal = tex
+			btn.ignore_texture_size = true
+			btn.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_COVERED
+			btn.material = _get_circle_mask_material()
+			var captured := pfp_id
+			btn.pressed.connect(func():
+				Auth.set_pfp(captured)
+				if is_instance_valid(_pfp_texture_rect):
+					_pfp_texture_rect.texture = tex
+				overlay.queue_free()
+			)
+			grid.add_child(btn)
+
+	var close_btn := Button.new()
+	close_btn.text = "Close"
+	close_btn.custom_minimum_size = Vector2(100, 34)
+	close_btn.pressed.connect(overlay.queue_free)
+	vbox.add_child(close_btn)
 
 func _menu_btn(label: String) -> Button:
 	var btn := Button.new()
 	btn.text = label
 	btn.custom_minimum_size = Vector2(300, 72)
 	btn.add_theme_font_size_override("font_size", 24)
+	return btn
+
+## Boxless nav item for the main menu's top-level list (MULTIPLAYER/VS AI/
+## RANKED/DECK BUILDER/CARD LIST) - plain clickable text in the same font/
+## black-outline treatment card text uses instead of a boxed button, so the
+## title screen reads as this game's own look rather than generic UI chrome.
+## Every other screen (lobby, auth, ranked flow, etc.) keeps _menu_btn()'s
+## boxed style - this is deliberately main-menu-only.
+const MENU_TEXT_COLOR := Color(0.85, 0.85, 0.92)
+const MENU_TEXT_HOVER_COLOR := Color(0.45, 0.85, 1.0)
+const MENU_TEXT_PRESSED_COLOR := Color(1.0, 0.82, 0.35)
+
+func _menu_text_btn(label: String) -> Button:
+	var btn := Button.new()
+	btn.text = label
+	btn.flat = true
+	btn.custom_minimum_size = Vector2(320, 0)
+	btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	btn.add_theme_font_override("font", MenuFont)
+	btn.add_theme_font_size_override("font_size", 28)
+	btn.add_theme_color_override("font_color", MENU_TEXT_COLOR)
+	btn.add_theme_color_override("font_hover_color", MENU_TEXT_HOVER_COLOR)
+	btn.add_theme_color_override("font_pressed_color", MENU_TEXT_PRESSED_COLOR)
+	btn.add_theme_color_override("font_focus_color", MENU_TEXT_COLOR)
+	btn.add_theme_constant_override("outline_size", 3)
+	btn.add_theme_color_override("font_outline_color", Color.BLACK)
+	var empty := StyleBoxEmpty.new()
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		btn.add_theme_stylebox_override(state, empty)
 	return btn
 
 # ── Multiplayer ────────────────────────────────────────────────────────
@@ -815,6 +1388,11 @@ func _on_play_pressed() -> void:
 	)
 
 func _on_ranked_pressed() -> void:
+	# A search is already running (the bottom-right queue indicator is the
+	# way to check status/cancel it) - don't let a second deck-select/search
+	# get started on top of it.
+	if _ranked_searching:
+		return
 	_clear_screen()
 	_show_deck_select(
 		"Choose Your Deck",
@@ -893,21 +1471,29 @@ func _show_ranked_start() -> void:
 
 # ── Ranked matchmaking ──────────────────────────────────────────────────
 #
-# START MATCH queues for a same-skill human opponent for up to
-# RANKED_SEARCH_TIMEOUT_SEC; if nobody's found in time, falls back to the
-# existing AI match (with a fake bot name in the opponent nameplate) so
-# Ranked always produces a match. A found human match gets a brief
-# confirmation screen (opponent name + rating) before the game starts.
-# `_ranked_search_id` guards against the match-found signal and the timeout
-# racing each other, and against a stale timer/signal from an earlier
-# cancelled search firing into a later one — whichever resolution is current
-# wins, anything bound to an older id is a no-op.
+# START MATCH sends the player back to the main menu (free to navigate menus/
+# card list/deck builder in the meantime) with a small "Searching for
+# opponent..." indicator pinned to the bottom-right of the screen, and queues
+# for a same-skill human opponent for up to RANKED_SEARCH_TIMEOUT_SEC; if
+# nobody's found in time, falls back to the existing AI match (with a fake
+# bot name in the opponent nameplate) so Ranked always produces a match.
+# Either resolution shows a "Match Found!" popup with a
+# RANKED_MATCH_COUNTDOWN_SEC countdown - on top of whatever screen the player
+# is currently looking at - before the game actually starts. `_ranked_search_id`
+# guards against the match-found signal and the timeout racing each other,
+# and against a stale timer/signal from an earlier cancelled search firing
+# into a later one — whichever resolution is current wins, anything bound to
+# an older id is a no-op.
 
 func _begin_ranked_search() -> void:
 	_ranked_search_id += 1
 	var search_id := _ranked_search_id
+	_ranked_searching = true
 	_clear_screen()
-	_show_ranked_searching()
+	_show_main_menu()
+	_show_queue_overlay("Searching for opponent...", _cancel_ranked_search, func() -> bool:
+		return _ranked_search_id == search_id
+	)
 	Auth.queue_ranked()
 	_ranked_match_found_callable = _on_ranked_match_found.bind(search_id)
 	Net.ranked_match_found.connect(_ranked_match_found_callable, CONNECT_ONE_SHOT)
@@ -917,41 +1503,61 @@ func _disconnect_ranked_match_found() -> void:
 	if _ranked_match_found_callable.is_valid() and Net.ranked_match_found.is_connected(_ranked_match_found_callable):
 		Net.ranked_match_found.disconnect(_ranked_match_found_callable)
 
-func _show_ranked_searching() -> void:
-	var root := VBoxContainer.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_theme_constant_override("separation", 0)
-	_canvas.add_child(root)
+## Small bottom-right status indicator + Cancel button, shared by Ranked and
+## Campaign matchmaking. Lives in its own CanvasLayer (sibling of _canvas,
+## not inside it) so it keeps showing across _clear_screen() calls as the
+## player navigates other menus while queued. `still_active` gates the
+## animated-dots loop - it should check the caller's own search-id guard, the
+## same one `on_cancel` bumps, so a stale animation from an already-
+## cancelled/resolved search can't keep running into a later one.
+func _show_queue_overlay(status_text: String, on_cancel: Callable, still_active: Callable) -> void:
+	_hide_queue_overlay()
+	_queue_layer = CanvasLayer.new()
+	_queue_layer.layer = 10
+	add_child(_queue_layer)
 
-	root.add_child(_make_header_bar("Ranked", _cancel_ranked_search))
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	panel.position = Vector2(-270, -64)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.06, 0.07, 0.10, 0.85)
+	style.set_corner_radius_all(6)
+	style.content_margin_left = 14
+	style.content_margin_right = 14
+	style.content_margin_top = 10
+	style.content_margin_bottom = 10
+	panel.add_theme_stylebox_override("panel", style)
+	_queue_layer.add_child(panel)
 
-	var center := CenterContainer.new()
-	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	root.add_child(center)
-
-	var vbox := VBoxContainer.new()
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	vbox.add_theme_constant_override("separation", 18)
-	center.add_child(vbox)
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 14)
+	panel.add_child(hbox)
 
 	var status_lbl := Label.new()
-	status_lbl.text = "Searching for opponent..."
-	status_lbl.add_theme_font_size_override("font_size", 24)
-	status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(status_lbl)
-	var search_id_at_start := _ranked_search_id
-	_animate_loading_dots(status_lbl, "Searching for opponent", func() -> bool: return _ranked_search_id == search_id_at_start)
+	status_lbl.text = status_text
+	status_lbl.add_theme_font_size_override("font_size", 16)
+	hbox.add_child(status_lbl)
+	_animate_loading_dots(status_lbl, status_text, func() -> bool:
+		return still_active.call() and is_instance_valid(_queue_layer)
+	)
 
-	var cancel_btn := _menu_btn("CANCEL")
-	cancel_btn.pressed.connect(_cancel_ranked_search)
-	vbox.add_child(cancel_btn)
+	var cancel_btn := Button.new()
+	cancel_btn.text = "Cancel"
+	cancel_btn.add_theme_font_size_override("font_size", 14)
+	cancel_btn.pressed.connect(on_cancel)
+	hbox.add_child(cancel_btn)
+
+func _hide_queue_overlay() -> void:
+	if is_instance_valid(_queue_layer):
+		_queue_layer.queue_free()
+	_queue_layer = null
 
 func _cancel_ranked_search() -> void:
 	_ranked_search_id += 1
+	_ranked_searching = false
 	_disconnect_ranked_match_found()
 	Auth.cancel_ranked_queue()
-	_clear_screen()
-	_show_ranked_start()
+	_hide_queue_overlay()
 
 func _on_ranked_search_timeout(search_id: int) -> void:
 	if search_id != _ranked_search_id:
@@ -959,27 +1565,60 @@ func _on_ranked_search_timeout(search_id: int) -> void:
 	_ranked_search_id += 1
 	_disconnect_ranked_match_found()
 	Auth.cancel_ranked_queue()
+	_hide_queue_overlay()
 	var ai_level := RankedProgress.get_ai_level(Auth.rank_bracket, Auth.rank_in_legend)
-	_clear_screen()
-	_start_game(_player_deck_ids, _random_ranked_opponent_ids(), ai_level, true, RankedProgress.random_bot_name())
+	var bot_name := RankedProgress.random_bot_name()
+	_show_match_found_popup(bot_name, -1, func():
+		_ranked_searching = false
+		_clear_screen()
+		_start_game(_player_deck_ids, _random_ranked_opponent_ids(), ai_level, true, bot_name)
+	)
 
 func _on_ranked_match_found(lobby_id: String, role: String, opponent_name: String, opponent_rating: int,
 							 search_id: int) -> void:
 	if search_id != _ranked_search_id:
 		return
 	_ranked_search_id += 1
-	_show_ranked_match_confirmation(role, opponent_name, opponent_rating)
+	_hide_queue_overlay()
+	_show_match_found_popup(opponent_name, opponent_rating, func():
+		_ranked_searching = false
+		_start_ranked_pvp_match(role, opponent_name, opponent_rating)
+	)
 
-func _show_ranked_match_confirmation(role: String, opponent_name: String, opponent_rating: int) -> void:
-	_clear_screen()
+## Popup shown on top of whatever screen the player is currently on (menu,
+## card list, deck builder, ...) once a match is found, with a countdown
+## before the match actually starts. `opponent_rating < 0` hides the rating
+## (used for the AI-fallback case, where there's no real rating to show).
+func _show_match_found_popup(opponent_name: String, opponent_rating: int, on_complete: Callable) -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 20
+	add_child(layer)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(dim)
+
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_canvas.add_child(center)
+	layer.add_child(center)
+
+	var panel := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.08, 0.09, 0.13, 0.96)
+	style.set_corner_radius_all(10)
+	style.content_margin_left = 40
+	style.content_margin_right = 40
+	style.content_margin_top = 28
+	style.content_margin_bottom = 28
+	panel.add_theme_stylebox_override("panel", style)
+	center.add_child(panel)
 
 	var vbox := VBoxContainer.new()
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.add_theme_constant_override("separation", 12)
-	center.add_child(vbox)
+	panel.add_child(vbox)
 
 	var found_lbl := Label.new()
 	found_lbl.text = "Match Found!"
@@ -988,13 +1627,26 @@ func _show_ranked_match_confirmation(role: String, opponent_name: String, oppone
 	vbox.add_child(found_lbl)
 
 	var vs_lbl := Label.new()
-	vs_lbl.text = "vs %s (~%d)" % [opponent_name, opponent_rating]
+	vs_lbl.text = ("vs %s (~%d)" % [opponent_name, opponent_rating]) if opponent_rating >= 0 else ("vs %s" % opponent_name)
 	vs_lbl.add_theme_font_size_override("font_size", 20)
 	vs_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(vs_lbl)
 
-	await get_tree().create_timer(RANKED_MATCH_CONFIRM_SEC).timeout
-	_start_ranked_pvp_match(role, opponent_name, opponent_rating)
+	var countdown_lbl := Label.new()
+	countdown_lbl.add_theme_font_size_override("font_size", 26)
+	countdown_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(countdown_lbl)
+
+	var seconds_left := RANKED_MATCH_COUNTDOWN_SEC
+	countdown_lbl.text = "Match starts in %d..." % seconds_left
+	for _i in RANKED_MATCH_COUNTDOWN_SEC:
+		await get_tree().create_timer(1.0).timeout
+		seconds_left -= 1
+		if is_instance_valid(countdown_lbl):
+			countdown_lbl.text = "Match starts in %d..." % max(seconds_left, 0)
+
+	layer.queue_free()
+	on_complete.call()
 
 func _start_ranked_pvp_match(role: String, opponent_name: String, opponent_rating: int) -> void:
 	if role == "host":
@@ -1031,7 +1683,7 @@ const RANKED_FACTIONS := [
 
 func _random_ranked_opponent_ids() -> Array[String]:
 	var faction_color: CardData.CardColor = RANKED_FACTIONS[randi() % RANKED_FACTIONS.size()]
-	var opp_deck := DeckManager.build_random_faction_deck(faction_color)
+	var opp_deck := DeckManager.build_archetype_deck(faction_color)
 	var opp_ids: Array[String] = []
 	for c in opp_deck:
 		opp_ids.append(c.id)
@@ -1280,402 +1932,6 @@ func _deck_card_btn(deck: Dictionary, on_select: Callable) -> Button:
 	btn.pressed.connect(func(): on_select.call(deck))
 	return btn
 
-# ── Simulation ─────────────────────────────────────────────────────────
-
-## Drives the simulation as an async loop instead of a _process() poll.
-## SimRunner now yields once per atomic AI decision (see
-## SimRunner._sim_play_turn), so `await run_batch(1)` here doesn't block
-## rendering/input for a whole game — the engine keeps pumping frames
-## between each MCTS decision, and STOP takes effect within about one
-## decision instead of within a whole game (previously) or a whole batch of
-## 20 games (before that, back when both were near-instant).
-## `runner`/`last_gps_ms` are captured locally, and the loop bails out the
-## moment `_sim_runner` no longer matches — either STOP was pressed, or the
-## deck-mode toggle rebuilt the screen with a brand new SimRunner instance.
-func _process(_delta: float) -> void:
-	if not is_instance_valid(_sim_status_lbl):
-		return
-	if not _sim_running:
-		_sim_status_lbl.text = ""
-		return
-	var elapsed_s := (Time.get_ticks_msec() - _sim_game_start_ms) / 1000.0
-	_sim_status_lbl.text = "Simulating... %.0fs" % elapsed_s
-
-func _run_simulation_loop() -> void:
-	var runner := _sim_runner
-	var last_gps_ms := Time.get_ticks_msec()
-	while _sim_running and _sim_runner == runner:
-		var before := runner.total_games
-		_sim_game_start_ms = Time.get_ticks_msec()
-		await runner.run_batch(1)
-		if not _sim_running or _sim_runner != runner:
-			return
-		var ran := runner.total_games - before
-		_sim_gps_count += ran
-		var now_ms := Time.get_ticks_msec()
-		var elapsed_sec := (now_ms - last_gps_ms) / 1000.0
-		if elapsed_sec >= 0.75:
-			_sim_gps_display = (_sim_gps_count / elapsed_sec) if elapsed_sec > 0.0 else 0.0
-			_sim_gps_count = 0
-			last_gps_ms = now_ms
-			_rebuild_card_list()
-		_update_sim_labels()
-
-func _update_sim_labels() -> void:
-	for key in _sim_stat_labels:
-		if not is_instance_valid(_sim_stat_labels[key]["wins"]):
-			_sim_stat_labels = {}
-			return
-		var w: int = _sim_runner.stats[key]["wins"]
-		var l: int = _sim_runner.stats[key]["losses"]
-		var total := w + l
-		_sim_stat_labels[key]["wins"].text = str(w)
-		_sim_stat_labels[key]["losses"].text = str(l)
-		_sim_stat_labels[key]["pct"].text = "%.1f%%" % (100.0 * w / total) if total > 0 else "-"
-	if is_instance_valid(_sim_totals_lbl):
-		_sim_totals_lbl.text = "Total: %d games   •   %.0f games/sec" % [
-			_sim_runner.total_games, _sim_gps_display]
-
-func _on_simulation_pressed() -> void:
-	_clear_screen()
-	_show_simulation_screen()
-
-func _show_simulation_screen() -> void:
-	_sim_running = false
-	_sim_runner = SimRunner.new(_sim_deck_mode, _sim_ai_level)
-	_sim_stat_labels = {}
-	_sim_card_grid = null
-	_sim_gps_count = 0
-	_sim_gps_display = 0.0
-
-	var root := VBoxContainer.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_theme_constant_override("separation", 0)
-	_canvas.add_child(root)
-
-	root.add_child(_make_header_bar("AI SIMULATION", func():
-		_sim_running = false
-		_sim_stat_labels = {}
-		_sim_totals_lbl = null
-		_sim_status_lbl = null
-		_sim_card_grid = null
-		_clear_screen()
-		_show_main_menu()
-	))
-
-	# ── Two-column layout ──────────────────────────────────────
-	var hbox := HBoxContainer.new()
-	hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	hbox.add_theme_constant_override("separation", 0)
-	root.add_child(hbox)
-
-	# ── LEFT: faction stats ────────────────────────────────────
-	var left_center := CenterContainer.new()
-	left_center.custom_minimum_size = Vector2(440, 0)
-	left_center.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	hbox.add_child(left_center)
-
-	var left_vbox := VBoxContainer.new()
-	left_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	left_vbox.add_theme_constant_override("separation", 14)
-	left_center.add_child(left_vbox)
-
-	var desc := Label.new()
-	desc.text = ("AIs play archetype-built decks from\ndifferent factions each game."
-		if _sim_deck_mode == SimRunner.DeckMode.ARCHETYPE
-		else "AIs play random decks from\ndifferent factions each game.")
-	desc.add_theme_font_size_override("font_size", 13)
-	desc.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
-	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	left_vbox.add_child(desc)
-
-	var mode_btn := _menu_btn(
-		"Deck mode: ARCHETYPE (tap for RANDOM)"
-		if _sim_deck_mode == SimRunner.DeckMode.ARCHETYPE
-		else "Deck mode: RANDOM (tap for ARCHETYPE)")
-	mode_btn.custom_minimum_size = Vector2(360, 44)
-	mode_btn.add_theme_font_size_override("font_size", 13)
-	mode_btn.pressed.connect(func():
-		_sim_deck_mode = (SimRunner.DeckMode.RANDOM
-			if _sim_deck_mode == SimRunner.DeckMode.ARCHETYPE
-			else SimRunner.DeckMode.ARCHETYPE)
-		_clear_screen()
-		_show_simulation_screen()
-	)
-	left_vbox.add_child(mode_btn)
-
-	## Higher = stronger/more realistic balance data but proportionally
-	## slower (level 10 on both sides can push a single game past a minute).
-	## Changing this rebuilds the screen with a fresh SimRunner, same as the
-	## deck-mode toggle, so accumulated stats never mix data from two levels.
-	_add_difficulty_row(left_vbox, _sim_ai_level, func(level: int):
-		_sim_ai_level = level
-		_clear_screen()
-		_show_simulation_screen()
-	)
-
-	var sim_diff_gap := Control.new()
-	sim_diff_gap.custom_minimum_size = Vector2(0, 4)
-	left_vbox.add_child(sim_diff_gap)
-
-	var table := GridContainer.new()
-	table.columns = 4
-	table.add_theme_constant_override("h_separation", 36)
-	table.add_theme_constant_override("v_separation", 10)
-	left_vbox.add_child(table)
-
-	const FACTION_HEADERS := ["Faction", "W", "L", "Win%"]
-	for h in FACTION_HEADERS:
-		var lbl := Label.new()
-		lbl.text = h
-		lbl.add_theme_font_size_override("font_size", 13)
-		lbl.add_theme_color_override("font_color", Color(0.55, 0.55, 0.65))
-		if h != "Faction":
-			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		table.add_child(_bg_cell(lbl))
-
-	const FACTIONS := [
-		["Sapiens",         "GREEN",   Color(0.20, 0.70, 0.20)],
-		["Moonlight Coven", "CRIMSON", Color(0.90, 0.25, 0.25)],
-		["Junklings",       "BLACK",   Color(0.65, 0.65, 0.70)],
-		["Gundari",         "ORANGE",  Color(0.95, 0.55, 0.10)],
-		["Inyuites",        "TEAL",    Color(0.15, 0.70, 0.80)],
-	]
-
-	for entry in FACTIONS:
-		var fname: String = entry[0]
-		var key: String   = entry[1]
-		var clr: Color    = entry[2]
-
-		var name_lbl := Label.new()
-		name_lbl.text = fname
-		name_lbl.add_theme_font_size_override("font_size", 19)
-		name_lbl.add_theme_color_override("font_color", clr)
-		table.add_child(_bg_cell(name_lbl))
-
-		var wins_lbl := Label.new()
-		wins_lbl.text = "0"
-		wins_lbl.add_theme_font_size_override("font_size", 19)
-		wins_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		wins_lbl.add_theme_color_override("font_color", Color.WHITE)
-		table.add_child(_bg_cell(wins_lbl))
-
-		var losses_lbl := Label.new()
-		losses_lbl.text = "0"
-		losses_lbl.add_theme_font_size_override("font_size", 19)
-		losses_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		losses_lbl.add_theme_color_override("font_color", Color.WHITE)
-		table.add_child(_bg_cell(losses_lbl))
-
-		var pct_lbl := Label.new()
-		pct_lbl.text = "-"
-		pct_lbl.add_theme_font_size_override("font_size", 19)
-		pct_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		pct_lbl.add_theme_color_override("font_color", Color.WHITE)
-		table.add_child(_bg_cell(pct_lbl))
-
-		_sim_stat_labels[key] = {"wins": wins_lbl, "losses": losses_lbl, "pct": pct_lbl}
-
-	left_vbox.add_child(HSeparator.new())
-
-	_sim_totals_lbl = Label.new()
-	_sim_totals_lbl.text = "Total: 0 games"
-	_sim_totals_lbl.add_theme_font_size_override("font_size", 13)
-	_sim_totals_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
-	_sim_totals_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	left_vbox.add_child(_sim_totals_lbl)
-
-	## Both sides now search at MCTS level 10, so a single game can take from
-	## several seconds to well over a minute — without this, the screen gives
-	## zero feedback between clicking START and the first game finishing,
-	## which reads as "nothing happened" even though it's working correctly.
-	_sim_status_lbl = Label.new()
-	_sim_status_lbl.text = ""
-	_sim_status_lbl.add_theme_font_size_override("font_size", 13)
-	_sim_status_lbl.add_theme_color_override("font_color", Color(0.9, 0.8, 0.3))
-	_sim_status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	left_vbox.add_child(_sim_status_lbl)
-
-	var start_btn := _menu_btn("START")
-	start_btn.custom_minimum_size = Vector2(240, 56)
-	start_btn.pressed.connect(func():
-		_sim_running = not _sim_running
-		start_btn.text = "STOP" if _sim_running else "START"
-		if _sim_running:
-			_run_simulation_loop()
-	)
-	left_vbox.add_child(start_btn)
-
-	# ── Vertical divider ───────────────────────────────────────
-	var vsep := VSeparator.new()
-	vsep.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	hbox.add_child(vsep)
-
-	# ── RIGHT: card win rates ──────────────────────────────────
-	var right_vbox := VBoxContainer.new()
-	right_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	right_vbox.add_theme_constant_override("separation", 6)
-	hbox.add_child(right_vbox)
-
-	var right_margin := MarginContainer.new()
-	right_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_margin.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
-		right_margin.add_theme_constant_override(side, 16)
-	right_vbox.add_child(right_margin)
-
-	var right_inner := VBoxContainer.new()
-	right_inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_inner.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	right_inner.add_theme_constant_override("separation", 8)
-	right_margin.add_child(right_inner)
-
-	var card_title := Label.new()
-	card_title.text = "CARD WIN RATES"
-	card_title.add_theme_font_size_override("font_size", 15)
-	card_title.add_theme_color_override("font_color", Color(0.7, 0.7, 0.8))
-	right_inner.add_child(card_title)
-
-	var card_sub := Label.new()
-	card_sub.text = "Sorted by win% in winning decks (min 30 appearances)"
-	card_sub.add_theme_font_size_override("font_size", 11)
-	card_sub.add_theme_color_override("font_color", Color(0.45, 0.45, 0.55))
-	right_inner.add_child(card_sub)
-
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_inner.add_child(scroll)
-
-	_sim_card_grid = GridContainer.new()
-	_sim_card_grid.columns = 5
-	_sim_card_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_sim_card_grid.add_theme_constant_override("h_separation", 20)
-	_sim_card_grid.add_theme_constant_override("v_separation", 5)
-	scroll.add_child(_sim_card_grid)
-
-	# Column headers
-	const CARD_HEADERS := ["Card", "Plays", "Win%", "K/P", "D/P"]
-	for h in CARD_HEADERS:
-		var lbl := Label.new()
-		lbl.text = h
-		lbl.add_theme_font_size_override("font_size", 12)
-		lbl.add_theme_color_override("font_color", Color(0.45, 0.45, 0.55))
-		if h == "Card":
-			lbl.custom_minimum_size = Vector2(220, 0)
-			_sim_card_grid.add_child(_bg_cell(lbl))
-		elif h == "Win%":
-			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			_sim_card_grid.add_child(_bg_cell(lbl))
-		else:
-			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			_sim_card_grid.add_child(lbl)
-
-func _rebuild_card_list() -> void:
-	if not is_instance_valid(_sim_card_grid) or _sim_runner == null:
-		return
-
-	# Clear existing rows (keep header row = first 5 children)
-	while _sim_card_grid.get_child_count() > 5:
-		var child := _sim_card_grid.get_child(_sim_card_grid.get_child_count() - 1)
-		_sim_card_grid.remove_child(child)
-		child.free()
-
-	const MIN_GAMES := 0
-	const FACTION_COLOR_MAP := {
-		CardData.CardColor.GREEN:   Color(0.20, 0.70, 0.20),
-		CardData.CardColor.CRIMSON: Color(0.90, 0.25, 0.25),
-		CardData.CardColor.BLACK:   Color(0.65, 0.65, 0.70),
-		CardData.CardColor.ORANGE:  Color(0.95, 0.55, 0.10),
-		CardData.CardColor.TEAL:    Color(0.15, 0.70, 0.80),
-		CardData.CardColor.GENERIC: Color(0.55, 0.55, 0.62),
-	}
-
-	# Build sortable list
-	var rows: Array = []
-	for id in _sim_runner.card_games:
-		var games: int = _sim_runner.card_games[id]
-		var plays: int = _sim_runner.card_plays.get(id, 0)
-		var wins: int  = _sim_runner.card_wins.get(id, 0)
-		var kills: int = _sim_runner.card_kills.get(id, 0)
-		var dmg: int   = _sim_runner.card_damage.get(id, 0)
-		var pct: float = 100.0 * wins / games if games > 0 else 0.0
-		rows.append({"id": id, "games": games, "plays": plays, "wins": wins, "pct": pct, "kills": kills, "dmg": dmg})
-
-	# Sort: cards with enough data by win% desc, then low-data cards by games desc
-	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		var ag: int = a["games"]
-		var bg: int = b["games"]
-		var a_ok: bool = ag >= MIN_GAMES
-		var b_ok: bool = bg >= MIN_GAMES
-		if a_ok and b_ok:
-			var ap: float = a["pct"]
-			var bp: float = b["pct"]
-			return ap > bp
-		if a_ok:
-			return true
-		if b_ok:
-			return false
-		return ag > bg
-	)
-
-	for row in rows:
-		var card_data := CardDatabase.get_card(row["id"])
-		if card_data == null:
-			continue
-		var clr: Color = FACTION_COLOR_MAP.get(card_data.color, Color(0.6, 0.6, 0.7))
-
-		var name_lbl := Label.new()
-		name_lbl.text = card_data.card_name
-		name_lbl.add_theme_font_size_override("font_size", 13)
-		name_lbl.add_theme_color_override("font_color", clr)
-		name_lbl.custom_minimum_size = Vector2(220, 0)
-		_sim_card_grid.add_child(_bg_cell(name_lbl))
-
-		var plays_i: int = row["plays"]
-		var plays_lbl := Label.new()
-		plays_lbl.text = str(plays_i)
-		plays_lbl.add_theme_font_size_override("font_size", 13)
-		plays_lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
-		plays_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		_sim_card_grid.add_child(plays_lbl)
-
-		var games_i: int = row["games"]
-
-		var pct_lbl := Label.new()
-		if games_i >= MIN_GAMES:
-			var pct_val: float = row["pct"]
-			pct_lbl.text = "%.1f%%" % pct_val
-			if pct_val >= 55.0:
-				pct_lbl.add_theme_color_override("font_color", Color(0.30, 0.90, 0.30))
-			elif pct_val <= 45.0:
-				pct_lbl.add_theme_color_override("font_color", Color(0.90, 0.35, 0.35))
-			else:
-				pct_lbl.add_theme_color_override("font_color", Color.WHITE)
-		else:
-			pct_lbl.text = "—"
-			pct_lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
-		pct_lbl.add_theme_font_size_override("font_size", 13)
-		pct_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		_sim_card_grid.add_child(_bg_cell(pct_lbl))
-
-		var kills_i: int = row["kills"]
-		var kills_lbl := Label.new()
-		kills_lbl.text = "%.2f" % (float(kills_i) / plays_i) if plays_i > 0 else "—"
-		kills_lbl.add_theme_font_size_override("font_size", 13)
-		kills_lbl.add_theme_color_override("font_color", Color(0.75, 0.75, 0.85))
-		kills_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		_sim_card_grid.add_child(kills_lbl)
-
-		var damage_i: int = row["dmg"]
-		var dmg_lbl := Label.new()
-		dmg_lbl.text = "%.1f" % (float(damage_i) / plays_i) if plays_i > 0 else "—"
-		dmg_lbl.add_theme_font_size_override("font_size", 13)
-		dmg_lbl.add_theme_color_override("font_color", Color(0.75, 0.75, 0.85))
-		dmg_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		_sim_card_grid.add_child(dmg_lbl)
-
 # ── Deck builder ───────────────────────────────────────────────────────
 
 func _on_deck_builder_pressed() -> void:
@@ -1683,6 +1939,38 @@ func _on_deck_builder_pressed() -> void:
 	var builder := DeckBuilderScene.instantiate()
 	_canvas.add_child(builder)
 	builder.back_pressed.connect(func():
+		_clear_screen()
+		_show_main_menu()
+	)
+
+# ── Shop (currency, packs, crafting) ────────────────────────────────────
+
+func _on_shop_pressed() -> void:
+	_clear_screen()
+	var screen := ShopScreenScript.new()
+	_canvas.add_child(screen)
+	screen.back_pressed.connect(func():
+		_clear_screen()
+		_show_main_menu()
+	)
+	screen.pack_opened_ready.connect(func(cards: Array, dust_awarded: int):
+		_clear_screen()
+		var open_screen := PackOpenScreenScript.new()
+		_canvas.add_child(open_screen)
+		open_screen.finished.connect(func():
+			_clear_screen()
+			_on_shop_pressed()
+		)
+		open_screen.setup(cards, dust_awarded)
+	)
+
+# ── Card list ──────────────────────────────────────────────────────────
+
+func _on_card_list_pressed() -> void:
+	_clear_screen()
+	var screen := CardListScreen.new()
+	_canvas.add_child(screen)
+	screen.back_pressed.connect(func():
 		_clear_screen()
 		_show_main_menu()
 	)
@@ -1721,4 +2009,327 @@ func _connect_ranked_requeue(board: Board) -> void:
 		_create_canvas()
 		_begin_ranked_search()
 	, CONNECT_ONE_SHOT)
+
+# ── Campaign ───────────────────────────────────────────────────────────
+#
+# A Campaign run is a best-of-3/5/7 sequence of independent local-AI matches
+# ("nodes") against one fixed opponent deck; some nodes carry a
+# battlefield-wide modifier (CampaignModifiers / GameState.node_modifier_ability).
+# Whoever lost the previous node picks the next flagged node's modifier from
+# two options; falling 2+ node-wins behind grants a one-time extra starting
+# mana crystal on the next node. See campaign_state.gd for the full rules.
+
+func _on_campaign_pressed() -> void:
+	# A campaign search is already running - the bottom-right queue indicator
+	# is the way to check status/cancel it, same as Ranked.
+	if _campaign_searching:
+		return
+	_clear_screen()
+	_show_deck_select(
+		"Choose Your Deck",
+		DeckManager.get_all_decks(),
+		func(): _clear_screen(); _show_main_menu(),
+		func(deck: Dictionary):
+			_player_deck_ids.clear()
+			for id in deck["card_ids"]:
+				_player_deck_ids.append(str(id))
+			_campaign_player_faction = int(deck.get("faction_idx", 0))
+			_clear_screen()
+			_show_campaign_setup()
+	)
+
+func _show_campaign_setup() -> void:
+	var root := VBoxContainer.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_theme_constant_override("separation", 0)
+	_canvas.add_child(root)
+
+	root.add_child(_make_header_bar("Campaign", func():
+		_clear_screen()
+		_on_campaign_pressed()
+	))
+
+	var center := CenterContainer.new()
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(center)
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 14)
+	center.add_child(vbox)
+
+	var selected_ai_level := 5  # Medium by default
+	_add_difficulty_row(vbox, selected_ai_level, func(level: int): selected_ai_level = level)
+
+	var diff_gap := Control.new()
+	diff_gap.custom_minimum_size = Vector2(0, 10)
+	vbox.add_child(diff_gap)
+
+	var campaign_sizes := [
+		{"label": "SMALL",  "size": CampaignState.Size.SMALL,  "desc": "Best of 3 · 1 modified node"},
+		{"label": "MEDIUM", "size": CampaignState.Size.MEDIUM, "desc": "Best of 5 · 2 modified nodes"},
+		{"label": "LARGE",  "size": CampaignState.Size.LARGE,  "desc": "Best of 7 · 4 modified nodes"},
+	]
+	for entry in campaign_sizes:
+		var row := VBoxContainer.new()
+		row.add_theme_constant_override("separation", 2)
+		vbox.add_child(row)
+
+		var btn := _menu_btn(entry["label"])
+		btn.pressed.connect(func():
+			_begin_campaign_search(entry["size"], selected_ai_level)
+		)
+		row.add_child(btn)
+
+		var desc_lbl := Label.new()
+		desc_lbl.text = entry["desc"]
+		desc_lbl.add_theme_font_size_override("font_size", 14)
+		desc_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		row.add_child(desc_lbl)
+
+# ── Campaign matchmaking ─────────────────────────────────────────────────
+#
+# Picking a size queues for a same-size human opponent for up to
+# CAMPAIGN_SEARCH_TIMEOUT_SEC (identical shape to the Ranked search above:
+# bottom-right queue indicator, free navigation while queued, "Match Found!"
+# countdown popup); if nobody's found in time, falls back to today's local
+# AI campaign (fixed "Rival Warlord" opponent). A found human opponent plays
+# every node of the run - see _start_campaign_pvp.
+
+func _begin_campaign_search(size: CampaignState.Size, ai_level: int) -> void:
+	_campaign_search_id += 1
+	var search_id := _campaign_search_id
+	_campaign_searching = true
+	_campaign_ai_level = ai_level
+	_clear_screen()
+	_show_main_menu()
+	_show_queue_overlay("Searching for campaign opponent...", _cancel_campaign_search, func() -> bool:
+		return _campaign_search_id == search_id
+	)
+	Auth.queue_campaign(size)
+	_campaign_match_found_callable = _on_campaign_match_found.bind(search_id)
+	Net.campaign_match_found.connect(_campaign_match_found_callable, CONNECT_ONE_SHOT)
+	get_tree().create_timer(CAMPAIGN_SEARCH_TIMEOUT_SEC).timeout.connect(_on_campaign_search_timeout.bind(size, search_id))
+
+func _disconnect_campaign_match_found() -> void:
+	if _campaign_match_found_callable.is_valid() and Net.campaign_match_found.is_connected(_campaign_match_found_callable):
+		Net.campaign_match_found.disconnect(_campaign_match_found_callable)
+
+func _cancel_campaign_search() -> void:
+	_campaign_search_id += 1
+	_campaign_searching = false
+	_disconnect_campaign_match_found()
+	Auth.cancel_campaign_queue()
+	_hide_queue_overlay()
+
+func _on_campaign_search_timeout(size: CampaignState.Size, search_id: int) -> void:
+	if search_id != _campaign_search_id:
+		return
+	_campaign_search_id += 1
+	_disconnect_campaign_match_found()
+	Auth.cancel_campaign_queue()
+	_hide_queue_overlay()
+	_show_match_found_popup(CAMPAIGN_OPPONENT_NAME, -1, func():
+		_campaign_searching = false
+		_clear_screen()
+		_start_campaign(size, _campaign_ai_level)
+	)
+
+func _on_campaign_match_found(lobby_id: String, role: String, opponent_name: String, size: int,
+							   search_id: int) -> void:
+	if search_id != _campaign_search_id:
+		return
+	_campaign_search_id += 1
+	_hide_queue_overlay()
+	_show_match_found_popup(opponent_name, -1, func():
+		_campaign_searching = false
+		_start_campaign_pvp(role, opponent_name, size)
+	)
+
+func _start_campaign(size: CampaignState.Size, ai_level: int) -> void:
+	_campaign_pvp = false
+	_campaign_state = CampaignState.new(size)
+	_campaign_ai_level = ai_level
+	_campaign_opponent_name = CAMPAIGN_OPPONENT_NAME
+	var opponent_faction: CardData.CardColor = RANKED_FACTIONS[randi() % RANKED_FACTIONS.size()]
+	var opp_deck := DeckManager.build_archetype_deck(opponent_faction)
+	_campaign_opponent_deck_ids.clear()
+	for c in opp_deck:
+		_campaign_opponent_deck_ids.append(c.id)
+	_campaign_opponent_deck_faction = opponent_faction
+	_campaign_state.set_faction_colors(_campaign_player_faction, opponent_faction)
+	_show_campaign_map_screen(null)
+
+## One-time handshake right after a human opponent is found: decks (fixed
+## for the whole run, same as the local-AI campaign's one fixed opponent
+## deck) and the host's authoritative CampaignState layout (which nodes are
+## modified, node 0's modifier, map choice, node positions) are exchanged
+## exactly once here via the generic relay/await_relay_of_type channel
+## already used for Ranked's deck exchange - every later node in the run
+## reuses this same lobby/relay connection, no further matchmaking needed.
+func _start_campaign_pvp(role: String, opponent_name: String, size: int) -> void:
+	_campaign_pvp = true
+	_campaign_pvp_role = role
+	_campaign_opponent_name = opponent_name
+	if role == "host":
+		_await_campaign_guest_deck_and_start(size as CampaignState.Size)
+	else:
+		Net.relay({"type": "campaign_deck", "deck_ids": _player_deck_ids, "faction_idx": int(_campaign_player_faction)})
+		var msg: Dictionary = await Net.await_relay_of_type("campaign_layout")
+		_campaign_state = CampaignState.new(size as CampaignState.Size)
+		_campaign_state.apply_layout(msg.get("layout", {}))
+		_campaign_opponent_deck_ids.clear()
+		for id in msg.get("opponent_deck_ids", []):
+			_campaign_opponent_deck_ids.append(str(id))
+		_campaign_opponent_deck_faction = int(msg.get("opponent_faction_idx", 0))
+		_campaign_state.set_faction_colors(_campaign_player_faction, _campaign_opponent_deck_faction)
+		_show_campaign_map_screen(null)
+
+func _await_campaign_guest_deck_and_start(size: CampaignState.Size) -> void:
+	var msg: Dictionary = await Net.await_relay_of_type("campaign_deck")
+	_campaign_opponent_deck_ids.clear()
+	for id in msg.get("deck_ids", []):
+		_campaign_opponent_deck_ids.append(str(id))
+	_campaign_opponent_deck_faction = int(msg.get("faction_idx", 0))
+	_campaign_state = CampaignState.new(size)
+	_campaign_state.set_faction_colors(_campaign_player_faction, _campaign_opponent_deck_faction)
+	Net.relay({
+		"type": "campaign_layout",
+		"layout": _campaign_state.to_layout_dict(),
+		"opponent_deck_ids": _player_deck_ids,
+		"opponent_faction_idx": int(_campaign_player_faction),
+	})
+	_show_campaign_map_screen(null)
+
+# ── Campaign map / node loop ─────────────────────────────────────────────
+
+## Shown before the first node and again after every subsequent one - a
+## cinematic map (CampaignMapScreen) that reports the last node's result (if
+## any), resolves/waits for the next flagged node's modifier if one is
+## needed, zooms to the next node and counts down to it automatically. Not
+## shown inside a match itself. `last_result` is null for the very first
+## node of a run.
+func _show_campaign_map_screen(last_result) -> void:
+	_clear_screen()
+	var map_screen := CampaignMapScreen.new()
+	map_screen.campaign_state = _campaign_state
+	map_screen.opponent_name = _campaign_opponent_name
+	map_screen.last_result = last_result
+	if _campaign_pvp and last_result == true and _campaign_state.current_node_needs_choice():
+		map_screen.awaiting_opponent_modifier = true
+	_canvas.add_child(map_screen)
+	map_screen.proceed_pressed.connect(_start_campaign_node_match, CONNECT_ONE_SHOT)
+	if _campaign_pvp:
+		map_screen.modifier_chosen.connect(func(chosen: Dictionary):
+			Net.relay({"type": "campaign_modifier_chosen", "modifier": chosen})
+		)
+		if map_screen.awaiting_opponent_modifier:
+			_await_campaign_modifier_choice(map_screen)
+
+## Fire-and-forget: only relevant when _show_campaign_map_screen just put the
+## map screen into its "waiting for opponent to choose" state.
+func _await_campaign_modifier_choice(map_screen: CampaignMapScreen) -> void:
+	var msg: Dictionary = await Net.await_relay_of_type("campaign_modifier_chosen")
+	if is_instance_valid(map_screen):
+		map_screen.on_modifier_resolved(msg.get("modifier", {}))
+
+func _start_campaign_node_match() -> void:
+	if _campaign_pvp:
+		_start_campaign_pvp_match()
+	else:
+		_start_campaign_match()
+
+func _start_campaign_match() -> void:
+	var node := _campaign_state.current_node()
+	var pd := DeckManager.build_deck_from_ids(_player_deck_ids)
+	var od := DeckManager.build_deck_from_ids(_campaign_opponent_deck_ids)
+	if is_instance_valid(_canvas):
+		_canvas.queue_free()
+	var board := BoardScene.instantiate()
+	add_child(board)
+	board.set_opponent_name(_campaign_opponent_name)
+	if not node.is_empty():
+		board.set_node_modifier_label("%s: %s" % [node["name"], node["description"]])
+	board.campaign_continue_requested.connect(_on_campaign_match_finished.bind(board), CONNECT_ONE_SHOT)
+	var modifier_ability: String = str(node.get("ability", ""))
+	var grant_bonus := _campaign_state.is_player_behind()
+	GameManagerAutoload.start_local_game(board, pd, od, _campaign_ai_level, false, true, modifier_ability, grant_bonus)
+
+## PvP sibling of _start_campaign_match - a fresh Board + MpGameManager per
+## node (same recreate-per-match pattern _start_ranked_pvp_match uses), host-
+## authoritative same as Ranked. Only the host computes node_modifier_ability/
+## grant_bonus_*: those drive game_state on the host's own authoritative copy
+## and reach the guest purely as a side effect of the normal state sync
+## (see mp_game_manager.gd), so the guest call doesn't need them at all.
+func _start_campaign_pvp_match() -> void:
+	var node := _campaign_state.current_node()
+	if is_instance_valid(_canvas):
+		_canvas.queue_free()
+	var board := BoardScene.instantiate()
+	add_child(board)
+	board.set_opponent_name(_campaign_opponent_name)
+	if not node.is_empty():
+		board.set_node_modifier_label("%s: %s" % [node["name"], node["description"]])
+	board.campaign_continue_requested.connect(_on_campaign_match_finished.bind(board), CONNECT_ONE_SHOT)
+	_mp_manager = MpGameManager.new()
+	board.add_child(_mp_manager)
+	if _campaign_pvp_role == "host":
+		var pd := DeckManager.build_deck_from_ids(_player_deck_ids)
+		var od := DeckManager.build_deck_from_ids(_campaign_opponent_deck_ids)
+		var modifier_ability: String = str(node.get("ability", ""))
+		_mp_manager.start_as_host(board, pd, od, _campaign_opponent_name, false, -1,
+			modifier_ability, _campaign_state.is_player_behind(), _campaign_state.is_opponent_behind(), true)
+	else:
+		_mp_manager.start_as_guest(board, _campaign_opponent_name, false, -1, true)
+
+func _on_campaign_match_finished(board: Board) -> void:
+	var won: bool
+	if _campaign_pvp:
+		var my_id := MpGameManager.HOST_ID if _campaign_pvp_role == "host" else MpGameManager.GUEST_ID
+		won = _mp_manager.game_state.winner_id == my_id
+	else:
+		won = GameManagerAutoload.game_state.winner_id == GameManagerAutoload.LOCAL_PLAYER_ID
+	_campaign_state.report_node_result(won)
+	board.queue_free()
+	_create_canvas()
+	if _campaign_state.is_over():
+		_show_campaign_final_screen()
+	else:
+		_show_campaign_map_screen(won)
+
+func _show_campaign_final_screen() -> void:
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_canvas.add_child(center)
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 14)
+	center.add_child(vbox)
+
+	var won := _campaign_state.player_won_campaign()
+	if won:
+		Economy.claim_earn_reward("campaign_milestone")
+	var result_lbl := Label.new()
+	result_lbl.text = "Campaign Won!" if won else "Campaign Lost"
+	result_lbl.add_theme_font_size_override("font_size", 48)
+	result_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(result_lbl)
+
+	var score_lbl := Label.new()
+	score_lbl.text = "Final score: %s" % _campaign_state.score_string()
+	score_lbl.add_theme_font_size_override("font_size", 22)
+	score_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(score_lbl)
+
+	var menu_btn := _menu_btn("RETURN TO MENU")
+	menu_btn.pressed.connect(func():
+		_campaign_state = null
+		_campaign_pvp = false
+		_campaign_pvp_role = ""
+		_mp_manager = null
+		_clear_screen()
+		_show_main_menu()
+	)
+	vbox.add_child(menu_btn)
 

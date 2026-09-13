@@ -35,6 +35,13 @@ var ranked_losses: int = 0
 ## in the background via save_deck()/delete_deck() below).
 var custom_decks: Array[Dictionary] = []
 
+## Filename (not a full path) of the chosen profile picture under
+## res://assets/pfps/, e.g. "warrior.png" - empty means no selection yet
+## (main.gd falls back to a generated placeholder). Synced to the account
+## server-side the same way custom_decks is: optimistic local update here,
+## background Net call, diagnostic-only result handling below.
+var selected_pfp: String = ""
+
 var _saved_token: String = ""
 
 func _ready() -> void:
@@ -43,6 +50,7 @@ func _ready() -> void:
 	Net.ranked_result_received.connect(_on_ranked_result_received)
 	Net.save_deck_result.connect(_on_deck_sync_result.bind("save"))
 	Net.delete_deck_result.connect(_on_deck_sync_result.bind("delete"))
+	Net.set_pfp_result.connect(_on_pfp_sync_result)
 	_load_saved_session()
 
 func save_deck(deck_name: String, faction_idx: int, card_ids: Array) -> void:
@@ -51,6 +59,10 @@ func save_deck(deck_name: String, faction_idx: int, card_ids: Array) -> void:
 func delete_deck(deck_name: String) -> void:
 	Net.delete_deck(token, deck_name)
 
+func set_pfp(pfp_id: String) -> void:
+	selected_pfp = pfp_id
+	Net.set_pfp(token, pfp_id)
+
 ## DeckManager already applies save/delete to custom_decks optimistically,
 ## so this is just a diagnostic backstop for when the server-side write
 ## actually failed (e.g. session expired) — the local cache and account can
@@ -58,6 +70,10 @@ func delete_deck(deck_name: String) -> void:
 func _on_deck_sync_result(success: bool, message: String, deck_name: String, action: String) -> void:
 	if not success:
 		push_warning("Deck %s failed to sync for '%s': %s" % [action, deck_name, message])
+
+func _on_pfp_sync_result(success: bool, message: String, _pfp_id: String) -> void:
+	if not success:
+		push_warning("Profile picture failed to sync: %s" % message)
 
 ## `opponent_rating` should only be passed for a matchmade PvP result (the
 ## opponent's rating at match-found time, from Net.ranked_match_found) so the
@@ -70,6 +86,12 @@ func queue_ranked() -> void:
 
 func cancel_ranked_queue() -> void:
 	Net.cancel_ranked_queue(token)
+
+func queue_campaign(size: int) -> void:
+	Net.queue_campaign(token, size)
+
+func cancel_campaign_queue() -> void:
+	Net.cancel_campaign_queue(token)
 
 func _on_ranked_result_received(success: bool, profile: Dictionary) -> void:
 	if not success:
@@ -123,6 +145,7 @@ func _apply_profile(profile: Dictionary) -> void:
 	ranked_win_streak = int(profile.get("ranked_win_streak", 0))
 	ranked_wins = int(profile.get("ranked_wins", 0))
 	ranked_losses = int(profile.get("ranked_losses", 0))
+	selected_pfp = str(profile.get("pfp_id", ""))
 	custom_decks.clear()
 	for d in profile.get("decks", []):
 		custom_decks.append(d)
@@ -143,6 +166,7 @@ func _clear_session() -> void:
 	ranked_win_streak = 0
 	ranked_wins = 0
 	ranked_losses = 0
+	selected_pfp = ""
 	custom_decks.clear()
 	is_logged_in = false
 	_saved_token = ""

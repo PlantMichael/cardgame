@@ -136,6 +136,7 @@ func acquire_mesh() -> MeshInstance3D:
 	_add_dim_overlay(mi, CardData.CardColor.GENERIC)
 	_add_highlight_overlay(mi, CardData.CardColor.GENERIC)
 	_add_attack_outline_overlay(mi, CardData.CardColor.GENERIC)
+	_add_target_outline_overlay(mi, CardData.CardColor.GENERIC)
 	return mi
 
 func release_mesh(mesh: MeshInstance3D) -> void:
@@ -371,6 +372,58 @@ func set_attack_outline(mesh: MeshInstance3D, shown: bool) -> void:
 		return
 	overlay.visible = shown
 
+## A card eligible to be targeted (by an attack, an ability, or a stratagem -
+## see Card.set_targeted()) also gets a border-only outline rather than
+## set_highlight()'s full color wash - same reasoning as the attack outline
+## above, and reuses its shader (just a second material instance with its
+## own color). Kept as its own separate overlay/state rather than folded
+## into set_attack_outline() since the two are never the same card at the
+## same time (one's "this can attack", the other's "this is a valid enemy
+## target") but can legitimately be active on screen simultaneously - a
+## shared overlay would only ever show one of them.
+const TARGET_OUTLINE_THICKNESS := 0.02
+const TARGET_OUTLINE_COLOR := Color(0.9, 0.15, 0.15)
+
+func _add_target_outline_overlay(mesh: MeshInstance3D, color: CardData.CardColor) -> void:
+	var overlay := MeshInstance3D.new()
+	overlay.name = "TargetOutlineOverlay"
+	overlay.visible = false
+	var quad := QuadMesh.new()
+	quad.size = _native_size
+	overlay.mesh = quad
+	var mat := ShaderMaterial.new()
+	mat.shader = _get_attack_outline_shader()
+	mat.set_shader_parameter("outline_color", TARGET_OUTLINE_COLOR)
+	mat.set_shader_parameter("thickness", TARGET_OUTLINE_THICKNESS)
+	mat.render_priority = 5
+	overlay.set_surface_override_material(0, mat)
+	mesh.add_child(overlay)
+	_reposition_target_outline_overlay(mesh, color)
+
+## Re-centers the target outline's forward offset for mesh's current color -
+## same reasoning as _reposition_text_overlay(), called alongside it. Placed
+## even further forward than the attack outline so the two never z-fight if
+## somehow both end up visible on the same mesh at once.
+func _reposition_target_outline_overlay(mesh: MeshInstance3D, color: CardData.CardColor) -> void:
+	var overlay := mesh.get_node_or_null("TargetOutlineOverlay") as MeshInstance3D
+	if overlay == null:
+		return
+	var counter_rotation := _stand_basis().inverse()
+	overlay.transform.basis = counter_rotation
+	var front_z: float = _front_z_by_color.get(color, _front_z_by_color.get(CardData.CardColor.GENERIC, 0.0))
+	var offset_amount := front_z * (1.0 + HIGHLIGHT_OVERLAY_FRONT_MARGIN + 0.15)
+	overlay.position = counter_rotation * Vector3(0, 0, offset_amount)
+
+## Shows/hides the targetable outline - see _add_target_outline_overlay().
+## No-op if the mesh has no overlay (stale reference).
+func set_target_outline(mesh: MeshInstance3D, shown: bool) -> void:
+	if not is_instance_valid(mesh):
+		return
+	var overlay := mesh.get_node_or_null("TargetOutlineOverlay") as MeshInstance3D
+	if overlay == null:
+		return
+	overlay.visible = shown
+
 ## Projects a card's baked text (see Card._setup_text_overlay()) onto its
 ## mesh's text-overlay quad. No-op if the mesh has no overlay - either it's
 ## a stale reference or the card opted out (use_text_overlay = false).
@@ -406,6 +459,7 @@ func configure_theme(mesh: MeshInstance3D, color: CardData.CardColor, art: Textu
 	_reposition_dim_overlay(mesh, color)
 	_reposition_highlight_overlay(mesh, color)
 	_reposition_attack_outline_overlay(mesh, color)
+	_reposition_target_outline_overlay(mesh, color)
 
 ## Tints the whole card (used for damage flash / transform pulses). Pass
 ## null to clear back to the normal per-surface materials.
@@ -420,6 +474,31 @@ func set_flash_tint(mesh: MeshInstance3D, color) -> void:
 	mat.emission_enabled = true
 	mat.emission = color
 	mat.emission_energy_multiplier = 0.6
+	mesh.material_override = mat
+
+## Fades the whole card toward invisible (alpha 1 = fully normal, alpha 0 =
+## fully invisible) - used for a Magic Arena-style dissolve-on-death instead
+## of the card just popping out of existence. Same material_override
+## mechanism as set_flash_tint() (this also replaces the mesh's real per-
+## surface art/text materials with a flat tinted one while active, so the
+## card reads as a soft glowing silhouette rather than its actual art as it
+## dissolves - a deliberate trade for a clean single-material fade instead of
+## animating alpha across every one of the mesh's several overlay materials
+## in lockstep), just with blending enabled and alpha driven continuously by
+## the caller (see Card.animate_death()'s tween_method) instead of a one-shot
+## opaque color. Pass alpha >= 1.0 to clear back to the normal materials.
+func set_dissolve(mesh: MeshInstance3D, alpha: float, tint: Color = Color(0.8, 0.85, 1.0)) -> void:
+	if not is_instance_valid(mesh):
+		return
+	if alpha >= 1.0:
+		mesh.material_override = null
+		return
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = Color(tint.r, tint.g, tint.b, alpha)
+	mat.emission_enabled = true
+	mat.emission = tint
+	mat.emission_energy_multiplier = 0.7
 	mesh.material_override = mat
 
 ## screen_rect: the card's current on-screen rect (global position + size,
