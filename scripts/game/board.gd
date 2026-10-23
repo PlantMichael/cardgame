@@ -285,8 +285,8 @@ func _style_end_turn_button() -> void:
 ## mat's dark-felt-with-gold-trim look (see _add_board_zone_backgrounds()).
 func _style_center_bar() -> void:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.05, 0.05, 0.06, 0.55)
-	style.border_color = Color(0.72, 0.58, 0.25, 0.85)
+	style.bg_color = Color(0.05, 0.05, 0.06, 0.30)
+	style.border_color = Color(0.72, 0.58, 0.25, 0.60)
 	style.set_border_width_all(2)
 	style.set_corner_radius_all(18)
 	var panel := Panel.new()
@@ -533,13 +533,13 @@ func _on_decline_pressed() -> void:
 ## match the rest of the ornate reskin (see _style_center_bar(), hero.gd).
 func _add_board_zone_backgrounds() -> void:
 	var outer_style = StyleBoxFlat.new()
-	outer_style.bg_color = Color(0.03, 0.05, 0.03, 0.42)
-	outer_style.border_color = Color(0.60, 0.47, 0.20, 0.9)
+	outer_style.bg_color = Color(0.03, 0.05, 0.03, 0.16)
+	outer_style.border_color = Color(0.60, 0.47, 0.20, 0.55)
 	outer_style.set_border_width_all(3)
 	outer_style.set_corner_radius_all(16)
 	var inner_style = StyleBoxFlat.new()
 	inner_style.draw_center = false
-	inner_style.border_color = Color(0.85, 0.74, 0.45, 0.5)
+	inner_style.border_color = Color(0.85, 0.74, 0.45, 0.22)
 	inner_style.set_border_width_all(1)
 	inner_style.set_corner_radius_all(13)
 	for zone in [opponent_board_zone, player_board_zone]:
@@ -560,20 +560,20 @@ func _add_board_zone_backgrounds() -> void:
 func _create_player_deck_icon() -> void:
 	_player_deck_icon = CardBackScene.instantiate()
 	_player_deck_icon.scale = Vector2(0.75, 0.75)
-	_player_deck_icon.position = Vector2(1632, 910)
+	_player_deck_icon.position = Vector2(1690, 760)
 	add_child(_player_deck_icon)
 
 	_deck_count_label = Label.new()
 	_deck_count_label.add_theme_font_size_override("font_size", 14)
 	_deck_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_deck_count_label.custom_minimum_size = Vector2(80, 0)
-	_deck_count_label.position = Vector2(1632, 1035)
+	_deck_count_label.position = Vector2(1690, 880)
 	add_child(_deck_count_label)
 
 	var graveyard_btn := Button.new()
 	graveyard_btn.text = "Graveyard"
 	graveyard_btn.custom_minimum_size = Vector2(100, 32)
-	graveyard_btn.position = Vector2(1630, 1050)
+	graveyard_btn.position = Vector2(1690, 915)
 	graveyard_btn.add_theme_font_size_override("font_size", 13)
 	graveyard_btn.pressed.connect(_open_graveyard_viewer)
 	add_child(graveyard_btn)
@@ -1364,14 +1364,16 @@ func _refresh_hand() -> void:
 
 	# Hearthstone-style squish: cards keep comfortable spacing until the hand
 	# would overflow the zone, then overlap progressively to keep fitting.
-	var wrapper_size := Card.PIXELS_MEDIUM + Vector2(12, 4)
-	var base_separation := 12.0
-	var zone_width := 1320.0
+	var wrapper_size := Card.PIXELS_MEDIUM + Vector2(10, 4)
+	var base_separation := 10.0
+	var zone_width: float = player_hand_zone.size.x
 	var separation := base_separation
 	if hand.size() > 1:
 		var natural_width: float = hand.size() * wrapper_size.x + (hand.size() - 1) * base_separation
 		if natural_width > zone_width:
-			separation = maxf((zone_width - hand.size() * wrapper_size.x) / (hand.size() - 1), -110.0)
+			# Floor scales with the card, so a full hand overlaps but never
+			# collapses into an unreadable stack.
+			separation = maxf((zone_width - hand.size() * wrapper_size.x) / (hand.size() - 1), -wrapper_size.x * 0.55)
 	player_hand_zone.add_theme_constant_override("separation", int(round(separation)))
 
 	var existing: Dictionary = {}
@@ -1424,9 +1426,9 @@ func _refresh_hand() -> void:
 	# count with no cards behind it (see PlayerState.to_net_dict).
 	for i in game_state.opponent.get_hand_size():
 		var back = CardBackScene.instantiate()
-		back.scale = Vector2(0.62, 0.62)
+		back.scale = Vector2(0.48, 0.48)
 		var back_wrapper = Control.new()
-		back_wrapper.custom_minimum_size = Vector2(68, 98)
+		back_wrapper.custom_minimum_size = Vector2(53, 77)
 		opponent_hand_zone.add_child(back_wrapper)
 		back_wrapper.add_child(back)
 
@@ -1952,6 +1954,88 @@ func animate_creature_attack(attacker_instance_id: String, attacker_player_id: S
 	attacker_card.z_as_relative = true
 	attacker_card.z_index = 0
 	attacker_card.position = base_pos
+
+## Lunge at the enemy hero. The going-face counterpart to
+## animate_creature_attack(): same lunge-and-return shape so the two read as
+## the same action, but the target is a hero badge rather than a card, so the
+## impact lands on the portrait and the hero recoils instead of a card taking
+## a damage flash.
+##
+## Attacking face used to have no animation at all - the hero's number simply
+## dropped - which made the game's most decisive action its least legible.
+func animate_creature_attack_face(attacker_instance_id: String, attacker_player_id: String) -> void:
+	if game_state == null:
+		return
+	var is_local_attacker: bool = attacker_player_id == game_state.player.player_id
+	var attacker_zone: HBoxContainer = player_board_zone if is_local_attacker else opponent_board_zone
+	var target_hero: Panel = opponent_hero if is_local_attacker else player_hero
+
+	var attacker_card: Card = null
+	for wrapper in attacker_zone.get_children():
+		var card := _get_card_child(wrapper)
+		if card and card.minion and card.minion.instance_id == attacker_instance_id:
+			attacker_card = card
+			break
+	if attacker_card == null or not is_instance_valid(target_hero):
+		return
+
+	var attacker_center: Vector2 = attacker_card.get_parent().get_global_rect().get_center()
+	var target_center: Vector2 = target_hero.get_global_rect().get_center()
+	var delta: Vector2 = target_center - attacker_center
+	# Stop short of the portrait: landing on top of it would hide the very
+	# thing the hit is about, and the recoil below sells the contact.
+	var reach := delta.length()
+	if reach > 1.0:
+		delta *= maxf(reach - 78.0, 0.0) / reach
+
+	var base_pos := attacker_card.position
+	attacker_card.z_as_relative = false
+	attacker_card.z_index = 100
+
+	var tween := create_tween()
+	tween.tween_property(attacker_card, "position", base_pos + delta, 0.18) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tween.tween_callback(func(): _hero_impact(target_hero))
+	tween.tween_property(attacker_card, "position", base_pos, 0.17) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	await tween.finished
+
+	# The board can refresh (and free this card) while the tween runs.
+	if not is_instance_valid(attacker_card):
+		return
+	attacker_card.z_as_relative = true
+	attacker_card.z_index = 0
+	attacker_card.position = base_pos
+
+## Red flash and a shove away from the attacker on a hero badge taking a hit.
+##
+## The resting position is cached in a meta the first time rather than read
+## live: two hits in quick succession (Dual Strike, several attackers) would
+## otherwise start the second tween from a mid-recoil position and leave the
+## badge permanently drifted off its slot.
+func _hero_impact(hero: Panel) -> void:
+	if not is_instance_valid(hero):
+		return
+	if not hero.has_meta(&"_rest_position"):
+		hero.set_meta(&"_rest_position", hero.position)
+	var home: Vector2 = hero.get_meta(&"_rest_position")
+	if hero.has_meta(&"_impact_tween"):
+		var prev: Tween = hero.get_meta(&"_impact_tween")
+		if is_instance_valid(prev):
+			prev.kill()
+	hero.position = home
+	hero.modulate = Color.WHITE
+
+	# Shoved away from whoever hit it: the player's hero is struck from above.
+	var shove := Vector2(0, 12.0 if hero == player_hero else -12.0)
+	var t := hero.create_tween()
+	hero.set_meta(&"_impact_tween", t)
+	t.set_parallel(true)
+	t.tween_property(hero, "modulate", Color(1.8, 0.7, 0.7), 0.07)
+	t.tween_property(hero, "position", home + shove, 0.07).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	t.chain().set_parallel(true)
+	t.tween_property(hero, "modulate", Color.WHITE, 0.24)
+	t.tween_property(hero, "position", home, 0.24).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 func animate_creature_challenge(challenger_instance_id: String, challenger_player_id: String, target_instance_id: String) -> void:
 	var is_local_attacker = (challenger_player_id == game_state.player.player_id)

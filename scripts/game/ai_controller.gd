@@ -335,6 +335,9 @@ func _attack_action(action: Dictionary, attacker: Minion, target: Minion, target
 			return
 	else:
 		board.log_action("Opponent's %s attacked your hero" % attacker_name)
+		await board.animate_creature_attack_face(attacker.instance_id, game_state.opponent.player_id)
+		if not is_instance_valid(board):
+			return
 	board.refresh()
 
 # --- Backward-compatible delegates (called directly by game_manager.gd for

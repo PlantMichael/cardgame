@@ -95,7 +95,13 @@ func _build_visuals() -> void:
 	add_child(_health_gem)
 
 	var gem_fill := _make_circle(gem_dia - 9.0, GEM_FILL)
-	gem_fill.position = _health_gem.position + Vector2(2.0, 2.0)
+	# Local to _health_gem, which is its PARENT. This used to be
+	# `_health_gem.position + Vector2(2, 2)`, adding the parent's own offset a
+	# second time, so the bright red fill flew off to roughly double the
+	# gem's offset and sat loose on the battlefield - the stray red orb. The
+	# darker bevel ring stayed put, which is why the gem still looked almost
+	# right and the orphan looked like an unrelated effect.
+	gem_fill.position = Vector2(2.0, 2.0)
 	_health_gem.add_child(gem_fill)
 
 	var shine := Control.new()

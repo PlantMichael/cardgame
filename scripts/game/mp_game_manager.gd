@@ -244,6 +244,10 @@ func _host_on_attack(attacker_id: String, target_type: String, target_id: String
 		board.log_action("Your %s attacked the opponent's hero" % attacker.data.card_name)
 		_relay_log("Opponent's %s attacked your hero" % attacker.data.card_name)
 		game_state.attack(attacker, null, target_id)
+		# Empty target_id on the wire means "went face" - see the guest's
+		# animate_attack handler.
+		await board.animate_creature_attack_face(attacker_id, HOST_ID)
+		_relay_animate_attack(attacker_id, HOST_ID, "")
 	board.refresh()
 	_send_state()
 	await _host_process_pending()
@@ -365,7 +369,10 @@ func _host_run_guest_turn() -> void:
 			elif target_type == "hero":
 				board.log_action("Opponent's %s attacked your hero" % attacker.data.card_name)
 				_relay_log("Your %s attacked opponent's hero" % attacker.data.card_name)
+				var face_attacker_id := attacker.instance_id
 				game_state.attack(attacker, null, target_id)
+				await board.animate_creature_attack_face(face_attacker_id, GUEST_ID)
+				_relay_animate_attack(face_attacker_id, GUEST_ID, "")
 			board.refresh()
 			_send_state()
 			await _host_process_pending()
@@ -1064,11 +1071,19 @@ func _guest_drain_queue() -> bool:
 
 		var anim = Net.pop_of_type("animate_attack")
 		if anim != null:
-			await board.animate_creature_attack(
-				str(anim.get("attacker_id", "")),
-				str(anim.get("attacker_player_id", "")),
-				str(anim.get("target_id", ""))
-			)
+			# An empty target id means the attacker went face.
+			var anim_target := str(anim.get("target_id", ""))
+			if anim_target.is_empty():
+				await board.animate_creature_attack_face(
+					str(anim.get("attacker_id", "")),
+					str(anim.get("attacker_player_id", ""))
+				)
+			else:
+				await board.animate_creature_attack(
+					str(anim.get("attacker_id", "")),
+					str(anim.get("attacker_player_id", "")),
+					anim_target
+				)
 			continue
 
 		var ch_anim = Net.pop_of_type("animate_challenge")

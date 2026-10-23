@@ -21,17 +21,17 @@ expand_mode = 1
 stretch_mode = 6
 
 [node name="OpponentHandZone" type="HBoxContainer" parent="."]
-offset_left = 300.0
-offset_top = 5.0
-offset_right = 1620.0
-offset_bottom = 130.0
+offset_left = 720.0
+offset_top = 4.0
+offset_right = 1200.0
+offset_bottom = 88.0
 theme_override_constants/separation = 4
 
 [node name="OpponentHero" type="Panel" parent="."]
 offset_left = 870.0
-offset_top = 140.0
+offset_top = 96.0
 offset_right = 1050.0
-offset_bottom = 310.0
+offset_bottom = 246.0
 script = ExtResource("1_km1cx")
 
 [node name="HPLabel" type="Label" parent="OpponentHero"]
@@ -46,18 +46,18 @@ horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="OpponentBoardZone" type="HBoxContainer" parent="."]
-offset_left = 300.0
-offset_top = 325.0
-offset_right = 1620.0
-offset_bottom = 515.0
+offset_left = 550.0
+offset_top = 282.0
+offset_right = 1370.0
+offset_bottom = 447.0
 theme_override_constants/separation = 10
 alignment = 1
 
 [node name="CenterBar" type="HBoxContainer" parent="."]
-offset_left = 300.0
-offset_top = 525.0
-offset_right = 1620.0
-offset_bottom = 575.0
+offset_left = 550.0
+offset_top = 455.0
+offset_right = 1370.0
+offset_bottom = 500.0
 theme_override_constants/separation = 40
 alignment = 1
 
@@ -79,18 +79,18 @@ bbcode_enabled = true
 fit_content = true
 
 [node name="PlayerBoardZone" type="HBoxContainer" parent="."]
-offset_left = 300.0
-offset_top = 585.0
-offset_right = 1620.0
-offset_bottom = 775.0
+offset_left = 550.0
+offset_top = 508.0
+offset_right = 1370.0
+offset_bottom = 673.0
 theme_override_constants/separation = 10
 alignment = 1
 
 [node name="PlayerHero" type="Panel" parent="."]
-offset_left = 130.0
-offset_top = 800.0
-offset_right = 310.0
-offset_bottom = 975.0
+offset_left = 870.0
+offset_top = 681.0
+offset_right = 1050.0
+offset_bottom = 831.0
 script = ExtResource("1_km1cx")
 
 [node name="HPLabel" type="Label" parent="PlayerHero"]
@@ -105,18 +105,18 @@ horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="PlayerHandZone" type="HBoxContainer" parent="."]
-offset_left = 300.0
-offset_top = 805.0
-offset_right = 1620.0
-offset_bottom = 1065.0
+offset_left = 430.0
+offset_top = 866.0
+offset_right = 1490.0
+offset_bottom = 1074.0
 theme_override_constants/separation = 12
 alignment = 1
 
 [node name="CombatLogPanel" type="PanelContainer" parent="."]
-offset_left = 39.0
-offset_top = 274.0
-offset_right = 248.0
-offset_bottom = 749.0
+offset_left = 24.0
+offset_top = 300.0
+offset_right = 200.0
+offset_bottom = 720.0
 
 [node name="CombatLogScroll" type="ScrollContainer" parent="CombatLogPanel"]
 layout_mode = 2

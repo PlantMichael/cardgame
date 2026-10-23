@@ -637,6 +637,9 @@ func _on_attack(attacker_id: String, target_type: String, target_id: String) -> 
 		})["ok"]
 		if ok:
 			board.log_action("Your %s attacked the opponent's hero" % attacker.data.card_name)
+			await board.animate_creature_attack_face(attacker_id, LOCAL_PLAYER_ID)
+			if had_dual_strike and attacker in game_state.player.board:
+				await board.animate_creature_attack_face(attacker_id, LOCAL_PLAYER_ID)
 	board.refresh()
 	await _resolve_all_pending()
 	if game_state.current_phase == GameState.Phase.GAME_OVER:

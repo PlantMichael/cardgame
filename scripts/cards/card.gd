@@ -35,14 +35,14 @@ enum Size { SMALL, MEDIUM, LARGE }
 ## helper, so callers can use them in their own `const` declarations (a
 ## wrapper's custom_minimum_size, say) - GDScript won't run a function in a
 ## constant expression.
-const SCALE_SMALL := Vector2(0.60, 0.60)
-const SCALE_MEDIUM := Vector2(0.80, 0.80)
-const SCALE_LARGE := Vector2(1.50, 1.50)
+const SCALE_SMALL := Vector2(0.46, 0.46)
+const SCALE_MEDIUM := Vector2(0.62, 0.62)
+const SCALE_LARGE := Vector2(1.20, 1.20)
 ## On-screen pixel size at each preset - CARD_SIZE times the scale above.
 ## What a container wrapper around a card at that preset should reserve.
-const PIXELS_SMALL := Vector2(132, 192)
-const PIXELS_MEDIUM := Vector2(176, 256)
-const PIXELS_LARGE := Vector2(330, 480)
+const PIXELS_SMALL := Vector2(101, 147)
+const PIXELS_MEDIUM := Vector2(136, 198)
+const PIXELS_LARGE := Vector2(264, 384)
 
 const SIZE_SCALES := {
 	Size.SMALL: SCALE_SMALL,
@@ -362,8 +362,12 @@ func _apply_stat_colors(m: Minion) -> void:
 	else:
 		health_label.add_theme_color_override("font_color", Color.WHITE)
 
+## Unplayable cards are dimmed, not hidden. 0.32 was dark enough that a card
+## you cannot afford yet vanished into the battlefield art - you could not
+## read what you were holding, which matters most on the turns you are
+## planning ahead.
 func set_playable(value: bool) -> void:
-	modulate = Color.WHITE if value else Color(0.32, 0.32, 0.32, 0.85)
+	modulate = Color.WHITE if value else Color(0.55, 0.55, 0.58, 0.92)
 
 ## Full-card washes, drawn by card_visual over the frame art. Kept light:
 ## the frame art is opaque and heavily colored, so anything near half alpha
