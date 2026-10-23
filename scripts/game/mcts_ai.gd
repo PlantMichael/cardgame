@@ -92,6 +92,13 @@ class _MCTSNode:
 	func average_value() -> float:
 		return value_sum / visits if visits > 0 else 0.0
 
+## The search's OWN randomness - which action to expand next, whether to make
+## a deliberate mistake. Deliberately separate from the match's generator
+## (GameState.rng): how hard the AI thinks is not part of the game, so
+## changing the search budget, or searching at all, must not change what the
+## match itself rolls. Kept off the global stream for the same reason.
+var _search_rng := RandomNumberGenerator.new()
+
 func _init(p_ai_player_id: String, p_ai_level: int = 5) -> void:
 	ai_player_id = p_ai_player_id
 	ai_level = clampi(p_ai_level, 1, 10)
@@ -112,10 +119,10 @@ func choose_action(game_state: GameState) -> Dictionary:
 		var root_state := game_state.duplicate_for_sim()
 		var root_actions := HeadlessTurn.list_legal_actions(root_state, ai_player_id)
 		if root_actions.is_empty():
-			return {"type": "end_turn"}
+			return {"type": "end_turn", "actor": ai_player_id}
 		if root_actions.size() == 1:
 			_pending_child = null
-			return _translate_to_real(root_actions[0], game_state)
+			return root_actions[0]
 		_root = _MCTSNode.new(root_state, null, null, false)
 		_root.untried_actions = root_actions.duplicate()
 		budget = int(config["iterations"])
@@ -133,13 +140,18 @@ func choose_action(game_state: GameState) -> Dictionary:
 
 		# Expansion: try one new action from this node.
 		if not node.is_terminal and not node.untried_actions.is_empty():
-			var idx := randi() % node.untried_actions.size()
+			var idx := _search_rng.randi_range(0, node.untried_actions.size() - 1)
 			var action: Dictionary = node.untried_actions[idx]
 			node.untried_actions.remove_at(idx)
 
+			# The action was enumerated against node.state but is applied to a
+			# fresh copy. That is only sound because actions are plain values
+			# resolved against the state receiving them (see
+			# GameState.validate) - applying a parent's Minion/CardData object
+			# here used to mutate the parent instead of the child.
 			var child_state: GameState = node.state.duplicate_for_sim()
-			HeadlessTurn.apply_action(child_state, action)
-			var terminal: bool = action["type"] == "end_turn" or child_state.current_phase == GameState.Phase.GAME_OVER
+			var applied := HeadlessTurn.apply_action(child_state, action)
+			var terminal: bool = (not applied) or action["type"] == "end_turn" or child_state.current_phase == GameState.Phase.GAME_OVER
 
 			var child := _MCTSNode.new(child_state, node, action, terminal)
 			if not terminal:
@@ -167,32 +179,33 @@ func choose_action(game_state: GameState) -> Dictionary:
 	elif not _root.untried_actions.is_empty():
 		chosen_action = _root.untried_actions[0]
 	else:
-		chosen_action = {"type": "end_turn"}
+		chosen_action = {"type": "end_turn", "actor": ai_player_id}
 	_pending_child = best
 
 	var mistake_rate: float = config["mistake_rate"]
-	if mistake_rate > 0.0 and randf() < mistake_rate:
+	if mistake_rate > 0.0 and _search_rng.randf() < mistake_rate:
 		var all_actions: Array[Dictionary] = _root.untried_actions.duplicate()
 		for child in _root.children:
 			all_actions.append(child.action)
-		chosen_action = all_actions[randi() % all_actions.size()]
+		chosen_action = all_actions[_search_rng.randi_range(0, all_actions.size() - 1)]
 		_pending_child = null
 		for child in _root.children:
 			if child.action == chosen_action:
 				_pending_child = child
 				break
-	return _translate_to_real(chosen_action, game_state)
+	# Returned as-is: the action names entities by uid/instance_id, which the
+	# real state resolves itself. No translation step is needed (or possible
+	# to get subtly wrong) any more.
+	return chosen_action
 
 ## Called by AIController right after it actually applies the action
 ## choose_action() returned to the real `game_state`. If the child the search
-## predicted for that action matches what really happened (verified via a
-## cheap structural fingerprint — instance_ids are preserved verbatim by
-## duplicate_for_sim() so a clone's and the real state's minions line up),
-## that child becomes the new root and its accumulated visit/value stats
-## carry into the next choose_action() call instead of starting cold. A
-## mismatch (e.g. a mid-turn pending-queue ability rolled a different random
-## target than the search's own rollout did) just discards the tree —
-## costs the next call full search time again, never correctness.
+## predicted for that action matches what really happened (verified via
+## _fingerprint), that child becomes the new root and its accumulated
+## visit/value stats carry into the next choose_action() call instead of
+## starting cold. A mismatch (e.g. a mid-turn pending-queue ability rolled a
+## different random target than the search's own rollout did) just discards
+## the tree - costs the next call full search time again, never correctness.
 func advance_after_real_action(real_state_after: GameState) -> void:
 	if _pending_child != null and _fingerprint(_pending_child.state) == _fingerprint(real_state_after):
 		_pending_child.parent = null
@@ -201,52 +214,62 @@ func advance_after_real_action(real_state_after: GameState) -> void:
 		_root = null
 	_pending_child = null
 
+## A canonical encoding of everything that can change how the rest of the
+## match plays out. Two states sharing a fingerprint must be interchangeable,
+## because a match licenses reusing a search tree built against the other.
+##
+## It therefore has to be complete, not merely indicative. The earlier version
+## sorted each board and recorded only instance_id/attack/health, which threw
+## away three things that change legal play:
+##
+##  - Board ORDER. Feast Attendant picks its targets by adjacency, so two
+##    boards holding the same creatures in a different order are different
+##    positions. Sorting made them compare equal.
+##  - Readiness and abilities. A creature that has already attacked, is
+##    exhausted, silenced, shielded or piloted offers different moves than
+##    one that is not.
+##  - Card-level state. Two hands holding the same card ids differ when one
+##    copy is discounted or carries rummage history, and the pending queues
+##    carry effects that have not resolved yet.
+##
+## Anything added to the rules later that affects play must be added here too,
+## or tree reuse silently starts certifying states that are not equivalent.
 static func _fingerprint(state: GameState) -> String:
 	var parts: Array[String] = []
+	parts.append("%d|%s|%d|%s" % [state.current_phase, state.active_player_id, state.turn_number, state.winner_id])
 	for p in [state.player, state.opponent]:
-		parts.append("%d|%d" % [p.hero_health, p.current_mana])
-		var hand_ids: Array[String] = []
+		parts.append("%s:%d/%d/%d/%d" % [p.player_id, p.hero_health, p.current_mana, p.max_mana, p.fatigue_damage])
+		# Hand order is not meaningful to the rules, so it is sorted - but
+		# each entry still carries the per-copy state that is.
+		var hand_sig: Array[String] = []
 		for c in p.hand:
-			hand_ids.append(c.id)
-		hand_ids.sort()
-		parts.append(",".join(hand_ids))
+			hand_sig.append("%s/%d/%d" % [c.id, c.cost_modifier, c.rummage_count])
+		hand_sig.sort()
+		parts.append(",".join(hand_sig))
+		parts.append("deck%d,grave%d" % [p.deck.size(), p.graveyard.size()])
+		# Board order IS meaningful - left in place, never sorted.
 		var board_sig: Array[String] = []
 		for m in p.board:
-			board_sig.append("%s:%d:%d" % [m.instance_id, m.current_attack, m.current_health])
-		board_sig.sort()
-		parts.append(",".join(board_sig))
+			var abilities: Array = m.abilities.duplicate()
+			abilities.sort()
+			board_sig.append("%s/%d/%d/%d/%s/%s/%s/%s/%d/%s" % [
+				m.instance_id, m.current_attack, m.current_health, m.max_health,
+				"a" if m.has_attacked else "-", "e" if m.is_exhausted else "-",
+				"d" if m.divine_shield else "-", "p" if m.is_piloted else "-",
+				m.data.rummage_count, ";".join(abilities),
+			])
+		parts.append("|".join(board_sig))
+	# Unresolved effects change what happens next just as much as the board.
+	parts.append("pend:%d/%d/%d/%d/%d/%d/%d" % [
+		state.pending_rummages.size(), state.pending_tank_shots.size(),
+		state.pending_nulls.size(), state.pending_overwatch_challenges.size(),
+		state.pending_buff_friendly_health.size(), state.pending_tank_specialist_buffs.size(),
+		state.pending_on_reinforce_damages.size(),
+	])
+	parts.append("tmp:%d,aura:%d,dr:%d" % [
+		state.temp_shielded.size(), state.growvin_granted.size(), state.death_reinforce_used.size(),
+	])
 	return "|".join(parts)
-
-## Root-level actions (the only ones ever returned) reference CardData/Minion
-## objects from the internal duplicate_for_sim() clone the search ran
-## against, not `game_state` itself. Applying those clone objects directly to
-## the real state would silently no-op (Array.erase()/identity checks fail
-## against a different instance) instead of raising an error, so every
-## chosen action must be re-resolved to its equivalent real object before the
-## caller applies it: cards by matching `.id` in the real hand (any physical
-## copy of the same card plays identically), minions by matching
-## `instance_id` (preserved verbatim by duplicate_for_sim) on the real board.
-func _translate_to_real(action: Dictionary, game_state: GameState) -> Dictionary:
-	var out := action.duplicate()
-	if out.get("card") != null:
-		var acting: PlayerState = game_state._get_player_by_id(ai_player_id)
-		for c in acting.hand:
-			if c.id == out["card"].id:
-				out["card"] = c
-				break
-	for key in ["attacker", "target", "minion"]:
-		if out.get(key) != null:
-			out[key] = _find_real_minion(game_state, out[key].instance_id)
-	return out
-
-func _find_real_minion(game_state: GameState, instance_id: String) -> Minion:
-	for m in game_state.player.board:
-		if m.instance_id == instance_id:
-			return m
-	for m in game_state.opponent.board:
-		if m.instance_id == instance_id:
-			return m
-	return null
 
 func _uct_select(node: _MCTSNode) -> _MCTSNode:
 	var best: _MCTSNode = null

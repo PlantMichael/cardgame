@@ -12,6 +12,7 @@ const MenuFont = preload("res://assets/fonts/Orbitron.ttf")
 const PackOpenerScript = preload("res://scripts/game/pack_opener.gd")
 const ShopScreenScript = preload("res://scripts/ui/shop_screen.gd")
 const PackOpenScreenScript = preload("res://scripts/ui/pack_open_screen.gd")
+const CoreTestsScript = preload("res://scripts/game/core_tests.gd")
 
 var _canvas: CanvasLayer
 var _player_deck_ids: Array[String] = []
@@ -95,6 +96,22 @@ func _ready() -> void:
 	if "--shop-test" in OS.get_cmdline_user_args():
 		_run_shop_test_cli()
 		return
+	if "--newcards-test" in OS.get_cmdline_user_args():
+		_run_newcards_test_cli()
+		return
+	if "--locations-test" in OS.get_cmdline_user_args():
+		_run_locations_test_cli()
+		return
+	if "--core-tests" in OS.get_cmdline_user_args():
+		_run_core_tests_cli()
+		return
+	if "--selftest-fail" in OS.get_cmdline_user_args():
+		# Deliberate failure, so the harness itself can be shown to report
+		# one (handoff regression scenario 14). Without this, "the suite
+		# passed" and "the suite never ran" look identical from outside.
+		print("RESULT: FAIL (deliberate)")
+		get_tree().quit(1)
+		return
 
 	_create_canvas()
 
@@ -166,6 +183,14 @@ func _run_mcts_timing_cli() -> void:
 ## Dev-only one-shot check of the fatigue math (both players start with an
 ## empty deck, so every draw fatigues immediately): godot --headless --path
 ## <project> -- --fatigue-test
+## Machine-detectable rules-core regression suite (scripts/game/core_tests.gd).
+## Unlike the older hooks in this file, this one exits with the failure count,
+## so a wrapper can tell pass from fail without parsing the log:
+##   godot --headless --path <checkout> -- --core-tests ; echo $?
+func _run_core_tests_cli() -> void:
+	var failures: int = CoreTestsScript.run()
+	get_tree().quit(failures)
+
 func _run_fatigue_test_cli() -> void:
 	print("Testing fatigue with empty decks...")
 	var gs := GameState.new("a", "b", [], [])
@@ -213,6 +238,11 @@ func _run_live_ai_test_cli() -> void:
 	print("Starting live (real Board/GameManager) local AI game to check for turn hangs...")
 	var board := BoardScene.instantiate()
 	add_child(board)
+	# Without this the run blocks forever on the interactive mulligan (nothing
+	# here can press its Start button), and the stall detector below reports
+	# it as "stuck on player_2's turn (turn 1)" - an AI hang that never was.
+	# That is what made this hook fail on roughly half its runs.
+	board.auto_confirm_mulligan = true
 	var pd := DeckManager.build_random_faction_deck(CardData.CardColor.GREEN)
 	var od := DeckManager.build_random_faction_deck(CardData.CardColor.CRIMSON)
 	GameManagerAutoload.start_local_game(board, pd, od, 10, false)
@@ -474,6 +504,249 @@ func _run_shop_test_cli() -> void:
 	print("RESULT: %s" % ("PASS" if ok else "FAIL"))
 	get_tree().quit()
 
+## Dev-only headless check for the LOCATION card type (Crypt Chapel is the
+## first one): locations are played from hand into a board slot like a
+## creature, never attack even if something buffs their attack, can be
+## attacked and destroyed without dealing retaliation damage, and their
+## passive fires from the board like any other watcher ability.
+## godot --headless --path <project> -- --locations-test
+func _run_locations_test_cli() -> void:
+	var ok := true
+
+	var chapel_data := CardDatabase.get_card("cr_021")
+	if chapel_data == null:
+		print("FAIL: Crypt Chapel (cr_021) did not load at all")
+		print("RESULT: FAIL")
+		get_tree().quit()
+		return
+	if chapel_data.card_type != CardData.CardType.LOCATION:
+		print("FAIL: Crypt Chapel is not typed LOCATION")
+		ok = false
+	# The LOCATION enum value has to exist before card_database parses it -
+	# without it the whole rest of crimson.json silently fails to load.
+	if CardDatabase.get_card("cr_009t") == null or CardDatabase.get_card("cr_028") == null:
+		print("FAIL: cards after Crypt Chapel in crimson.json didn't load")
+		ok = false
+
+	# Played from hand into a board slot, like a creature.
+	var gs := GameState.new("a", "b", [], [])
+	gs.player.max_mana = 10
+	var chapel: CardData = chapel_data.duplicate()
+	gs.player.hand.append(chapel)
+	var chapel_minion := gs.play_creature("a", chapel)
+	if chapel_minion == null or gs.player.board.size() != 1 or gs.player.board_slots_used() != 1:
+		print("FAIL: Crypt Chapel didn't land on the board as one slot")
+		ok = false
+	elif not chapel_minion.is_location() or chapel_minion.max_health != 8:
+		print("FAIL: Crypt Chapel should be a location with 8 health, got %d" % chapel_minion.max_health)
+		ok = false
+
+	# Never attacks - not even after something hands it attack power.
+	if chapel_minion != null:
+		chapel_minion.is_exhausted = false
+		chapel_minion.current_attack += 3
+		if chapel_minion.can_attack():
+			print("FAIL: a buffed Crypt Chapel was allowed to attack")
+			ok = false
+
+	# Passive fires from the board: a friendly creature that transforms gains
+	# Ambush (Crypt Runt transforms into a bat on play).
+	gs.player.current_mana = 0
+	var runt: CardData = CardDatabase.get_card("cr_010").duplicate()
+	gs.player.hand.append(runt)
+	var runt_minion := gs.play_creature("a", runt)
+	if runt_minion == null or not runt_minion.has_ability(Abilities.AMBUSH):
+		print("FAIL: Crypt Chapel didn't grant Ambush to a transforming friendly")
+		ok = false
+
+	# Attackable and destroyable, and it deals no damage back.
+	var gs2 := GameState.new("a", "b", [], [])
+	var attacker := Minion.new(CardDatabase.get_card("g_024"), "a")
+	attacker.is_exhausted = false
+	attacker.current_attack = 8
+	gs2.player.place_minion(attacker)
+	var enemy_chapel := Minion.new(chapel_data, "b")
+	gs2.opponent.place_minion(enemy_chapel)
+	var attacker_hp_before := attacker.current_health
+	gs2.attack(attacker, enemy_chapel)
+	if not gs2.opponent.board.is_empty():
+		print("FAIL: 8 damage should have destroyed the 8-health Crypt Chapel")
+		ok = false
+	if gs2.opponent.graveyard.size() != 1:
+		print("FAIL: destroyed location didn't go to the graveyard")
+		ok = false
+	if attacker.current_health != attacker_hp_before:
+		print("FAIL: attacking a location dealt retaliation damage (%d -> %d)" % [attacker_hp_before, attacker.current_health])
+		ok = false
+
+	print("RESULT: %s" % ("PASS" if ok else "FAIL"))
+	get_tree().quit()
+
+## Dev-only headless check for the ten cards whose abilities were wired up
+## together (Garrick, Requisitioner, Cornered Hunter, Animus Hoarder,
+## Junksquatch, Salvager, Mech Station, Ancient Abominable, Tutkiun, Rampant
+## Yetiling). Each block sets up the minimum board it needs and asserts the
+## observable result, since none of this is reachable from a bare --script run
+## (no autoloads) and all of it is otherwise only verifiable by hand-playing.
+## godot --headless --path <project> -- --newcards-test
+func _run_newcards_test_cli() -> void:
+	var ok := true
+
+	# Requisitioner: +0/+1 per *other* friendly creature, counted on play.
+	var gs := GameState.new("a", "b", [], [])
+	gs.player.max_mana = 10
+	for _i in 2:
+		gs.player.place_minion(Minion.new(CardDatabase.get_card("g_024"), "a"))
+	var requisitioner: CardData = CardDatabase.get_card("g_022").duplicate()
+	gs.player.hand.append(requisitioner)
+	var req_minion := gs.play_creature("a", requisitioner)
+	if req_minion == null or req_minion.max_health != 7 or req_minion.current_attack != 2:
+		print("FAIL: Requisitioner should be 2/7 behind two friendlies, got %s" % \
+			("null" if req_minion == null else "%d/%d" % [req_minion.current_attack, req_minion.max_health]))
+		ok = false
+
+	# Corporal Garrick: one friendly death per turn comes back, the second
+	# doesn't, and the allowance refreshes at the turn boundary.
+	var gs2 := GameState.new("a", "b", [], [])
+	gs2.active_player_id = "a"
+	gs2.player.place_minion(Minion.new(CardDatabase.get_card("g_021"), "a"))
+	var grunt := Minion.new(CardDatabase.get_card("g_024"), "a")
+	gs2.player.place_minion(grunt)
+	grunt.current_health = 0
+	gs2._remove_dead_minions()
+	if gs2.player.board.size() != 2:
+		print("FAIL: Garrick should have reinforced the first friendly death (board %d)" % gs2.player.board.size())
+		ok = false
+	for m in gs2.player.board.duplicate():
+		if m.data.id == "g_024":
+			m.current_health = 0
+	gs2._remove_dead_minions()
+	if gs2.player.board.size() != 1:
+		print("FAIL: Garrick saved a second creature in the same turn (board %d)" % gs2.player.board.size())
+		ok = false
+	gs2.end_turn()
+	var grunt2 := Minion.new(CardDatabase.get_card("g_024"), "a")
+	gs2.player.place_minion(grunt2)
+	grunt2.current_health = 0
+	gs2._remove_dead_minions()
+	if gs2.player.board.size() != 2:
+		print("FAIL: Garrick's save didn't refresh on the new turn (board %d)" % gs2.player.board.size())
+		ok = false
+
+	# Cornered Hunter: leaves a 3/3 Desperate Mauler behind.
+	var gs3 := GameState.new("a", "b", [], [])
+	var hunter := Minion.new(CardDatabase.get_card("cr_027"), "a")
+	gs3.player.place_minion(hunter)
+	hunter.current_health = 0
+	gs3._remove_dead_minions()
+	if gs3.player.board.size() != 1 or gs3.player.board[0].data.id != "cr_009t":
+		print("FAIL: Cornered Hunter did not transform into cr_009t on death")
+		ok = false
+
+	# Animus Hoarder: end of turn, 1 health off a random enemy and onto itself.
+	var gs4 := GameState.new("a", "b", [], [])
+	gs4.active_player_id = "a"
+	var hoarder := Minion.new(CardDatabase.get_card("cr_028"), "a")
+	gs4.player.place_minion(hoarder)
+	var victim := Minion.new(CardDatabase.get_card("g_024"), "b")
+	gs4.opponent.place_minion(victim)
+	gs4.end_turn()
+	if hoarder.max_health != 7 or victim.current_health != 3:
+		print("FAIL: Animus Hoarder siphon wrong - hoarder %d hp, victim %d hp" % [hoarder.max_health, victim.current_health])
+		ok = false
+
+	# Junksquatch: stats become the graveyard count on play.
+	var gs5 := GameState.new("a", "b", [], [])
+	gs5.player.max_mana = 10
+	for _i in 4:
+		gs5.player.graveyard.append(CardDatabase.get_card("b_009"))
+	var squatch: CardData = CardDatabase.get_card("b_023").duplicate()
+	gs5.player.hand.append(squatch)
+	var squatch_minion := gs5.play_creature("a", squatch)
+	if squatch_minion == null or squatch_minion.current_attack != 4 or squatch_minion.max_health != 4:
+		print("FAIL: Junksquatch should be 4/4 off a 4-card graveyard")
+		ok = false
+
+	# Salvager: the creature it rummages keeps a permanent +1/+1.
+	var gs6 := GameState.new("a", "b", [], [])
+	gs6.player.max_mana = 10
+	gs6.player.graveyard.append(CardDatabase.get_card("b_009").duplicate())
+	var salvager: CardData = CardDatabase.get_card("b_024").duplicate()
+	gs6.player.hand.append(salvager)
+	gs6.play_creature("a", salvager)
+	if gs6.pending_rummages.is_empty():
+		print("FAIL: Salvager queued no rummage")
+		ok = false
+	else:
+		var entry: Dictionary = gs6.pending_rummages.pop_front()
+		var options := gs6.get_rummage_options("a", entry.get("max_cost", -1), entry.get("type_filter", ""))
+		if options.is_empty():
+			print("FAIL: Salvager's rummage found no options")
+			ok = false
+		else:
+			gs6.complete_rummage("a", options[0], false, true, entry.get("buff_creature", false))
+			var retrieved: CardData = gs6.player.hand.back()
+			if retrieved.attack != 3 or retrieved.health != 2:
+				print("FAIL: Salvager's rummaged creature should be 3/2, got %d/%d" % [retrieved.attack, retrieved.health])
+				ok = false
+
+	# Mech Station: heals friendly mechs 2 at end of turn, capped at max.
+	var gs7 := GameState.new("a", "b", [], [])
+	gs7.active_player_id = "a"
+	gs7.player.place_minion(Minion.new(CardDatabase.get_card("o_026"), "a"))
+	var mech := Minion.new(CardDatabase.get_card("o_025"), "a")
+	mech.max_health = 5
+	mech.current_health = 1
+	gs7.player.place_minion(mech)
+	gs7.end_turn()
+	if mech.current_health != 3:
+		print("FAIL: Mech Station should have healed the mech to 3, got %d" % mech.current_health)
+		ok = false
+
+	# Ancient Abominable: Colossal eats two of the seven board slots.
+	var gs8 := GameState.new("a", "b", [], [])
+	gs8.player.max_mana = 10
+	var abominable: CardData = CardDatabase.get_card("t_0").duplicate()
+	gs8.player.hand.append(abominable)
+	gs8.play_creature("a", abominable)
+	if gs8.player.board.size() != 1 or gs8.player.board_slots_used() != 2:
+		print("FAIL: Ancient Abominable should use 2 slots, got %d" % gs8.player.board_slots_used())
+		ok = false
+	for _i in 5:
+		gs8.player.place_minion(Minion.new(CardDatabase.get_card("g_024"), "a"))
+	if gs8.player.board_slots_used() != 7 or gs8.player.can_fit_card(CardDatabase.get_card("g_024")):
+		print("FAIL: board should be full at 7 slots (used %d)" % gs8.player.board_slots_used())
+		ok = false
+
+	# Tutkiun: Yetis in hand get cheaper at end of turn.
+	var gs9 := GameState.new("a", "b", [], [])
+	gs9.active_player_id = "a"
+	gs9.player.place_minion(Minion.new(CardDatabase.get_card("t_021"), "a"))
+	var yeti_in_hand: CardData = CardDatabase.get_card("t_011").duplicate()
+	var non_yeti: CardData = CardDatabase.get_card("g_024").duplicate()
+	gs9.player.hand.append(yeti_in_hand)
+	gs9.player.hand.append(non_yeti)
+	gs9.end_turn()
+	if yeti_in_hand.effective_cost() != 1 or non_yeti.effective_cost() != 3:
+		print("FAIL: Tutkiun discount wrong - yeti %d, non-yeti %d" % [yeti_in_hand.effective_cost(), non_yeti.effective_cost()])
+		ok = false
+
+	# Rampant Yetiling: overkill damage spills onto the enemy hero.
+	var gs10 := GameState.new("a", "b", [], [])
+	gs10.active_player_id = "a"
+	var yetiling := Minion.new(CardDatabase.get_card("t_024"), "a")
+	yetiling.is_exhausted = false
+	gs10.player.place_minion(yetiling)
+	gs10.opponent.place_minion(Minion.new(CardDatabase.get_card("b_009"), "b"))
+	var hero_before := gs10.opponent.hero_health
+	gs10.attack(yetiling, gs10.opponent.board[0])
+	if gs10.opponent.hero_health != hero_before - 4:
+		print("FAIL: Trample should have spilled 4 to face, hero went %d -> %d" % [hero_before, gs10.opponent.hero_health])
+		ok = false
+
+	print("RESULT: %s" % ("PASS" if ok else "FAIL"))
+	get_tree().quit()
+
 func _run_mcts_benchmark_cli() -> void:
 	print("Running MCTS benchmark...")
 	var r1 := await MCTSBenchmark.run(6, MCTSBenchmark.mcts(3), MCTSBenchmark.mcts(1))
@@ -546,6 +819,14 @@ func _show_main_menu() -> void:
 const PFP_DIR := "res://assets/pfps/"
 const PFP_SIZE := 52.0
 const PFP_BADGE_SIZE := 20.0
+const PFP_PICK_SIZE := 72.0
+const PFP_RING_COLOR := Color(0.75, 0.62, 0.32)
+## Profile menu (opened from the bar's portrait). Wider than the old
+## picture-only picker since it also carries identity, ladder standing and
+## the two balances.
+const PROFILE_PANEL_W := 620.0
+const PROFILE_PFP_SIZE := 96.0
+const PROFILE_BADGE_SIZE := 34.0
 ## Every account with no explicit choice yet (Auth.selected_pfp == "") shows
 ## this one - not just whichever file happens to sort first in PFP_DIR.
 const DEFAULT_PFP_ID := "pfp_planet.png"
@@ -583,7 +864,9 @@ func _build_profile_bar() -> void:
 		row.add_child(offline_lbl)
 		return
 
-	row.add_child(_build_pfp_control())
+	var pfp := _build_pfp_control(PFP_SIZE, PFP_BADGE_SIZE, _show_profile_menu)
+	_pfp_texture_rect = pfp["texture"]
+	row.add_child(pfp["control"])
 
 	var name_lbl := Label.new()
 	name_lbl.text = Auth.username
@@ -606,71 +889,81 @@ func _build_profile_bar() -> void:
 	)
 	row.add_child(logout_btn)
 
-## pfp circle (click to open the picker) with a rank-tier badge overlapping
-## its bottom-left corner, both wrapped so the badge can overhang the pfp's
-## own bounds without getting clipped by it.
-func _build_pfp_control() -> Control:
-	var wrap := Control.new()
-	wrap.custom_minimum_size = Vector2(PFP_SIZE + 8, PFP_SIZE + 8)
+## pfp circle with a rank-tier badge overlapping its bottom-left corner, both
+## wrapped so the badge can overhang the pfp's own bounds without getting
+## clipped by it. `size`/`badge_size` let the same badge serve both the
+## profile bar (small, clickable) and the profile menu's header (large,
+## static) - pass an `on_pressed` only for the clickable one. Returns the
+## wrapper plus the portrait TextureRect, so the caller can swap the texture
+## in place when the player picks a new picture.
+func _build_pfp_control(size: float = PFP_SIZE, badge_size: float = PFP_BADGE_SIZE, on_pressed: Callable = Callable()) -> Dictionary:
+	# The portrait sits exactly inside the ring's border, so both insets are
+	# derived from the border width rather than hardcoded per size.
+	var border := 3 if size <= 60.0 else 4
 
-	var btn := Button.new()
-	btn.position = Vector2(4, 4)
-	btn.custom_minimum_size = Vector2(PFP_SIZE, PFP_SIZE)
-	btn.flat = true
-	var empty := StyleBoxEmpty.new()
-	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-		btn.add_theme_stylebox_override(state, empty)
-	btn.pressed.connect(_show_pfp_picker)
-	wrap.add_child(btn)
+	var wrap := Control.new()
+	wrap.custom_minimum_size = Vector2(size + 8, size + 8)
+
+	if not on_pressed.is_null():
+		var btn := Button.new()
+		btn.position = Vector2(4, 4)
+		btn.custom_minimum_size = Vector2(size, size)
+		btn.flat = true
+		var empty := StyleBoxEmpty.new()
+		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+			btn.add_theme_stylebox_override(state, empty)
+		btn.pressed.connect(on_pressed)
+		wrap.add_child(btn)
 
 	var ring := Panel.new()
 	ring.position = Vector2(4, 4)
-	ring.custom_minimum_size = Vector2(PFP_SIZE, PFP_SIZE)
+	ring.custom_minimum_size = Vector2(size, size)
 	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var ring_style := StyleBoxFlat.new()
 	ring_style.bg_color = Color(0, 0, 0, 0)
-	ring_style.border_width_left = 3
-	ring_style.border_width_top = 3
-	ring_style.border_width_right = 3
-	ring_style.border_width_bottom = 3
-	ring_style.border_color = Color(0.75, 0.62, 0.32)
-	ring_style.set_corner_radius_all(int(PFP_SIZE / 2))
+	ring_style.border_width_left = border
+	ring_style.border_width_top = border
+	ring_style.border_width_right = border
+	ring_style.border_width_bottom = border
+	ring_style.border_color = PFP_RING_COLOR
+	ring_style.set_corner_radius_all(int(size / 2))
 	ring.add_theme_stylebox_override("panel", ring_style)
 	wrap.add_child(ring)
 
-	_pfp_texture_rect = TextureRect.new()
-	_pfp_texture_rect.position = Vector2(7, 7)
-	_pfp_texture_rect.custom_minimum_size = Vector2(PFP_SIZE - 6, PFP_SIZE - 6)
-	_pfp_texture_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_pfp_texture_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	_pfp_texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_pfp_texture_rect.material = _get_circle_mask_material()
-	_pfp_texture_rect.texture = _load_current_pfp_texture()
-	wrap.add_child(_pfp_texture_rect)
+	var tex_rect := TextureRect.new()
+	tex_rect.position = Vector2(4 + border, 4 + border)
+	tex_rect.custom_minimum_size = Vector2(size - border * 2, size - border * 2)
+	tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tex_rect.material = _get_circle_mask_material()
+	tex_rect.texture = _load_current_pfp_texture()
+	wrap.add_child(tex_rect)
 
-	var badge := _build_rank_badge()
-	badge.position = Vector2(-2, PFP_SIZE - PFP_BADGE_SIZE + 6)
+	var badge := _build_rank_badge(badge_size)
+	badge.position = Vector2(-2, size - badge_size + 6)
 	wrap.add_child(badge)
 
-	return wrap
+	return {"control": wrap, "texture": tex_rect}
 
-func _build_rank_badge() -> Control:
+func _build_rank_badge(badge_size: float = PFP_BADGE_SIZE) -> Control:
 	var badge := Panel.new()
-	badge.custom_minimum_size = Vector2(PFP_BADGE_SIZE, PFP_BADGE_SIZE)
+	badge.custom_minimum_size = Vector2(badge_size, badge_size)
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var border := maxi(2, int(badge_size / 11.0))
 	var st := StyleBoxFlat.new()
 	st.bg_color = RankedProgress.get_tier_color(Auth.rank_bracket, Auth.rank_in_legend, Auth.rank_legend_rating)
-	st.set_corner_radius_all(int(PFP_BADGE_SIZE / 2))
-	st.border_width_left = 2
-	st.border_width_top = 2
-	st.border_width_right = 2
-	st.border_width_bottom = 2
+	st.set_corner_radius_all(int(badge_size / 2))
+	st.border_width_left = border
+	st.border_width_top = border
+	st.border_width_right = border
+	st.border_width_bottom = border
 	st.border_color = Color(0.05, 0.05, 0.07)
 	badge.add_theme_stylebox_override("panel", st)
 
 	var lbl := Label.new()
 	lbl.text = RankedProgress.get_badge_text(Auth.rank_bracket, Auth.rank_in_legend)
-	lbl.add_theme_font_size_override("font_size", 11)
+	lbl.add_theme_font_size_override("font_size", int(badge_size * 0.55))
 	lbl.add_theme_color_override("font_color", Color.WHITE)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -709,20 +1002,20 @@ const GLIMMER_TINT := Color(0.75, 0.88, 1.0)
 
 var _icon_tint_shader: Shader = null
 
-func _glimmer_icon() -> Control:
+func _glimmer_icon(size: float = 16.0) -> Control:
 	var t := TextureRect.new()
 	t.texture = GLIMMER_ICON
-	t.custom_minimum_size = Vector2(16, 16)
+	t.custom_minimum_size = Vector2(size, size)
 	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	t.material = _make_icon_tint_material(GLIMMER_TINT)
 	return t
 
 ## Cyllats' art is already a finished colored icon - shown as-is.
-func _cyllats_icon() -> Control:
+func _cyllats_icon(size: float = 16.0) -> Control:
 	var t := TextureRect.new()
 	t.texture = CYLLATS_ICON
-	t.custom_minimum_size = Vector2(16, 16)
+	t.custom_minimum_size = Vector2(size, size)
 	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	return t
@@ -794,20 +1087,32 @@ func _load_current_pfp_texture() -> Texture2D:
 			return tex2
 	return _get_default_pfp_texture()
 
-## Full-screen grid modal for picking among every image in PFP_DIR - same
-## overlay-in-_canvas shape as the rest of main.gd's screens, so it's torn
-## down automatically by _clear_screen() if the player navigates away.
-func _show_pfp_picker() -> void:
-	var files := _list_pfp_files()
-
+## Full-screen modal opened from the profile bar's portrait: identity
+## (portrait, name, ladder standing and record), the two currency balances,
+## and the picture picker that used to be this modal's only content. Every
+## field is account state that already exists (Auth / RankedProgress /
+## Economy) - nothing new is persisted here, and picking a picture is still
+## the only thing that writes anything.
+##
+## Same overlay-in-_canvas shape as the rest of main.gd's screens, so it's
+## torn down automatically by _clear_screen() if the player navigates away.
+func _show_profile_menu() -> void:
 	var overlay := ColorRect.new()
 	overlay.color = Color(0, 0, 0, 0.78)
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	_canvas.add_child(overlay)
 
+	# CenterContainer rather than PRESET_CENTER on the panel itself: the
+	# panel's height depends on whether the LP bar and the picker grid are
+	# there, and a preset would snapshot offsets before those exist.
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(center)
+
 	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.custom_minimum_size = Vector2(PROFILE_PANEL_W, 0)
 	var pstyle := StyleBoxFlat.new()
 	pstyle.bg_color = Color(0.08, 0.09, 0.12, 0.96)
 	pstyle.set_corner_radius_all(10)
@@ -816,21 +1121,133 @@ func _show_pfp_picker() -> void:
 	pstyle.content_margin_top = 20
 	pstyle.content_margin_bottom = 20
 	panel.add_theme_stylebox_override("panel", pstyle)
-	overlay.add_child(panel)
+	center.add_child(panel)
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 14)
 	panel.add_child(vbox)
 
 	var title := Label.new()
-	title.text = "Choose a Profile Picture"
+	title.text = "Profile"
 	title.add_theme_font_size_override("font_size", 20)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
 
+	var tier_color := RankedProgress.get_tier_color(
+		Auth.rank_bracket, Auth.rank_in_legend, Auth.rank_legend_rating)
+
+	# ── Identity ────────────────────────────────────────────────────────
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 18)
+	vbox.add_child(header)
+
+	var big_pfp := _build_pfp_control(PROFILE_PFP_SIZE, PROFILE_BADGE_SIZE)
+	var big_tex: TextureRect = big_pfp["texture"]
+	header.add_child(big_pfp["control"])
+
+	var ident := VBoxContainer.new()
+	ident.add_theme_constant_override("separation", 7)
+	ident.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	header.add_child(ident)
+
+	var name_lbl := Label.new()
+	name_lbl.text = Auth.username
+	name_lbl.add_theme_font_override("font", MenuFont)
+	name_lbl.add_theme_font_size_override("font_size", 22)
+	name_lbl.add_theme_color_override("font_color", Color(0.92, 0.92, 0.96))
+	ident.add_child(name_lbl)
+
+	var tier_row := HBoxContainer.new()
+	tier_row.add_theme_constant_override("separation", 8)
+	ident.add_child(tier_row)
+
+	var dot := Panel.new()
+	dot.custom_minimum_size = Vector2(10, 10)
+	dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var dot_style := StyleBoxFlat.new()
+	dot_style.bg_color = tier_color
+	dot_style.set_corner_radius_all(5)
+	dot.add_theme_stylebox_override("panel", dot_style)
+	tier_row.add_child(dot)
+
+	var tier_lbl := Label.new()
+	tier_lbl.text = RankedProgress.get_display_string(
+		Auth.rank_bracket, Auth.rank_in_legend, Auth.rank_legend_rating)
+	tier_lbl.add_theme_font_size_override("font_size", 15)
+	tier_lbl.add_theme_color_override("font_color", tier_color.lightened(0.3))
+	tier_row.add_child(tier_lbl)
+
+	var record := "%dW · %dL" % [Auth.ranked_wins, Auth.ranked_losses]
+	if Auth.ranked_win_streak > 0:
+		record += " · %d win streak" % Auth.ranked_win_streak
+	var record_lbl := Label.new()
+	record_lbl.text = record
+	record_lbl.add_theme_font_size_override("font_size", 13)
+	record_lbl.add_theme_color_override("font_color", Color(0.56, 0.56, 0.61))
+	ident.add_child(record_lbl)
+
+	# ── LP bar ──────────────────────────────────────────────────────────
+	# Bracketed ladder only: Legend tracks a continuous rating instead, which
+	# get_display_string() already spells out above.
+	if not Auth.rank_in_legend:
+		var lp_box := VBoxContainer.new()
+		lp_box.add_theme_constant_override("separation", 6)
+		vbox.add_child(lp_box)
+
+		var lp_row := HBoxContainer.new()
+		lp_box.add_child(lp_row)
+
+		var lp_title := Label.new()
+		lp_title.text = "RANK PROGRESS"
+		lp_title.add_theme_font_size_override("font_size", 12)
+		lp_title.add_theme_color_override("font_color", Color(0.55, 0.55, 0.60))
+		lp_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lp_row.add_child(lp_title)
+
+		var lp_value := Label.new()
+		lp_value.text = RankedProgress.get_lp_string(Auth.rank_in_legend, Auth.rank_lp)
+		lp_value.add_theme_font_size_override("font_size", 12)
+		lp_value.add_theme_color_override("font_color", Color(0.92, 0.92, 0.96))
+		lp_row.add_child(lp_value)
+
+		var bar := ProgressBar.new()
+		bar.custom_minimum_size = Vector2(0, 10)
+		bar.max_value = RankedProgress.LP_PER_BRACKET
+		bar.value = Auth.rank_lp
+		bar.show_percentage = false
+		var track := StyleBoxFlat.new()
+		track.bg_color = Color(0.14, 0.14, 0.17)
+		track.set_corner_radius_all(5)
+		bar.add_theme_stylebox_override("background", track)
+		var fill := StyleBoxFlat.new()
+		fill.bg_color = tier_color
+		fill.set_corner_radius_all(5)
+		bar.add_theme_stylebox_override("fill", fill)
+		lp_box.add_child(bar)
+
+	vbox.add_child(HSeparator.new())
+
+	# ── Balances ────────────────────────────────────────────────────────
+	var money := HBoxContainer.new()
+	money.add_theme_constant_override("separation", 36)
+	vbox.add_child(money)
+	money.add_child(_named_currency_cell(_glimmer_icon(20.0), "dust", "Glimmer"))
+	money.add_child(_named_currency_cell(_cyllats_icon(20.0), "gold", "Cyllats"))
+
+	vbox.add_child(HSeparator.new())
+
+	# ── Picture picker ──────────────────────────────────────────────────
+	var pick_lbl := Label.new()
+	pick_lbl.text = "PROFILE PICTURE"
+	pick_lbl.add_theme_font_size_override("font_size", 12)
+	pick_lbl.add_theme_color_override("font_color", Color(0.55, 0.55, 0.60))
+	vbox.add_child(pick_lbl)
+
+	var files := _list_pfp_files()
 	if files.is_empty():
 		var empty_lbl := Label.new()
 		empty_lbl.text = "No profile pictures found in assets/pfps/ yet."
+		empty_lbl.add_theme_font_size_override("font_size", 13)
 		vbox.add_child(empty_lbl)
 	else:
 		var grid := GridContainer.new()
@@ -838,30 +1255,91 @@ func _show_pfp_picker() -> void:
 		grid.add_theme_constant_override("h_separation", 10)
 		grid.add_theme_constant_override("v_separation", 10)
 		vbox.add_child(grid)
+
+		var current := Auth.selected_pfp if not Auth.selected_pfp.is_empty() else DEFAULT_PFP_ID
+		# pfp_id -> its selection ring, so picking one can move the ring
+		# without rebuilding the whole modal.
+		var rings: Dictionary = {}
 		for pfp_id in files:
 			var tex: Texture2D = load(_pfp_path(pfp_id))
 			if tex == null:
 				continue
+
+			var slot := Control.new()
+			slot.custom_minimum_size = Vector2(PFP_PICK_SIZE, PFP_PICK_SIZE)
+			grid.add_child(slot)
+
 			var btn := TextureButton.new()
-			btn.custom_minimum_size = Vector2(72, 72)
+			btn.custom_minimum_size = Vector2(PFP_PICK_SIZE, PFP_PICK_SIZE)
 			btn.texture_normal = tex
 			btn.ignore_texture_size = true
 			btn.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_COVERED
 			btn.material = _get_circle_mask_material()
+			slot.add_child(btn)
+
+			var ring := Panel.new()
+			ring.custom_minimum_size = Vector2(PFP_PICK_SIZE, PFP_PICK_SIZE)
+			ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var rs := StyleBoxFlat.new()
+			rs.bg_color = Color(0, 0, 0, 0)
+			rs.border_width_left = 3
+			rs.border_width_top = 3
+			rs.border_width_right = 3
+			rs.border_width_bottom = 3
+			rs.border_color = PFP_RING_COLOR
+			rs.set_corner_radius_all(int(PFP_PICK_SIZE / 2))
+			ring.add_theme_stylebox_override("panel", rs)
+			ring.visible = pfp_id == current
+			slot.add_child(ring)
+			rings[pfp_id] = ring
+
 			var captured := pfp_id
 			btn.pressed.connect(func():
 				Auth.set_pfp(captured)
 				if is_instance_valid(_pfp_texture_rect):
 					_pfp_texture_rect.texture = tex
-				overlay.queue_free()
+				if is_instance_valid(big_tex):
+					big_tex.texture = tex
+				for id in rings:
+					var r: Panel = rings[id]
+					if is_instance_valid(r):
+						r.visible = id == captured
 			)
-			grid.add_child(btn)
+
+	# ── Footer ──────────────────────────────────────────────────────────
+	var footer := HBoxContainer.new()
+	vbox.add_child(footer)
+
+	var logout_btn := Button.new()
+	logout_btn.text = "Log Out"
+	logout_btn.add_theme_font_size_override("font_size", 13)
+	logout_btn.pressed.connect(func():
+		Auth.logout()
+		_clear_screen()
+		_require_login_then(_show_main_menu, false)
+	)
+	footer.add_child(logout_btn)
+
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_child(spacer)
 
 	var close_btn := Button.new()
 	close_btn.text = "Close"
 	close_btn.custom_minimum_size = Vector2(100, 34)
 	close_btn.pressed.connect(overlay.queue_free)
-	vbox.add_child(close_btn)
+	footer.add_child(close_btn)
+
+## _currency_cell() plus the currency's name - the profile menu has room to
+## spell out which balance is which, where the bar only has the icon.
+func _named_currency_cell(icon: Control, kind: String, display_name: String) -> Control:
+	var cell := _currency_cell(icon, kind)
+	var name_lbl := Label.new()
+	name_lbl.text = display_name
+	name_lbl.add_theme_font_size_override("font_size", 13)
+	name_lbl.add_theme_color_override("font_color", Color(0.56, 0.56, 0.61))
+	cell.add_child(name_lbl)
+	return cell
 
 func _menu_btn(label: String) -> Button:
 	var btn := Button.new()
@@ -1343,6 +1821,7 @@ func _start_mp_game_as_host() -> void:
 	var board := BoardScene.instantiate()
 	add_child(board)
 	_mp_manager = MpGameManager.new()
+	_mp_manager.match_id = _mp_lobby_id
 	board.add_child(_mp_manager)
 	_mp_manager.start_as_host(board, pd, od)
 
@@ -1351,6 +1830,7 @@ func _start_mp_game_as_guest() -> void:
 	var board := BoardScene.instantiate()
 	add_child(board)
 	_mp_manager = MpGameManager.new()
+	_mp_manager.match_id = _mp_lobby_id
 	board.add_child(_mp_manager)
 	_mp_manager.start_as_guest(board)
 
@@ -1579,6 +2059,8 @@ func _on_ranked_match_found(lobby_id: String, role: String, opponent_name: Strin
 	if search_id != _ranked_search_id:
 		return
 	_ranked_search_id += 1
+	# Remembered so the result can name the match it settles.
+	_mp_lobby_id = lobby_id
 	_hide_queue_overlay()
 	_show_match_found_popup(opponent_name, opponent_rating, func():
 		_ranked_searching = false
@@ -1658,6 +2140,7 @@ func _start_ranked_pvp_match(role: String, opponent_name: String, opponent_ratin
 		add_child(board)
 		_connect_ranked_requeue(board)
 		_mp_manager = MpGameManager.new()
+		_mp_manager.match_id = _mp_lobby_id
 		board.add_child(_mp_manager)
 		_mp_manager.start_as_guest(board, opponent_name, true, opponent_rating)
 
@@ -1673,6 +2156,7 @@ func _await_ranked_guest_deck_and_start(opponent_name: String, opponent_rating: 
 	add_child(board)
 	_connect_ranked_requeue(board)
 	_mp_manager = MpGameManager.new()
+	_mp_manager.match_id = _mp_lobby_id
 	board.add_child(_mp_manager)
 	_mp_manager.start_as_host(board, pd, od, opponent_name, true, opponent_rating)
 
@@ -2272,6 +2756,7 @@ func _start_campaign_pvp_match() -> void:
 		board.set_node_modifier_label("%s: %s" % [node["name"], node["description"]])
 	board.campaign_continue_requested.connect(_on_campaign_match_finished.bind(board), CONNECT_ONE_SHOT)
 	_mp_manager = MpGameManager.new()
+	_mp_manager.match_id = _mp_lobby_id
 	board.add_child(_mp_manager)
 	if _campaign_pvp_role == "host":
 		var pd := DeckManager.build_deck_from_ids(_player_deck_ids)

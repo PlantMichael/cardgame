@@ -1,18 +1,18 @@
 # Project Overview
 
-A Hearthstone-style card game built in **Godot 4.3** (GDScript). Single-player vs AI, 1280×720, Forward Plus renderer. Future plans include online multiplayer via Nakama.
+A Hearthstone-style card game built in **Godot 4.3** (GDScript). Single-player vs AI plus online multiplayer, 1920×1080, Forward Plus renderer.
 
 ## Tech Stack
 
 - **Engine:** Godot 4.3 (GDScript)
-- **Future networking:** Nakama game server
+- **Networking:** custom Node.js WebSocket relay (`server/relay.js`) — accounts, lobbies, ranked matchmaking, currency/shop (not Nakama)
 - **Card data:** JSON files per color faction
 
 ## Game Design
 
 - **5 colors:** GREEN, CRIMSON, BLACK, ORANGE, TEAL
 - **Deck building:** 30 cards, 1–2 colors per deck
-- **Card types:** CREATURE (played to battlefield) and STRATAGEM (instant spell effect)
+- **Card types:** CREATURE (played to battlefield), STRATAGEM (instant spell effect), and LOCATION (played to a battlefield slot; health only, never attacks, gives a passive buff until destroyed)
 - **Keywords:** Guardian/Taunt (must be attacked first), Rush/Charge (can attack immediately), Reinforce
 - **Turn structure:** Hearthstone-style — gain 1 mana crystal per turn (max 10), draw 1 card, take actions in any order, end turn
 - **Win condition:** Reduce opponent hero to 0 HP (both start at 30)

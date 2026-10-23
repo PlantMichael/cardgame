@@ -1,5 +1,103 @@
 # Abilities System
 
+## Shared operations
+
+Effects do not mutate creatures directly; they call the shared operation, which
+owns the reaction chain that has to follow. Adding an effect means calling one
+of these, not copying a four-line sequence:
+
+| Operation | Use for |
+|---|---|
+| `GameState.gain_max_health(target, n)` | +n to both current and maximum health (a buff) |
+| `GameState.restore_health(target, n)` | heal up to the existing maximum (no max change) |
+| `GameState.apply_on_play_damage(target, n, source_id)` | on-play / triggered damage, with amplification |
+| `GameState.sanguine_recipients(actor_id, donor)` | legal Drain recipients |
+
+`gain_max_health()` runs Crypt Hunger's replacement, Apothecary's bonus and the
+max-health transform check. Ten sites in `abilities.gd` used to open-code that
+sequence and all but one omitted the transform check, so a creature buffed over
+its threshold by an ability did not transform while the same creature buffed by
+Supply Drop did. `restore_health()` deliberately skips the transform check —
+`_try_health_transform()` triggers off `max_health`, which a pure heal cannot
+raise.
+
+## Effect resolution order
+
+`GameState.PENDING_QUEUES` is the authoritative order queued effects resolve
+in, and `has_pending()` drives "repeat until stable". Local play, the
+multiplayer host and the headless search all iterate that list rather than
+each keeping its own sequence — they previously disagreed (local took tank
+shots before rummages, the search did the reverse) and multiplayer never
+drained `pending_tank_specialist_buffs` at all.
+
+Deaths are resolved in **groups**: `_remove_dead_minions()` collects everything
+lethal, removes the whole group, and only then fires their death triggers, so
+simultaneous lethal damage is genuinely simultaneous and no trigger can rescue
+a creature out of the group. Order within a group is the active player's board
+first, then the opponent's, left to right. A consequence worth remembering: a
+replacement creature's recorded slot may no longer exist when its trigger runs,
+which is why `_safe_board_index()` clamps it.
+
+## Targeted on-play effects
+
+`on_play_restore_health`, `on_play_buff_other_friendly` and
+`on_play_damage_high_attack` open a `GameState` pending choice instead of
+resolving against a target the caller picked. Legality is decided once in the
+rules core, so human play, the AI, the multiplayer host/guest and the search
+all answer the same question and resolve through the same shared operation.
+No legal target means no prompt and no effect.
+
+## Reinforce
+
+Reinforce carries its remaining returns in **one** ability string:
+`reinforce` is one return, `reinforce_4` is four (Commander Maurice). Use
+`Abilities.reinforce_uses_of(minion)` rather than `has_ability(REINFORCE)`,
+which misses the counted form.
+
+It is deliberately not N repeated `reinforce` entries: a single death would
+fire the handler once per entry (several copies from one death) and each copy
+would inherit the full printed count again, so the budget would never run
+down. A replacement is built from the card definition and then has its
+Reinforce stripped and the *reduced* count put back.
+
+Corporal Garrick's save is its own effect, not a Reinforce use, so a creature
+it saves keeps whatever returns it still had.
+
+## Resolved rules decisions
+
+**Crypt Hunger (Delos, `cr_019`) — "when this creature gains health, lose it
+and draw a card."** The gain is reverted in whatever stat was raised, then a
+card is drawn. `GameState._try_heal_to_draw(target, gained, max_gained)` takes
+both deltas: a +N/+N buff (Apothecary, Supply Drop, tank specialist) passes
+both so the creature ends where it started, while a **pure heal** — restoring
+damage, capped at the existing maximum — passes `0` for `max_gained`. Passing
+the current-health gain for both is what used to shrink the creature: a
+3-max/1-current Delos healed for 2 came out 1-max/1-current.
+
+**Damage amplification scope.** `_get_enemy_damage_amp(source)` is the bonus a
+player's own board adds to damage **they** deal to the enemy. It applies to
+on-play damage (`apply_on_play_damage`), combat (`attack`/`apply_challenge`),
+and on-play area damage that hits only enemy creatures. It is **not** applied
+to the two deathrattle effects that damage both boards symmetrically
+(`DEATHRATTLE_AOE_TRANSFORM`, deathrattle-damage-all-except-mech): there is no
+single amplifier that applies to both halves. Amplifying only the enemy half is
+defensible but has not been decided — flagged, not silently chosen.
+
+**Drain / Sanguine recipients (`cr_str_003`).** "Take 2 health from a creature
+you control and give it to **another** creature you control" — the donor is not
+a legal recipient. Enforced centrally by `GameState.sanguine_recipients()`. The
+simulation already excluded the donor; local play and multiplayer did not, so
+the card could be played as a no-op that healed the creature it had just
+damaged.
+
+**Aura lifetime.** Lasting contributions are bound to a source that must still
+qualify. Anything that strips or replaces a creature's abilities — silence
+(`apply_null`), transformation — calls
+`GameState.reconcile_lasting_effects(owner_id)`, which withdraws grants whose
+source is gone. Only what the aura actually granted is withdrawn:
+`_apply_growvin_aura_to_mech()` records a grant only when it really added the
+ability, so a creature that owns that ability in its own right keeps it.
+
 Abilities are plain strings stored on `CardData.abilities` and copied to `Minion.abilities`.
 
 ## Canonical Constants (abilities.gd Autoload)
@@ -86,6 +184,19 @@ Abilities are plain strings stored on `CardData.abilities` and copied to `Minion
 | `ON_FRIENDLY_PILOT_DRAW` | `"on_friendly_pilot_draw"` | When a friendly Pilot merges into a Mech: draw a card (displayed as "Pilot Bond") |
 | `ON_YETI_CHALLENGE_ATTACK` | `"on_yeti_challenge_attack"` | When a friendly Yeti challenges: this minion attacks the same target |
 | `ON_FRIENDLY_TANK_DEATH_BUFF_TANK` | `"on_friendly_tank_death_buff_tank"` | When a friendly Tank dies: give a friendly Tank +1/+2 |
+| `ON_FRIENDLY_DEATH_REINFORCE` | `"on_friendly_death_reinforce"` | Passive (displayed as "Rally"): the first friendly creature to die each turn is reinforced (a copy returns at its board index). Tracked by `GameState.death_reinforce_used`, cleared every turn boundary. The holder is already off the board when its own death resolves, so it can't save itself |
+| `ON_PLAY_HEALTH_PER_FRIENDLY` | `"on_play_health_per_friendly"` | On play: gain +0/+1 for each *other* friendly creature on the board |
+| `DEATHRATTLE_TRANSFORM` | `"deathrattle_transform"` | On death: place the card named by `CardData.transform_into` on the owner's board at the same index (no damage; the plain version of `DEATHRATTLE_AOE_TRANSFORM`) |
+| `END_TURN_DRAIN_RANDOM_ENEMY` | `"end_turn_drain_random_enemy"` | At the end of the owner's turn (displayed as "Siphon"): deal 1 damage to a random enemy creature and gain +0/+1. No-op when the enemy board is empty |
+| `STATS_FROM_GRAVEYARD` | `"stats_from_graveyard"` | On play (displayed as "Scrapbuilt"): set attack and health to the owner's graveyard size, floored at 1. Set once on play, not continuously |
+| `RUMMAGE_BUFF_CREATURE` | `"rummage_buff_creature"` | On play (displayed as "Refurbish"): rummage; if the retrieved card is a creature it permanently gains +1/+1 (queued as `"buff_creature": true` on the pending rummage) |
+| `END_TURN_HEAL_MECHS` | `"end_turn_heal_mechs"` | At the end of the owner's turn (displayed as "Repair Bay"): heal all friendly Mechs 2. Stacks across copies |
+| `END_TURN_YETI_DISCOUNT` | `"end_turn_yeti_discount"` | At the end of the owner's turn (displayed as "Provision"): every Yeti in hand gets `cost_modifier -= 1`. `effective_cost()` floors at 1 |
+| `TWO_SLOT` | `"two_slot"` | Passive (displayed as "Colossal"): occupies 2 of the 7 board slots. Enforced by `PlayerState.slots_for`/`has_room_for`/`can_fit_card`; `board.gd` renders its cell double-width |
+| `TRAMPLE` | `"trample"` | Damage beyond the defending minion's pre-hit health is dealt to the enemy hero. Applied in `GameState._strike_minion`, so it covers attacks, the Dual Strike second hit, challenges, and Yeti challenge follow-ups |
+| `ATTACK_RUMMAGE` | `"attack_rummage"` | When this minion attacks: rummage a card from your graveyard costing less than this card (queued via `fire_on_attack`) |
+| `ON_PLAY_TRANSFORM` | `"on_play_transform"` | On play: immediately transform into the card named by `CardData.transform_into`, with no player choice (displayed as "On Play: Morph"); the unprompted counterpart to `ON_PLAY_TRANSFORM_CHOICE` |
+| `DEATHRATTLE_DAMAGE_ALL_EXCEPT_MECH` | `"deathrattle_damage_all_except_mech_N"` (e.g. `"deathrattle_damage_all_except_mech_3"`) | On death: deal N damage to every creature on **both** boards except those with the `MECH` tag |
 
 The `Abilities` autoload holds all constants and their display metadata in `DEFINITIONS`. PILOT, ON_PLAY_DAMAGE, ON_PLAY_AOE_ENEMY, ON_REINFORCE_DAMAGE, ON_ANY_REINFORCE_SHOT, TRANSFORM, TRANSFORM_AT_MAX_HEALTH, SHIELDED, and ENEMY_DAMAGE_AMP are handled separately via helper functions (e.g. `is_pilot`, `is_on_play_damage`, `is_shielded`, `get_shield_value`, `is_enemy_damage_amp`, `get_enemy_damage_amp_value`) because their display strings or values are dynamic.
 

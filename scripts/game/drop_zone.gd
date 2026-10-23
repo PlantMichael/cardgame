@@ -31,7 +31,7 @@ func _on_mouse_exited() -> void:
 		highlight(false)
 
 func can_accept(card: Card) -> bool:
-	return card.is_in_hand and card.data.card_type == CardData.CardType.CREATURE
+	return card.is_in_hand and card.data.occupies_board()
 
 func accept_drop(card: Card) -> void:
 	card_dropped.emit(card)

@@ -18,26 +18,36 @@ extends RefCounted
 ## shared heuristic pickers so the search doesn't also have to branch on
 ## *which* enemy minion a spell hits), one per legal attacker/target pairing
 ## (plus "attack face"), and always `end_turn`.
+##
+## Actions are plain values addressed by uid/instance_id - never live CardData
+## or Minion objects. An action produced here is therefore safe to apply to
+## ANY state that still contains those entities, which is what makes MCTS
+## expansion (enumerate against a parent, apply to a freshly copied child)
+## correct. See GameState.validate() for the full reasoning.
 static func list_legal_actions(gs: GameState, acting_id: String) -> Array[Dictionary]:
 	var actions: Array[Dictionary] = []
 	if gs.current_phase == GameState.Phase.GAME_OVER:
 		return actions
 
-	var acting: PlayerState = gs._get_player_by_id(acting_id)
-	var enemy: PlayerState = gs._get_player_by_id(gs._opponent_id(acting_id))
+	var acting: PlayerState = gs.find_player(acting_id)
+	if acting == null:
+		return actions
+	var enemy: PlayerState = gs.find_player(gs._opponent_id(acting_id))
 
 	for card in acting.hand:
 		if not acting.can_play_card(card):
 			continue
-		if card.card_type == CardData.CardType.CREATURE:
-			if acting.board.size() < PlayerState.MAX_BOARD_SIZE:
-				actions.append({"type": "play_creature", "card": card})
+		if card.occupies_board():
+			if acting.can_fit_card(card):
+				actions.append({"type": "play_creature", "actor": acting_id, "card_uid": card.uid})
 		elif card.card_type == CardData.CardType.STRATAGEM:
 			var pick := _pick_stratagem_target(card, gs, acting_id)
 			if pick["ready"]:
+				var picked_minion: Minion = pick["minion"]
 				actions.append({
-					"type": "play_stratagem", "card": card,
-					"minion": pick["minion"], "player_id": pick["player_id"],
+					"type": "play_stratagem", "actor": acting_id, "card_uid": card.uid,
+					"target_instance_id": picked_minion.instance_id if picked_minion != null else "",
+					"target_player_id": pick["player_id"],
 				})
 
 	var attackers: Array[Minion] = []
@@ -54,37 +64,47 @@ static func list_legal_actions(gs: GameState, acting_id: String) -> Array[Dictio
 				targets.append(m)
 		for attacker in attackers:
 			for target in targets:
-				actions.append({"type": "attack", "attacker": attacker, "target": target, "target_player_id": ""})
+				actions.append({
+					"type": "attack", "actor": acting_id,
+					"attacker_instance_id": attacker.instance_id,
+					"target_instance_id": target.instance_id, "target_player_id": "",
+				})
 			if not forced:
-				actions.append({"type": "attack", "attacker": attacker, "target": null, "target_player_id": enemy.player_id})
+				actions.append({
+					"type": "attack", "actor": acting_id,
+					"attacker_instance_id": attacker.instance_id,
+					"target_instance_id": "", "target_player_id": enemy.player_id,
+				})
 
-	actions.append({"type": "end_turn"})
+	actions.append({"type": "end_turn", "actor": acting_id})
 	return actions
 
 ## Applies exactly one atomic action produced by list_legal_actions() (or
 ## greedy_pick_action()) and resolves any pending_* queue it triggers.
-static func apply_action(gs: GameState, action: Dictionary) -> void:
+##
+## Returns whether the command was accepted. An action enumerated against a
+## different state may legitimately no longer be legal here (the search
+## applies a parent's action list to a child); that is a rejection, not a
+## crash, and the caller gets `false` rather than a silently half-applied
+## mutation.
+static func apply_action(gs: GameState, action: Dictionary) -> bool:
+	var result := gs.execute(action)
+	if not result["ok"]:
+		return false
 	match action["type"]:
 		"play_creature":
-			var acting_id: String = gs.active_player_id
-			var m := gs.play_creature(acting_id, action["card"])
+			var m: Minion = result.get("minion")
 			if m != null:
 				_handle_on_play(m, gs)
 			_resolve_pending(gs)
 		"play_stratagem":
-			var acting_id: String = gs.active_player_id
-			var target_minion: Minion = action.get("minion")
-			var ok := gs.play_stratagem(acting_id, action["card"], target_minion, action.get("player_id", ""))
-			if ok:
-				_apply_stratagem_secondary(action["card"], target_minion, gs, acting_id)
+			_apply_stratagem_secondary(result["card"], result.get("target"), gs, str(action["actor"]))
 			_resolve_pending(gs)
 		"attack":
-			var attacker: Minion = action["attacker"]
-			gs.attack(attacker, action.get("target"), action.get("target_player_id", ""))
 			_resolve_pending(gs)
 		"end_turn":
-			gs.end_turn()
 			_resolve_pending(gs)
+	return true
 
 # --- Greedy policy (rollout completion / predicted opponent turn) ---
 
@@ -93,8 +113,10 @@ static func apply_action(gs: GameState, action: Dictionary) -> void:
 ## attack, else end the turn. Same priorities AIController/SimRunner already
 ## use, just returning one action instead of looping with UI side effects.
 static func greedy_pick_action(gs: GameState, acting_id: String) -> Dictionary:
-	var acting: PlayerState = gs._get_player_by_id(acting_id)
-	var enemy: PlayerState = gs._get_player_by_id(gs._opponent_id(acting_id))
+	var acting: PlayerState = gs.find_player(acting_id)
+	if acting == null:
+		return {"type": "end_turn", "actor": acting_id}
+	var enemy: PlayerState = gs.find_player(gs._opponent_id(acting_id))
 
 	var hand := acting.hand.duplicate()
 	hand.sort_custom(func(a: CardData, b: CardData) -> bool:
@@ -112,15 +134,17 @@ static func greedy_pick_action(gs: GameState, acting_id: String) -> Dictionary:
 	for card in hand:
 		if not acting.can_play_card(card):
 			continue
-		if card.card_type == CardData.CardType.CREATURE:
-			if acting.board.size() < PlayerState.MAX_BOARD_SIZE:
-				return {"type": "play_creature", "card": card}
+		if card.occupies_board():
+			if acting.can_fit_card(card):
+				return {"type": "play_creature", "actor": acting_id, "card_uid": card.uid}
 		elif card.card_type == CardData.CardType.STRATAGEM:
 			var pick := _pick_stratagem_target(card, gs, acting_id)
 			if pick["ready"]:
+				var picked: Minion = pick["minion"]
 				return {
-					"type": "play_stratagem", "card": card,
-					"minion": pick["minion"], "player_id": pick["player_id"],
+					"type": "play_stratagem", "actor": acting_id, "card_uid": card.uid,
+					"target_instance_id": picked.instance_id if picked != null else "",
+					"target_player_id": pick["player_id"],
 				}
 
 	var attackers: Array[Minion] = []
@@ -128,7 +152,7 @@ static func greedy_pick_action(gs: GameState, acting_id: String) -> Dictionary:
 		if m.can_attack():
 			attackers.append(m)
 	if attackers.is_empty():
-		return {"type": "end_turn"}
+		return {"type": "end_turn", "actor": acting_id}
 
 	var guardians := enemy.get_guardian_minions()
 	var forced := not guardians.is_empty()
@@ -140,8 +164,12 @@ static func greedy_pick_action(gs: GameState, acting_id: String) -> Dictionary:
 
 	if candidates.is_empty():
 		if forced:
-			return {"type": "end_turn"}
-		return {"type": "attack", "attacker": attackers[0], "target": null, "target_player_id": enemy.player_id}
+			return {"type": "end_turn", "actor": acting_id}
+		return {
+			"type": "attack", "actor": acting_id,
+			"attacker_instance_id": attackers[0].instance_id,
+			"target_instance_id": "", "target_player_id": enemy.player_id,
+		}
 
 	var best_score := -999
 	var best_attacker: Minion = null
@@ -161,10 +189,18 @@ static func greedy_pick_action(gs: GameState, acting_id: String) -> Dictionary:
 				best_target = null
 
 	if best_attacker == null or (best_score <= 0 and not forced):
-		return {"type": "end_turn"}
+		return {"type": "end_turn", "actor": acting_id}
 	if best_target != null:
-		return {"type": "attack", "attacker": best_attacker, "target": best_target, "target_player_id": ""}
-	return {"type": "attack", "attacker": best_attacker, "target": null, "target_player_id": enemy.player_id}
+		return {
+			"type": "attack", "actor": acting_id,
+			"attacker_instance_id": best_attacker.instance_id,
+			"target_instance_id": best_target.instance_id, "target_player_id": "",
+		}
+	return {
+		"type": "attack", "actor": acting_id,
+		"attacker_instance_id": best_attacker.instance_id,
+		"target_instance_id": "", "target_player_id": enemy.player_id,
+	}
 
 ## Plays out the rest of `acting_id`'s turn (including ending it) using
 ## greedy_pick_action repeatedly. Used to simulate the opponent's predicted
@@ -175,7 +211,12 @@ static func play_full_turn_greedy(gs: GameState, acting_id: String) -> void:
 		if gs.current_phase == GameState.Phase.GAME_OVER:
 			return
 		var action := greedy_pick_action(gs, acting_id)
-		apply_action(gs, action)
+		# A rejected action would otherwise spin this loop to its safety cap
+		# re-picking the same illegal move; end the turn instead.
+		if not apply_action(gs, action):
+			gs.execute({"type": "end_turn", "actor": acting_id})
+			_resolve_pending(gs)
+			return
 		if action["type"] == "end_turn" or gs.current_phase == GameState.Phase.GAME_OVER:
 			return
 
@@ -329,10 +370,7 @@ static func _apply_stratagem_secondary(card: CardData, target: Minion, gs: GameS
 		gs.apply_heal_buff(AIHeuristics.pick_health_buff_target(acting.board.duplicate()), 2)
 
 	if card.effect == "sanguine" and target != null:
-		var others: Array[Minion] = []
-		for m in acting.board:
-			if m != target:
-				others.append(m)
+		var others := gs.sanguine_recipients(acting_id, target)
 		if not others.is_empty():
 			gs.apply_heal_buff(AIHeuristics.pick_health_buff_target(others), 2)
 
@@ -466,13 +504,13 @@ static func _handle_on_play(m: Minion, gs: GameState) -> void:
 			if bm != m:
 				cands.append(bm)
 		if cands.size() >= 2:
-			var a := cands[randi() % cands.size()]
+			var a: Minion = gs.rand_pick(cands)
 			var rest: Array[Minion] = []
 			for bm in cands:
 				if bm != a:
 					rest.append(bm)
 			if not rest.is_empty():
-				gs.apply_swap_friendly_health(a, rest[randi() % rest.size()])
+				gs.apply_swap_friendly_health(a, gs.rand_pick(rest))
 
 	if m not in friendly.board:
 		return
@@ -486,8 +524,55 @@ static func _handle_on_play(m: Minion, gs: GameState) -> void:
 				gs.apply_pilot(m, AIHeuristics.pick_best_pilot_target(mechs, m), friendly, false)
 			break
 
+## Picks an answer for whatever choice is open, using AI scoring over the
+## legal options the rules core produced. This is POLICY, not rules: it may
+## only choose among options, never widen or narrow them.
+##
+## Shared by the search, the greedy rollout policy and the live AI, so all
+## three resolve a targeted on-play effect the same way.
+static func answer_pending_choice(gs: GameState) -> void:
+	if not gs.has_pending_choice():
+		return
+	var choice := gs.pending_choice
+	var targets := gs.pending_choice_targets()
+	if targets.is_empty():
+		gs.answer_choice(str(choice["id"]), "")
+		return
+	var pick: Minion = targets[0]
+	match str(choice["effect"]):
+		GameState.CHOICE_RESTORE_HEALTH:
+			# The most wounded creature gains the most from it.
+			for m in targets:
+				if (m.max_health - m.current_health) > (pick.max_health - pick.current_health):
+					pick = m
+		GameState.CHOICE_BUFF_OTHER_FRIENDLY:
+			pick = AIHeuristics.pick_health_buff_target(targets)
+		GameState.CHOICE_DAMAGE_HIGH_ATTACK:
+			# Prefer something the 4 damage actually kills; else the biggest
+			# attacker.
+			var best_kill: Minion = null
+			for m in targets:
+				if m.current_health <= 4 and (best_kill == null or m.current_attack > best_kill.current_attack):
+					best_kill = m
+			if best_kill != null:
+				pick = best_kill
+			else:
+				for m in targets:
+					if m.current_attack > pick.current_attack:
+						pick = m
+	if pick == null:
+		pick = targets[0]
+	gs.answer_choice(str(choice["id"]), pick.instance_id)
+
 # --- Pending-queue resolution (ported from SimRunner._resolve_pending) ---
 
+## Works off every queued effect, repeating until nothing is pending.
+##
+## The queues are drained in GameState.PENDING_QUEUES order - the same order
+## local play and the multiplayer host use. This used to take rummages
+## before tank shots while both of those took tank shots first, so the
+## search was predicting a different board than the game would actually
+## produce whenever an action queued both.
 static func _resolve_pending(gs: GameState) -> void:
 	gs.pending_drawn_cards.clear()
 	gs.pending_fatigue_damage.clear()
@@ -496,6 +581,26 @@ static func _resolve_pending(gs: GameState) -> void:
 		changed = false
 		if gs.current_phase == GameState.Phase.GAME_OVER:
 			return
+		# An open choice blocks every ordinary command, so the search has to
+		# answer it before anything else can proceed.
+		while gs.has_pending_choice():
+			changed = true
+			answer_pending_choice(gs)
+			if gs.current_phase == GameState.Phase.GAME_OVER:
+				return
+
+		while not gs.pending_tank_shots.is_empty():
+			changed = true
+			var pid: String = gs.pending_tank_shots.pop_front()
+			var enemy: PlayerState = gs._get_player_by_id(gs._opponent_id(pid))
+			if not enemy.board.is_empty():
+				gs.apply_on_play_damage(gs.rand_pick(enemy.board), 1, pid)
+			else:
+				enemy.hero_health -= 1
+				gs._check_win_condition()
+			gs.pending_drawn_cards.clear()
+			if gs.current_phase == GameState.Phase.GAME_OVER:
+				return
 
 		while not gs.pending_rummages.is_empty():
 			changed = true
@@ -506,23 +611,10 @@ static func _resolve_pending(gs: GameState) -> void:
 				func(m: Minion) -> bool: return m.has_ability(Abilities.RUMMAGE_EQUAL_COST))
 			var options := gs.get_rummage_options(pid, entry.get("max_cost", -1), entry.get("type_filter", ""), allow_equal)
 			if not options.is_empty():
-				var chosen: CardData = options[randi() % options.size()]
-				var placed := gs.complete_rummage(pid, chosen, entry.get("play_it", false), entry.get("discount", true))
+				var chosen: CardData = gs.rand_pick(options)
+				var placed := gs.complete_rummage(pid, chosen, entry.get("play_it", false), entry.get("discount", true), entry.get("buff_creature", false))
 				if placed != null:
 					_handle_on_play(placed, gs)
-			gs.pending_drawn_cards.clear()
-			if gs.current_phase == GameState.Phase.GAME_OVER:
-				return
-
-		while not gs.pending_tank_shots.is_empty():
-			changed = true
-			var pid: String = gs.pending_tank_shots.pop_front()
-			var enemy: PlayerState = gs._get_player_by_id(gs._opponent_id(pid))
-			if not enemy.board.is_empty():
-				gs.apply_on_play_damage(enemy.board[randi() % enemy.board.size()], 1, pid)
-			else:
-				enemy.hero_health -= 1
-				gs._check_win_condition()
 			gs.pending_drawn_cards.clear()
 			if gs.current_phase == GameState.Phase.GAME_OVER:
 				return
@@ -533,7 +625,7 @@ static func _resolve_pending(gs: GameState) -> void:
 			var pid: String = entry["player_id"]
 			var enemy: PlayerState = gs._get_player_by_id(gs._opponent_id(pid))
 			if not enemy.board.is_empty():
-				gs.apply_null(enemy.board[randi() % enemy.board.size()])
+				gs.apply_null(gs.rand_pick(enemy.board))
 
 		while not gs.pending_buff_friendly_health.is_empty():
 			changed = true
@@ -551,7 +643,7 @@ static func _resolve_pending(gs: GameState) -> void:
 				if m.data.tribe == "tank":
 					tanks.append(m)
 			if not tanks.is_empty():
-				gs.apply_tank_specialist_buff(tanks[randi() % tanks.size()])
+				gs.apply_tank_specialist_buff(gs.rand_pick(tanks))
 
 		while not gs.pending_on_reinforce_damages.is_empty():
 			changed = true
@@ -560,7 +652,7 @@ static func _resolve_pending(gs: GameState) -> void:
 			var dmg: int = entry["damage"]
 			var enemy: PlayerState = gs._get_player_by_id(gs._opponent_id(pid))
 			if not enemy.board.is_empty():
-				gs.apply_on_play_damage(enemy.board[randi() % enemy.board.size()], dmg, pid)
+				gs.apply_on_play_damage(gs.rand_pick(enemy.board), dmg, pid)
 			else:
 				enemy.hero_health -= dmg
 				gs._check_win_condition()

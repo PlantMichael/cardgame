@@ -1,7 +1,6 @@
-[gd_scene load_steps=3 format=3 uid="uid://dy4vs7ja4xxwy"]
+[gd_scene load_steps=2 format=3 uid="uid://dy4vs7ja4xxwy"]
 
 [ext_resource type="Script" path="res://scripts/ui/deck_builder_screen.gd" id="1_dbscr"]
-[ext_resource type="PackedScene" path="res://scenes/cards/Card3DLayer.tscn" id="2_card3d"]
 
 [node name="DeckBuilderScreen" type="Control"]
 layout_mode = 3
@@ -20,8 +19,6 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.13, 0.1, 0.07, 1)
-
-[node name="Card3DLayer" parent="." instance=ExtResource("2_card3d")]
 
 [node name="HubPage" type="Control" parent="."]
 layout_mode = 1
@@ -277,12 +274,12 @@ theme_override_constants/separation = 10
 layout_mode = 2
 
 [node name="PreviewSection" type="VBoxContainer" parent="EditorPage/CollectionPanel/CollHBox"]
-custom_minimum_size = Vector2(254, 0)
+custom_minimum_size = Vector2(330, 0)
 layout_mode = 2
 theme_override_constants/separation = 8
 
 [node name="PreviewCardHolder" type="Control" parent="EditorPage/CollectionPanel/CollHBox/PreviewSection"]
-custom_minimum_size = Vector2(254, 370)
+custom_minimum_size = Vector2(330, 480)
 layout_mode = 2
 clip_contents = true
 

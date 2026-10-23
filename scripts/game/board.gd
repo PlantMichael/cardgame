@@ -18,7 +18,7 @@ var _flash_start: int = 0
 @onready var player_hero: Panel = $PlayerHero
 @onready var opponent_hero: Panel = $OpponentHero
 @onready var card_preview_zone: Control = $CardPreviewZone
-@onready var preview_card: CardPreview = $CardPreviewZone/PreviewCard
+@onready var preview_card: Card = $CardPreviewZone/PreviewCard
 @onready var combat_log_scroll: ScrollContainer = $CombatLogPanel/CombatLogScroll
 @onready var combat_log_vbox: VBoxContainer = $CombatLogPanel/CombatLogScroll/CombatLogVBox
 var decline_button: Button
@@ -27,11 +27,12 @@ const CardScene = preload("res://scenes/cards/Card.tscn")
 const CardBackScene = preload("res://scenes/cards/CardBack.tscn")
 
 ## Shared sizing for every "look at a row of cards and pick/view one" screen
-## (mulligan, rummage retrieval, graveyard viewer) - bumped up from the old
-## 0.65/143x208 these all used to share, which read too small to actually
-## examine a card's text next to the deck builder/hand's own sizing.
-const PICKER_CARD_SCALE := Vector2(0.85, 0.85)
-const PICKER_WRAPPER_SIZE := Vector2(187, 272)
+## (mulligan, rummage retrieval, graveyard viewer, transform choice). These
+## all show a card at the same MEDIUM preset the hand uses - see Card.Size
+## for the three sizes a card is ever drawn at - with the wrapper reserving
+## that preset's on-screen size plus a little breathing room.
+const PICKER_CARD_SCALE := Card.SCALE_MEDIUM
+const PICKER_WRAPPER_SIZE := Card.PIXELS_MEDIUM + Vector2(11, 16)
 
 const BATTLEFIELD_TEXTURES: Array[Texture2D] = [
 	preload("res://assets/battlefield.png"),
@@ -49,6 +50,10 @@ const BATTLEFIELD_TEXTURES: Array[Texture2D] = [
 ## would lock in a stale offset as the new "rest" position, which compounds
 ## across plays into a card visibly drifting off to one side over a turn.
 const BOARD_CARD_REST_POSITION := Vector2(2, 2)
+
+## Both board rows show cards at the one SMALL preset (they used to run at
+## slightly different scales), so they share a wrapper size too.
+const _BOARD_WRAPPER_SIZE := Card.PIXELS_SMALL + Vector2(4, 4)
 
 const CURSOR_DEFAULT = preload("res://assets/01.png")
 const CURSOR_TARGET = preload("res://assets/15.png")
@@ -80,11 +85,10 @@ var _active_player_ghost: Card = null
 ## synchronously inside game_state.play_creature(), well before the first
 ## board.refresh() ever reconciles anything) reassigns the just-played
 ## Minion's .data to a different CardData, which broke that identity match
-## and left the ghost - a whole live SubViewport plus MeshInstance3D and its
-## overlay children (see card.gd/card_3d_layer.gd) - permanently unclaimed:
-## invisible but still rendering every frame forever. Each transform-on-play
-## card played compounded another one of these, which is exactly what made
-## the game measurably laggier as a match went on.
+## and left the ghost permanently unclaimed: a whole live Card node, hidden
+## but never freed. Each transform-on-play card played compounded another
+## one of these, which is exactly what made the game measurably laggier as a
+## match went on.
 ##
 ## A single pending slot per zone sidesteps the whole class of mismatch: at
 ## most one ghost is ever in flight per side at a time (the player can't
@@ -115,10 +119,10 @@ const _END_TURN_COLOR_ACTIONS_LEFT := Color(1.0, 0.82, 0.25)
 const _END_TURN_COLOR_READY := Color(0.4, 0.85, 0.45)
 var _hide_scheduled: bool = false
 ## True while a full-screen modal (graveyard viewer, rummage/transform
-## picker) is open - see _open_modal_overlay(). Its own card thumbnails
-## share the same global 3D camera/texture as the hover-preview (see
-## card_3d_layer.gd), so instead of fighting over depth-sort priority the
-## preview simply stays hidden for as long as a modal owns the screen.
+## picker) is open - see _open_modal_overlay(). A modal already fills the
+## screen with cards to look at, so the hover preview would only ever land
+## on top of them as clutter: it stays hidden for as long as a modal owns
+## the screen.
 var _modal_open: bool = false
 var _hover_card: Card = null
 const HOVER_PREVIEW_DELAY_SEC := 0.4
@@ -131,6 +135,8 @@ var _yeti_select_mode: bool = false
 var _tank_shot_mode: bool = false
 var _null_mode: bool = false
 var _buff_friendly_mode: bool = false
+var _choice_mode: bool = false
+var _choice_option_ids: Array = []
 var _buff_friendly_exclude: Minion = null
 var _buff_friendly_tribe_filter: String = ""
 var _on_play_pilot_mode: bool = false
@@ -172,6 +178,11 @@ signal yeti_selected(minion: Minion)
 signal tank_shot_resolved(target_minion: Minion, target_player_id: String)
 signal null_target_selected(target: Minion)
 signal buff_friendly_target_selected(target: Minion)
+## One generic targeting mode for GameState pending choices. The rules core
+## supplies the legal option ids, so this never re-derives legality - unlike
+## the older per-effect modes above, each of which re-implements its own
+## filter and can drift from the rules.
+signal choice_target_selected(target: Minion)
 signal on_play_pilot_target_selected(target: Minion)
 
 func _ready() -> void:
@@ -403,6 +414,27 @@ func _end_null_mode(target: Minion) -> void:
 	hide_decline_button()
 	null_target_selected.emit(target)
 
+## Highlights exactly the minions the rules core listed as legal for the open
+## choice, on either board. `option_ids` comes straight from
+## GameState.pending_choice["options"].
+func start_choice_targeting(option_ids: Array, decline_text: String = "Skip") -> void:
+	_choice_mode = true
+	_choice_option_ids = option_ids.duplicate()
+	for zone in [player_board_zone, opponent_board_zone]:
+		for wrapper in zone.get_children():
+			var card = _get_card_child(wrapper)
+			if card and card.minion and card.minion.instance_id in _choice_option_ids:
+				card.set_targeted(true)
+	show_decline_button(decline_text)
+
+func _end_choice_mode(target: Minion) -> void:
+	_choice_mode = false
+	_choice_option_ids = []
+	_highlight_board_minions(player_board_zone, false)
+	_highlight_board_minions(opponent_board_zone, false)
+	hide_decline_button()
+	choice_target_selected.emit(target)
+
 func start_buff_friendly_targeting(exclude: Minion = null, tribe_filter: String = "") -> void:
 	_buff_friendly_mode = true
 	_buff_friendly_exclude = exclude
@@ -483,6 +515,8 @@ func _on_decline_pressed() -> void:
 		_end_null_mode(null)
 	elif _buff_friendly_mode:
 		_end_buff_friendly_mode(null)
+	elif _choice_mode:
+		_end_choice_mode(null)
 	elif selected_attacker != null:
 		# A plain attacker selection (declaring who to attack with, not one
 		# of the special targeting modes above) shows this same Cancel
@@ -666,6 +700,10 @@ func _input(event: InputEvent) -> void:
 						if _on_play_damage_mode:
 							_end_on_play_damage_mode(card.minion, "")
 							return
+						if _choice_mode:
+							if card.minion.instance_id in _choice_option_ids:
+								_end_choice_mode(card.minion)
+							return
 						if _buff_friendly_mode:
 							var tribe_ok: bool = _buff_friendly_tribe_filter.is_empty() or card.minion.data.tribe == _buff_friendly_tribe_filter
 							if card.minion != _buff_friendly_exclude and tribe_ok:
@@ -691,6 +729,10 @@ func _input(event: InputEvent) -> void:
 							return
 						if _tank_shot_mode:
 							_end_tank_shot_mode(card.minion, "")
+							return
+						if _choice_mode:
+							if card.minion.instance_id in _choice_option_ids:
+								_end_choice_mode(card.minion)
 							return
 						if _null_mode:
 							_end_null_mode(card.minion)
@@ -834,8 +876,10 @@ func _get_card_child(wrapper: Node) -> Card:
 
 # --- Drop handler ---
 
-const _PREVIEW_W := 330.0
-const _PREVIEW_H := 520.0
+## The hover preview shows a card at the LARGE preset; the zone is that size
+## plus the 40px top offset PreviewCard sits at inside it (see Board.tscn).
+const _PREVIEW_W := Card.PIXELS_LARGE.x
+const _PREVIEW_H := Card.PIXELS_LARGE.y + 40.0
 const _PREVIEW_PAD := 14.0
 
 func _show_card_preview(data: CardData, minion: Minion = null, source_rect: Rect2 = Rect2()) -> void:
@@ -891,13 +935,11 @@ func _open_modal_overlay() -> CanvasLayer:
 	return overlay
 
 ## Frees `overlay` (a modal picker from _open_modal_overlay() - rummage,
-## graveyard, transform) safely: overlay.queue_free() alone only sets
-## is_queued_for_deletion() on the overlay itself, not on the Card nodes
-## nested inside it, and Card._exit_tree() only releases its 3D mesh when
-## that's true on the Card - so a plain overlay.queue_free() left every
-## picker card's mesh behind as a permanent "ghost" card stuck in the middle
-## of the screen. queue_free()ing each Card directly first makes sure its
-## own is_queued_for_deletion() is set before deletion actually happens.
+## graveyard, transform) and the Card nodes nested inside it. The cards are
+## queued directly rather than left to the overlay's own recursive free so
+## each one's is_queued_for_deletion() is set before deletion happens, which
+## is what any Card teardown that cares about a deliberate free (rather than
+## a reparent) keys off.
 func _close_modal_overlay(overlay: CanvasLayer) -> void:
 	_release_cards_in(overlay)
 	overlay.queue_free()
@@ -1080,10 +1122,10 @@ func _on_card_dropped(card: Card) -> void:
 		card.return_to_hand()
 		return
 
-	# Handle creature drop
-	if card.data.card_type == CardData.CardType.CREATURE:
+	# Handle creature/location drop (both land in a board slot)
+	if card.data.occupies_board():
 		var board_rect = player_board_zone.get_global_rect().grow(20)
-		if board_rect.has_point(mouse_pos) and game_state.player.board.size() < PlayerState.MAX_BOARD_SIZE:
+		if board_rect.has_point(mouse_pos) and game_state.player.can_fit_card(card.data):
 			var at_index := _board_insert_index_for_x(player_board_zone, mouse_pos.x)
 			_play_card_with_slam(card, card.data, at_index)
 			return
@@ -1188,15 +1230,14 @@ func _release_hand_slot_and_emit_play(card: Card, card_data_to_play: CardData, a
 ## call this well before the game_state mutation that creates the Minion
 ## (game_state.play_creature() et al.), ideally before any announce/think
 ## pause the caller already has (see ai_controller.gd/mp_game_manager.gd's
-## callers), not right before it: instantiating a Card allocates a whole
-## SubViewport for its text overlay (see card.gd's _setup_text_overlay()),
-## and paying that cost synchronously right when the flight is meant to
-## start reads as a stutter. Calling it early instead lets that cost land
+## callers), not right before it: instantiating and setting up a Card isn't
+## free, and paying that cost synchronously right when the flight is meant
+## to start reads as a stutter. Calling it early instead lets that cost land
 ## during a pause the player already expects.
 ##
-## The ghost starts zero-scaled at the opponent's hand position - same
-## "hidden without breaking mesh placement" trick _reconcile_board_zone()
-## uses for the real card it'll fly onto (see there) - so it stays invisible
+## The ghost starts zero-scaled at the opponent's hand position - the same
+## way _reconcile_board_zone() hides the real card it'll fly onto (see
+## there) - so it stays invisible
 ## until _slam_ghost_onto_card() tweens it up to full size mid-flight, and
 ## doesn't spoil the card before it's actually played. `card_data` is only
 ## used to make the ghost look like the right card (setup() below) -
@@ -1213,9 +1254,7 @@ func play_opponent_card_with_slam(card_data: CardData) -> void:
 
 ## Flies `ghost` (see _play_card_with_slam()/play_opponent_card_with_slam())
 ## onto `real_card` - the actual board Card _reconcile_board_zone() just
-## created and zero-scaled for it (see there for why zero-scale, not
-## `.visible`, is what hides a freshly-created card without also hiding its
-## 3D mesh for good) - then reveals real_card at `target_scale` with a quick
+## created and zero-scaled for it - then reveals real_card at `target_scale` with a quick
 ## squash-and-settle "impact" and frees the ghost. `wrapper`'s rect is read
 ## only once its container has actually finished resorting after the
 ## add_child()/move_child() that just happened - awaiting the container's own
@@ -1314,18 +1353,18 @@ func _finish_play_stratagem(card: Card, card_data_to_play: CardData, target_mini
 ## destroying and recreating every hand card on every refresh() - refresh()
 ## fires on nearly every action anywhere in a turn, including the AI's, so a
 ## full rebuild here meant the player's own hand (which the AI's turn never
-## actually touches) tore down and rebuilt its 3D card meshes - a visible
+## actually touches) tore down and rebuilt every hand card - a visible
 ## flash - on every single AI action. draw_card() duplicates each drawn
 ## CardData into its own unique Resource (see player_state.gd), so reference
 ## identity is a stable per-copy key across refreshes. Opponent's face-down
-## hand backs are plain 2D sprites (no 3D mesh to flash) and stay a simple
-## full rebuild below.
+## hand backs are cheap single-panel sprites and stay a simple full rebuild
+## below.
 func _refresh_hand() -> void:
 	var hand: Array[CardData] = game_state.player.hand
 
 	# Hearthstone-style squish: cards keep comfortable spacing until the hand
 	# would overflow the zone, then overlap progressively to keep fitting.
-	var wrapper_size := Vector2(168, 243)
+	var wrapper_size := Card.PIXELS_MEDIUM + Vector2(12, 4)
 	var base_separation := 12.0
 	var zone_width := 1320.0
 	var separation := base_separation
@@ -1381,7 +1420,9 @@ func _refresh_hand() -> void:
 		c.hide()
 		c.queue_free()
 		opponent_hand_zone.remove_child(c)
-	for i in game_state.opponent.hand.size():
+	# get_hand_size(), not hand.size(): on the guest the opponent's hand is a
+	# count with no cards behind it (see PlayerState.to_net_dict).
+	for i in game_state.opponent.get_hand_size():
 		var back = CardBackScene.instantiate()
 		back.scale = Vector2(0.62, 0.62)
 		var back_wrapper = Control.new()
@@ -1429,7 +1470,7 @@ func _animate_hand_draws(cards: Array[Card]) -> void:
 ## persist across the refresh get `configure` re-run on them (cheap - just
 ## refreshes labels/stats/highlights on the existing node) instead of being
 ## destroyed and recreated, so only minions that actually entered or left the
-## board pay the create/destroy (and mesh flash) cost.
+## board pay the create/destroy (and rebuild flash) cost.
 func _reconcile_board_zone(zone: HBoxContainer, minions: Array, wrapper_size: Vector2, card_scale: Vector2, configure: Callable) -> void:
 	var existing: Dictionary = {}
 	for wrapper in zone.get_children():
@@ -1464,7 +1505,6 @@ func _reconcile_board_zone(zone: HBoxContainer, minions: Array, wrapper_size: Ve
 		else:
 			card = CardScene.instantiate()
 			wrapper = Control.new()
-			wrapper.custom_minimum_size = wrapper_size
 			zone.add_child(wrapper)
 			wrapper.add_child(card)
 			card.scale = card_scale
@@ -1475,18 +1515,18 @@ func _reconcile_board_zone(zone: HBoxContainer, minions: Array, wrapper_size: Ve
 			# brand-new card built in this zone while one's pending - see
 			# _pending_slam_ghost_by_zone). Stay hidden until it lands (see
 			# _slam_ghost_onto_card()). Zero-scale rather than
-			# `.visible = false`: the 3D mesh only ever reveals itself once
-			# _process() has positioned it at a non-degenerate rect at least
-			# once (see card.gd's _mesh_placed) - going invisible before that
-			# first placement ever happens would permanently skip it, since
-			# _update_mesh_transform() itself bails out early while invisible.
-			# A zero-size rect (from zero scale) hits that same early-return
-			# path without needing invisibility, so placement - and thus the
-			# eventual reveal - still happens normally once we scale back up.
+			# `.visible = false` so the card still participates in its
+			# container's layout pass and lands in its true final slot -
+			# _slam_ghost_onto_card() reads that wrapper's rect to aim the
+			# flight at it.
 			if _pending_slam_ghost_by_zone.has(zone):
 				incoming_ghost = _pending_slam_ghost_by_zone[zone]
 				_pending_slam_ghost_by_zone.erase(zone)
 				card.scale = Vector2.ZERO
+		# A Colossal minion occupies two board slots, so its cell is two slots
+		# wide. Set every pass, not just on creation: a minion can gain or lose
+		# the ability mid-life (Null strips it).
+		wrapper.custom_minimum_size = Vector2(wrapper_size.x * PlayerState.slots_for(minion.abilities), wrapper_size.y)
 		zone.move_child(wrapper, i)
 		configure.call(card, minion)
 		kept[minion.instance_id] = true
@@ -1503,11 +1543,9 @@ func _reconcile_board_zone(zone: HBoxContainer, minions: Array, wrapper_size: Ve
 			wrapper.queue_free()
 			zone.remove_child(wrapper)
 
-## Disabled for now - animate_death()'s per-frame set_dissolve() call
-## allocates a brand new StandardMaterial3D every single call (see card_3d_
-## layer.gd), which is expensive enough that several minions dying in the
-## same reconcile pass (an AoE, a big attack turn) read as a real stutter.
-## Card.animate_death() itself is left intact - re-enable by detaching the
+## Disabled for now - the removal loop above frees a dying minion's wrapper
+## outright, which takes the Card with it before any death animation could
+## play. Card.animate_death() itself is left intact - re-enable by detaching the
 ## dying Card from its wrapper before freeing it (reparent to `self` at its
 ## current global_position, same trick _slam_ghost_onto_card() uses) and
 ## awaiting this before actually freeing it, the way this used to work.
@@ -1567,11 +1605,13 @@ func _settle_shifted_cards(zone: Container, old_positions: Dictionary) -> void:
 func _refresh_boards() -> void:
 	var is_my_turn = game_state.is_local_player_turn()
 
-	_reconcile_board_zone(player_board_zone, game_state.player.board, Vector2(127, 184), Vector2(0.57, 0.57),
+	_reconcile_board_zone(player_board_zone, game_state.player.board, _BOARD_WRAPPER_SIZE, Card.SCALE_SMALL,
 		func(card: Card, minion: Minion) -> void:
 			card.setup_as_minion(minion)
 			card.set_can_attack(is_my_turn and minion.can_attack())
-			card.set_summoning_sick(minion.is_exhausted)
+			# Locations never attack, so the summoning-sick treatment would
+			# just read as a permanent malfunction on them.
+			card.set_summoning_sick(minion.is_exhausted and not minion.is_location())
 			if minion.is_newly_reinforced:
 				minion.is_newly_reinforced = false
 				_animate_reinforce_drop(card)
@@ -1580,7 +1620,7 @@ func _refresh_boards() -> void:
 				card.animate_transform()
 	)
 
-	_reconcile_board_zone(opponent_board_zone, game_state.opponent.board, Vector2(137, 198), Vector2(0.6125, 0.6125),
+	_reconcile_board_zone(opponent_board_zone, game_state.opponent.board, _BOARD_WRAPPER_SIZE, Card.SCALE_SMALL,
 		func(card: Card, minion: Minion) -> void:
 			card.setup_as_minion(minion)
 			card.set_can_attack(false)
@@ -1755,7 +1795,7 @@ func _highlight_attack_targets(value: bool) -> void:
 func _has_pending_target_prompt() -> bool:
 	return _challenge_mode or _on_play_damage_mode or _pilot_mode \
 		or _yeti_select_mode or _tank_shot_mode or _on_play_pilot_mode \
-		or _null_mode or _buff_friendly_mode
+		or _null_mode or _buff_friendly_mode or _choice_mode
 
 func _on_end_turn_pressed() -> void:
 	if end_turn_button.disabled:
@@ -2025,7 +2065,6 @@ func show_graveyard_picker(options: Array[CardData]) -> CardData:
 		wrapper.flat = true
 		current_row.add_child(wrapper)
 		var card = CardScene.instantiate()
-		card.use_text_overlay = false
 		card.scale = PICKER_CARD_SCALE
 		card.position = Vector2(0, 0)
 		wrapper.add_child(card)
@@ -2155,12 +2194,11 @@ func show_transform_picker(options: Array[CardData]) -> CardData:
 
 	for card_data in options:
 		var wrapper = Button.new()
-		wrapper.custom_minimum_size = Vector2(143, 208)
+		wrapper.custom_minimum_size = PICKER_WRAPPER_SIZE
 		wrapper.flat = true
 		cards_row.add_child(wrapper)
 		var card = CardScene.instantiate()
-		card.use_text_overlay = false
-		card.scale = Vector2(0.65, 0.65)
+		card.scale = PICKER_CARD_SCALE
 		card.position = Vector2(0, 0)
 		wrapper.add_child(card)
 		card.setup(card_data)
@@ -2185,7 +2223,16 @@ func show_transform_picker(options: Array[CardData]) -> CardData:
 ## GameState.mulligan_swap()) so this stays a pure "ask the player" step,
 ## reusable for both the local player's own hand and (in multiplayer) purely
 ## as a picker whose result gets relayed instead of applied locally.
+## Set by headless test harnesses before start_local_game(). The mulligan
+## blocks on `await start_button.pressed`, and a headless harness has no way
+## to press it, so the match sits in the mulligan forever - which from the
+## outside is indistinguishable from the AI hanging. With this set the
+## opening hand is kept and play continues immediately.
+var auto_confirm_mulligan: bool = false
+
 func show_mulligan_screen(hand: Array[CardData]) -> Array[CardData]:
+	if auto_confirm_mulligan:
+		return [] as Array[CardData]
 	var overlay := _open_modal_overlay()
 
 	var bg = ColorRect.new()
@@ -2226,7 +2273,6 @@ func show_mulligan_screen(hand: Array[CardData]) -> Array[CardData]:
 		wrapper.flat = true
 		cards_row.add_child(wrapper)
 		var card = CardScene.instantiate()
-		card.use_text_overlay = false
 		card.scale = PICKER_CARD_SCALE
 		card.position = Vector2(0, 0)
 		wrapper.add_child(card)

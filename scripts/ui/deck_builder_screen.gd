@@ -4,11 +4,13 @@ extends Control
 signal back_pressed
 
 const CardScene := preload("res://scenes/cards/Card.tscn")
-const CardPreviewScene := preload("res://scenes/cards/CardPreview.tscn")
 
-const COLL_CARD_SCALE := 0.5
-const COLL_W := 110
-const COLL_H := 160
+## The collection grid's thumbnails and the preview beside it both use one
+## of Card's three size presets rather than a scale of their own - see
+## Card.Size.
+const COLL_CARD_SCALE := Card.SCALE_SMALL.x
+const COLL_W := int(Card.PIXELS_SMALL.x)
+const COLL_H := int(Card.PIXELS_SMALL.y)
 const STACK_OFFSET := 6
 const DECK_W := 72
 const DECK_H := 100
@@ -16,7 +18,7 @@ const DECK_BG  := Color(0.09, 0.07, 0.05)
 const SEARCH_BG := Color(0.11, 0.09, 0.07)
 const COLL_BG  := Color(0.07, 0.05, 0.04)
 const TOOLBAR_BG := Color(0.08, 0.06, 0.05)
-const PREVIEW_SCALE := 1.155
+const PREVIEW_SCALE := Card.SCALE_LARGE.x
 const KEYWORD_W := 238.0
 
 # ── State ──────────────────────────────────────────────────────────────────
@@ -34,7 +36,7 @@ var _filter_btns: Array[Button] = []
 var _filter_box: HBoxContainer = null
 var _delete_btn: Button = null
 var _keywords: Dictionary = {}
-var _preview_card_node: CardPreview = null
+var _preview_card_node: Card = null
 var _hide_preview_scheduled: bool = false
 
 # ── Hub page ───────────────────────────────────────────────────────────────
@@ -95,7 +97,7 @@ func _load_keywords() -> void:
 		_keywords = result
 
 func _setup_preview_card() -> void:
-	_preview_card_node = CardPreviewScene.instantiate()
+	_preview_card_node = CardScene.instantiate()
 	_preview_card_node.scale = Vector2(PREVIEW_SCALE, PREVIEW_SCALE)
 	_preview_card_node.position = Vector2(0, 0)
 	_preview_card_node.input_pickable = false
@@ -122,13 +124,19 @@ func _setup_delete_button() -> void:
 	hbox.add_child(_delete_btn)
 
 func _apply_styles() -> void:
-	var mk := func(c: Color) -> StyleBoxFlat:
-		var s := StyleBoxFlat.new(); s.bg_color = c; return s
+	# The strips carry the same 14px side gutter as the panels below them, so
+	# Back/Search don't sit flush against the screen edge.
+	var strip := func(c: Color) -> StyleBoxFlat:
+		var s := StyleBoxFlat.new()
+		s.bg_color = c
+		s.content_margin_left = 14
+		s.content_margin_right = 14
+		return s
 
-	$HubPage/Toolbar.add_theme_stylebox_override("panel", mk.call(TOOLBAR_BG))
-	$FactionPage/Toolbar.add_theme_stylebox_override("panel", mk.call(TOOLBAR_BG))
-	$EditorPage/TopSection/EditorToolbar.add_theme_stylebox_override("panel", mk.call(TOOLBAR_BG))
-	$EditorPage/TopSection/SearchStrip.add_theme_stylebox_override("panel", mk.call(SEARCH_BG))
+	$HubPage/Toolbar.add_theme_stylebox_override("panel", strip.call(TOOLBAR_BG))
+	$FactionPage/Toolbar.add_theme_stylebox_override("panel", strip.call(TOOLBAR_BG))
+	$EditorPage/TopSection/EditorToolbar.add_theme_stylebox_override("panel", strip.call(TOOLBAR_BG))
+	$EditorPage/TopSection/SearchStrip.add_theme_stylebox_override("panel", strip.call(SEARCH_BG))
 
 	var deck_s := StyleBoxFlat.new()
 	deck_s.bg_color = DECK_BG
@@ -385,7 +393,10 @@ func _refresh_deck() -> void:
 		for id in by_bucket.get(col, []):
 			var card: CardData = CardDatabase.get_card(id)
 			var stack := _deck_stack(card, counts[id])
-			stack.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+			# Centered, not SHRINK_BEGIN: the columns expand-fill to ~236px
+			# each, so left-aligning a 78px stack leaves a ragged gap down
+			# every column.
+			stack.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 			vcol.add_child(stack)
 
 		var fill := Control.new()
@@ -409,11 +420,11 @@ func _deck_stack(card: CardData, count: int) -> Button:
 		back.position = Vector2(STACK_OFFSET, STACK_OFFSET)
 		btn.add_child(back)
 
-	# The same baked 3D model battlefield cards use, at deck-list scale - it
-	# never tilts here since Card only tilts while is_in_hand (hover) or
-	# _dragging, and this instance is neither (input_pickable is off below).
+	# A real Card at deck-list scale, so a deck row shows the same frame art
+	# the rest of the game does. This is the one spot that doesn't use a
+	# Card.Size preset: the deck list is a dense strip of slivers, not cards
+	# meant to be read, so it sizes itself off DECK_W instead.
 	var front: Card = CardScene.instantiate()
-	front.use_text_overlay = false
 	front.scale = Vector2(DECK_W / Card.CARD_SIZE.x, DECK_W / Card.CARD_SIZE.x)
 	front.position = Vector2(0, 0)
 	front.input_pickable = false
@@ -527,7 +538,6 @@ func _coll_card(card: CardData, in_deck: int, deck_full: bool) -> Dictionary:
 	btn.add_theme_stylebox_override("hover", hover_s)
 
 	var card_node: Card = CardScene.instantiate()
-	card_node.use_text_overlay = false
 	card_node.scale = Vector2(COLL_CARD_SCALE, COLL_CARD_SCALE)
 	card_node.position = Vector2(0, 0)
 	card_node.input_pickable = false

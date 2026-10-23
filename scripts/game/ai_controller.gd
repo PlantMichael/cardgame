@@ -34,26 +34,47 @@ func take_turn(game_state: GameState, board: Board) -> void:
 		await _apply_action(action, game_state, board)
 		if not is_instance_valid(board):
 			return
+		# A targeted on-play effect opens a choice that blocks every further
+		# command until it is answered. Same policy the search uses.
+		while game_state.has_pending_choice():
+			HeadlessTurn.answer_pending_choice(game_state)
+			board.refresh()
 		if game_state.current_phase == GameState.Phase.GAME_OVER:
 			return
 		engine.advance_after_real_action(game_state)
 
+## The engine returns actions as plain values naming entities by uid /
+## instance_id (see GameState.validate). They are resolved against the real
+## state here so the presentation helpers below can keep working with
+## objects. A resolution miss means the action went stale between being
+## chosen and being applied - drop it rather than dereferencing null.
 func _apply_action(action: Dictionary, game_state: GameState, board: Board) -> void:
+	var ai: PlayerState = game_state.opponent
 	match action["type"]:
 		"play_creature":
-			await _play_creature_action(action["card"], game_state, board)
+			var card := ai.find_card_in_hand(str(action.get("card_uid", "")))
+			if card == null:
+				return
+			await _play_creature_action(action, card, game_state, board)
 		"play_stratagem":
-			await _play_stratagem_action(action["card"], action.get("minion"), action.get("player_id", ""), game_state, board)
+			var card := ai.find_card_in_hand(str(action.get("card_uid", "")))
+			if card == null:
+				return
+			var target := game_state.find_minion(str(action.get("target_instance_id", "")))
+			await _play_stratagem_action(action, card, target, str(action.get("target_player_id", "")), game_state, board)
 		"attack":
-			await _attack_action(action["attacker"], action.get("target"), action.get("target_player_id", ""), game_state, board)
+			var attacker := game_state.find_minion(str(action.get("attacker_instance_id", "")))
+			if attacker == null:
+				return
+			var target := game_state.find_minion(str(action.get("target_instance_id", "")))
+			await _attack_action(action, attacker, target, str(action.get("target_player_id", "")), game_state, board)
 
 # --- Card playing ---
 
-func _play_creature_action(card: CardData, game_state: GameState, board: Board) -> void:
+func _play_creature_action(action: Dictionary, card: CardData, game_state: GameState, board: Board) -> void:
 	# Registered here (well before the slam itself starts) rather than right
-	# before game_state.play_creature() below - instantiating a Card is not
-	# free (it allocates a whole SubViewport for its text overlay - see
-	# card.gd's _setup_text_overlay()), and paying that cost synchronously at
+	# before game_state.play_creature() below - instantiating and setting up
+	# a Card is not free, and paying that cost synchronously at
 	# the exact moment the flight animation is meant to start read as a stutter
 	# right at kickoff. Doing it now lets that cost land during the THINK_DELAY/
 	# announce_card pause below instead, which the player already reads as a
@@ -65,7 +86,12 @@ func _play_creature_action(card: CardData, game_state: GameState, board: Board) 
 	await board.announce_card(card)
 	if not is_instance_valid(board):
 		return
-	var new_minion = game_state.play_creature(game_state.opponent.player_id, card)
+	# Through the shared validated boundary, same as the human player's own
+	# plays - the AI gets no privileged path into the rules.
+	var played := game_state.execute(action)
+	if not played["ok"]:
+		return
+	var new_minion: Minion = played.get("minion")
 	board.log_action("Opponent played %s" % card.card_name)
 	board.refresh()
 	# See game_manager.gd's identical wait on this same call chain (there,
@@ -78,14 +104,14 @@ func _play_creature_action(card: CardData, game_state: GameState, board: Board) 
 	if new_minion:
 		await _handle_on_play_effects(new_minion, game_state, board)
 
-func _play_stratagem_action(card: CardData, minion: Minion, target_player_id: String, game_state: GameState, board: Board) -> void:
+func _play_stratagem_action(action: Dictionary, card: CardData, minion: Minion, target_player_id: String, game_state: GameState, board: Board) -> void:
 	await get_tree().create_timer(THINK_DELAY).timeout
 	if not is_instance_valid(board):
 		return
 	await board.announce_card(card)
 	if not is_instance_valid(board):
 		return
-	if not game_state.play_stratagem(game_state.opponent.player_id, card, minion, target_player_id):
+	if not game_state.execute(action)["ok"]:
 		return
 	board.log_action("Opponent played %s" % card.card_name)
 	if minion != null:
@@ -293,19 +319,22 @@ func _handle_on_play_effects(new_minion: Minion, game_state: GameState, board: B
 
 # --- Attack execution ---
 
-func _attack_action(attacker: Minion, target: Minion, target_player_id: String, game_state: GameState, board: Board) -> void:
+func _attack_action(action: Dictionary, attacker: Minion, target: Minion, target_player_id: String, game_state: GameState, board: Board) -> void:
 	await get_tree().create_timer(THINK_DELAY).timeout
 	if not is_instance_valid(board):
 		return
+	var attacker_name: String = attacker.data.card_name
+	var target_iid: String = target.instance_id if target != null else ""
+	var target_name: String = target.data.card_name if target != null else ""
+	if not game_state.execute(action)["ok"]:
+		return
 	if target != null:
-		board.log_action("Opponent's %s attacked your %s" % [attacker.data.card_name, target.data.card_name])
-		game_state.attack(attacker, target)
-		await board.animate_creature_attack(attacker.instance_id, game_state.opponent.player_id, target.instance_id)
+		board.log_action("Opponent's %s attacked your %s" % [attacker_name, target_name])
+		await board.animate_creature_attack(attacker.instance_id, game_state.opponent.player_id, target_iid)
 		if not is_instance_valid(board):
 			return
 	else:
-		board.log_action("Opponent's %s attacked your hero" % attacker.data.card_name)
-		game_state.attack(attacker, null, target_player_id)
+		board.log_action("Opponent's %s attacked your hero" % attacker_name)
 	board.refresh()
 
 # --- Backward-compatible delegates (called directly by game_manager.gd for

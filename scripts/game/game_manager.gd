@@ -10,6 +10,10 @@ var is_campaign: bool = false
 ## this, a second run reassigns turn/phase mid-flight and can double up draws
 ## or skip them, draining a hand over the course of several turns.
 var _end_turn_in_progress: bool = false
+## Identity for a ranked match against the AI. The server has no record of
+## these (so they move no Elo), but the id still makes settlement idempotent:
+## a retried report replays the stored outcome instead of awarding twice.
+var _ranked_match_id: String = ""
 
 const LOCAL_PLAYER_ID = "player_1"
 const OPPONENT_PLAYER_ID = "player_2"
@@ -37,6 +41,7 @@ func start_local_game(board_node: Board, player_deck: Array[CardData], opponent_
 	# there instead), or a rematch into this same singleton would find the
 	# guard already stuck true and End Turn would silently do nothing.
 	_end_turn_in_progress = false
+	_ranked_match_id = "ai_%d_%d" % [Time.get_unix_time_from_system(), randi()]
 	game_state = GameState.new(LOCAL_PLAYER_ID, OPPONENT_PLAYER_ID, player_deck, opponent_deck)
 	game_state.node_modifier_ability = node_modifier_ability
 	board.action_play_card.connect(_on_play_card)
@@ -62,35 +67,30 @@ func start_local_game(board_node: Board, player_deck: Array[CardData], opponent_
 		board.log_action("--- Opponent Turn %d ---" % game_state.turn_number)
 		await ai_controller.take_turn(game_state, board)
 		await _announce_pending_draws()
-		await _process_pending_tank_shots()
-		await _process_pending_rummages()
-		await _process_pending_nulls()
-		await _process_pending_buff_friendly_health()
-		await _process_pending_tank_specialist_buffs()
-		await _process_pending_on_reinforce_damages()
-		await _process_pending_overwatch_challenges()
+		await _resolve_all_pending()
 		if game_state.current_phase == GameState.Phase.GAME_OVER:
 			_handle_game_over()
 			return
 		game_state.end_turn()
 		board.refresh()
 		await _announce_pending_draws()
-		await _process_pending_tank_shots()
-		await _process_pending_rummages()
-		await _process_pending_nulls()
-		await _process_pending_buff_friendly_health()
-		await _process_pending_tank_specialist_buffs()
-		await _process_pending_on_reinforce_damages()
-		await _process_pending_overwatch_challenges()
+		await _resolve_all_pending()
 		if game_state.current_phase == GameState.Phase.GAME_OVER:
 			_handle_game_over()
 			return
 		board.log_action("--- Your Turn %d ---" % game_state.turn_number)
 
+## The board hands up the CardData the player dragged; it is turned into a
+## value command here so the human path goes through exactly the same
+## validation the AI and multiplayer paths do (see GameState.validate).
 func _on_play_card(card_data: CardData, at_index: int) -> void:
-	if not game_state.is_local_player_turn():
+	if card_data == null:
 		return
-	var minion = game_state.play_creature(LOCAL_PLAYER_ID, card_data, at_index)
+	var played := game_state.execute({
+		"type": GameState.CMD_PLAY_CREATURE, "actor": LOCAL_PLAYER_ID,
+		"card_uid": card_data.uid, "at_index": at_index,
+	})
+	var minion: Minion = played.get("minion")
 	if minion:
 		board.log_action("You played %s" % card_data.card_name)
 		await get_tree().process_frame
@@ -103,13 +103,7 @@ func _on_play_card(card_data: CardData, at_index: int) -> void:
 		# legendary - see legendary_animations.gd) could have its own
 		# prompt pop up mid-animation.
 		await board.await_slam_landed(board.player_board_zone)
-		await _process_pending_tank_shots()
-		await _process_pending_rummages()
-		await _process_pending_nulls()
-		await _process_pending_buff_friendly_health()
-		await _process_pending_tank_specialist_buffs()
-		await _process_pending_on_reinforce_damages()
-		await _process_pending_overwatch_challenges()
+		await _resolve_all_pending()
 		await _run_player_on_play(minion)
 		await _announce_pending_draws()
 		board.refresh()
@@ -163,13 +157,7 @@ func _run_player_on_play(minion: Minion) -> void:
 			await board.animate_creature_challenge(minion.instance_id, LOCAL_PLAYER_ID, target.instance_id)
 			board.refresh()
 			await _announce_pending_draws()
-			await _process_pending_tank_shots()
-			await _process_pending_rummages()
-			await _process_pending_nulls()
-			await _process_pending_buff_friendly_health()
-			await _process_pending_tank_specialist_buffs()
-			await _process_pending_on_reinforce_damages()
-			await _process_pending_overwatch_challenges()
+			await _resolve_all_pending()
 			if game_state.current_phase == GameState.Phase.GAME_OVER:
 				_handle_game_over()
 	if minion.has_ability(Abilities.ON_PLAY_YETI_CHALLENGE) and not game_state.opponent.board.is_empty():
@@ -189,9 +177,7 @@ func _run_player_on_play(minion: Minion) -> void:
 					game_state.apply_challenge(chosen, target)
 					await board.animate_creature_challenge(chosen.instance_id, LOCAL_PLAYER_ID, target.instance_id)
 					board.refresh()
-					await _announce_pending_draws()
-					await _process_pending_on_reinforce_damages()
-					await _process_pending_overwatch_challenges()
+					await _resolve_all_pending()
 					if game_state.current_phase == GameState.Phase.GAME_OVER:
 						_handle_game_over()
 	if minion.has_ability(Abilities.CHALLENGE_ALL) and not game_state.opponent.board.is_empty():
@@ -206,13 +192,7 @@ func _run_player_on_play(minion: Minion) -> void:
 			await board.animate_creature_challenge(minion.instance_id, LOCAL_PLAYER_ID, enemy.instance_id)
 			board.refresh()
 			await _announce_pending_draws()
-			await _process_pending_tank_shots()
-			await _process_pending_rummages()
-			await _process_pending_nulls()
-			await _process_pending_buff_friendly_health()
-			await _process_pending_tank_specialist_buffs()
-			await _process_pending_on_reinforce_damages()
-			await _process_pending_overwatch_challenges()
+			await _resolve_all_pending()
 			if game_state.current_phase == GameState.Phase.GAME_OVER:
 				_handle_game_over()
 				return
@@ -243,13 +223,7 @@ func _run_player_on_play(minion: Minion) -> void:
 				board.log_action("Your %s won and gained +1/+1!" % minion.data.card_name)
 				board.refresh()
 			await _announce_pending_draws()
-			await _process_pending_tank_shots()
-			await _process_pending_rummages()
-			await _process_pending_nulls()
-			await _process_pending_buff_friendly_health()
-			await _process_pending_tank_specialist_buffs()
-			await _process_pending_on_reinforce_damages()
-			await _process_pending_overwatch_challenges()
+			await _resolve_all_pending()
 			if game_state.current_phase == GameState.Phase.GAME_OVER:
 				_handle_game_over()
 	if minion.has_ability(Abilities.ON_PLAY_SWAP_FRIENDLY_HEALTH):
@@ -278,6 +252,66 @@ func _run_player_on_play(minion: Minion) -> void:
 					target.current_health])
 				game_state.apply_devour_friendly(minion, target, game_state.player)
 				board.refresh()
+
+## Works off every queued effect in the order the rules core defines
+## (GameState.PENDING_QUEUES), repeating until nothing is pending.
+##
+## Replaces the fixed seven-call sequence that used to be pasted at each of
+## the twelve points an action can finish. Pasting it meant the order lived in
+## twelve places here plus its own copies in the multiplayer host and the
+## headless search, and those copies had already drifted apart. It also only
+## ever made ONE pass, so an effect queued by a later entry into an
+## already-drained queue sat there until some unrelated later action happened
+## to drain it.
+## Presents whatever choice the rules core has opened and feeds the answer
+## back through GameState.answer_choice(). The UI highlights exactly the
+## options the core listed - it never decides legality itself.
+##
+## The AI answers the same choices through HeadlessTurn.answer_pending_choice,
+## and multiplayer relays them; all three go through answer_choice(), so the
+## effect resolves in one place.
+func _resolve_pending_choices() -> void:
+	while game_state.has_pending_choice():
+		var choice: Dictionary = game_state.pending_choice.duplicate(true)
+		if str(choice["player_id"]) != LOCAL_PLAYER_ID:
+			# Not ours to answer; the AI's own path handles it.
+			return
+		board.start_choice_targeting(choice["options"])
+		var target: Minion = await board.choice_target_selected
+		if not is_instance_valid(board):
+			return
+		var answer: String = target.instance_id if target != null else ""
+		var result := game_state.answer_choice(str(choice["id"]), answer)
+		if not result["ok"]:
+			# A rejected answer leaves the choice open; stop rather than spin.
+			board.log_action("Choice not accepted: %s" % result.get("error", ""))
+			return
+		board.refresh()
+
+func _resolve_all_pending() -> void:
+	await _resolve_pending_choices()
+	if not is_instance_valid(board):
+		return
+	await _announce_pending_draws()
+	for _pass in 16:  # safety cap against a pathological trigger loop
+		if not game_state.has_pending():
+			return
+		for queue_name in GameState.PENDING_QUEUES:
+			if game_state.current_phase == GameState.Phase.GAME_OVER:
+				return
+			var queue: Array = game_state.get(queue_name)
+			if queue.is_empty():
+				continue
+			match queue_name:
+				"pending_tank_shots": await _process_pending_tank_shots()
+				"pending_rummages": await _process_pending_rummages()
+				"pending_nulls": await _process_pending_nulls()
+				"pending_buff_friendly_health": await _process_pending_buff_friendly_health()
+				"pending_tank_specialist_buffs": await _process_pending_tank_specialist_buffs()
+				"pending_on_reinforce_damages": await _process_pending_on_reinforce_damages()
+				"pending_overwatch_challenges": await _process_pending_overwatch_challenges()
+			if not is_instance_valid(board):
+				return
 
 func _process_pending_tank_shots() -> void:
 	while not game_state.pending_tank_shots.is_empty():
@@ -506,6 +540,7 @@ func _process_pending_rummages() -> void:
 		var type_filter: String = entry.get("type_filter", "")
 		var play_it: bool = entry.get("play_it", false)
 		var discount: bool = entry.get("discount", true)
+		var buff_creature: bool = entry.get("buff_creature", false)
 		var p_state = game_state.player if player_id == LOCAL_PLAYER_ID else game_state.opponent
 		var allow_equal: bool = p_state.board.any(func(m): return m.has_ability(Abilities.RUMMAGE_EQUAL_COST))
 		var options = game_state.get_rummage_options(player_id, max_cost, type_filter, allow_equal)
@@ -518,11 +553,15 @@ func _process_pending_rummages() -> void:
 			options.sort_custom(func(a, b): return a.cost > b.cost)
 			chosen = options[0]
 		if chosen:
-			var placed: Minion = game_state.complete_rummage(player_id, chosen, play_it, discount)
+			var placed: Minion = game_state.complete_rummage(player_id, chosen, play_it, discount, buff_creature)
 			board.refresh()
 			if placed != null:
 				if player_id == LOCAL_PLAYER_ID:
 					await _run_player_on_play(placed)
+					# Deliberately not _resolve_all_pending(): this runs INSIDE
+					# the rummage queue handler, so re-entering it would drain
+					# pending_rummages recursively. Anything left over is
+					# picked up by the outer loop's next pass.
 					await _announce_pending_draws()
 					await _process_pending_tank_shots()
 					await _process_pending_nulls()
@@ -580,29 +619,41 @@ func _on_attack(attacker_id: String, target_type: String, target_id: String) -> 
 	if target_type == "minion":
 		var target = _find_minion(OPPONENT_PLAYER_ID, target_id)
 		if target:
-			board.log_action("Your %s attacked opponent's %s" % [attacker.data.card_name, target.data.card_name])
-			game_state.attack(attacker, target)
-			await board.animate_creature_attack(attacker_id, LOCAL_PLAYER_ID, target_id)
-			if had_dual_strike and attacker in game_state.player.board:
+			var target_name: String = target.data.card_name
+			var ok: bool = game_state.execute({
+				"type": GameState.CMD_ATTACK, "actor": LOCAL_PLAYER_ID,
+				"attacker_instance_id": attacker_id, "target_instance_id": target_id,
+			})["ok"]
+			if ok:
+				board.log_action("Your %s attacked opponent's %s" % [attacker.data.card_name, target_name])
 				await board.animate_creature_attack(attacker_id, LOCAL_PLAYER_ID, target_id)
+				if had_dual_strike and attacker in game_state.player.board:
+					await board.animate_creature_attack(attacker_id, LOCAL_PLAYER_ID, target_id)
 	elif target_type == "hero":
-		board.log_action("Your %s attacked the opponent's hero" % attacker.data.card_name)
-		game_state.attack(attacker, null, target_id)
+		var ok: bool = game_state.execute({
+			"type": GameState.CMD_ATTACK, "actor": LOCAL_PLAYER_ID,
+			"attacker_instance_id": attacker_id, "target_instance_id": "",
+			"target_player_id": target_id,
+		})["ok"]
+		if ok:
+			board.log_action("Your %s attacked the opponent's hero" % attacker.data.card_name)
 	board.refresh()
-	await _announce_pending_draws()
-	await _process_pending_tank_shots()
-	await _process_pending_rummages()
-	await _process_pending_nulls()
-	await _process_pending_buff_friendly_health()
-	await _process_pending_on_reinforce_damages()
-	await _process_pending_overwatch_challenges()
+	await _resolve_all_pending()
 	if game_state.current_phase == GameState.Phase.GAME_OVER:
 		_handle_game_over()
 
 func _on_play_stratagem(card_data: CardData, target_minion: Minion, target_player_id: String) -> void:
 	if not game_state.is_local_player_turn():
 		return
-	if not game_state.play_stratagem(LOCAL_PLAYER_ID, card_data, target_minion, target_player_id):
+	if card_data == null:
+		return
+	var strat := game_state.execute({
+		"type": GameState.CMD_PLAY_STRATAGEM, "actor": LOCAL_PLAYER_ID,
+		"card_uid": card_data.uid,
+		"target_instance_id": target_minion.instance_id if target_minion != null else "",
+		"target_player_id": target_player_id,
+	})
+	if not strat["ok"]:
 		board.refresh()
 		return
 	if target_minion != null:
@@ -654,20 +705,17 @@ func _on_play_stratagem(card_data: CardData, target_minion: Minion, target_playe
 				board.log_action("Blood Transfusion gave %s +2 health" % recipient.data.card_name)
 				game_state.apply_heal_buff(recipient, 2)
 				board.refresh()
-	if card_data.effect == "sanguine" and not game_state.player.board.is_empty():
-		board.start_buff_friendly_targeting()
+	# "...give it to ANOTHER creature you control" - the donor is not a legal
+	# recipient, so it is excluded from targeting and re-checked on the answer.
+	var sanguine_targets := game_state.sanguine_recipients(LOCAL_PLAYER_ID, target_minion)
+	if card_data.effect == "sanguine" and not sanguine_targets.is_empty():
+		board.start_buff_friendly_targeting(target_minion)
 		var recipient: Minion = await board.buff_friendly_target_selected
-		if recipient != null and recipient in game_state.player.board:
+		if recipient != null and recipient in sanguine_targets:
 			board.log_action("Sanguine gave %s +2 health" % recipient.data.card_name)
 			game_state.apply_heal_buff(recipient, 2)
 			board.refresh()
-	await _announce_pending_draws()
-	await _process_pending_tank_shots()
-	await _process_pending_rummages()
-	await _process_pending_nulls()
-	await _process_pending_buff_friendly_health()
-	await _process_pending_on_reinforce_damages()
-	await _process_pending_overwatch_challenges()
+	await _resolve_all_pending()
 	if game_state.current_phase == GameState.Phase.GAME_OVER:
 		_handle_game_over()
 
@@ -689,13 +737,7 @@ func _on_end_turn() -> void:
 			_end_turn_in_progress = false
 			return
 		await _announce_pending_draws()
-		await _process_pending_tank_shots()
-		await _process_pending_rummages()
-		await _process_pending_nulls()
-		await _process_pending_buff_friendly_health()
-		await _process_pending_tank_specialist_buffs()
-		await _process_pending_on_reinforce_damages()
-		await _process_pending_overwatch_challenges()
+		await _resolve_all_pending()
 		if game_state.current_phase == GameState.Phase.GAME_OVER:
 			_handle_game_over()
 			_end_turn_in_progress = false
@@ -703,13 +745,7 @@ func _on_end_turn() -> void:
 		game_state.end_turn()
 		board.refresh()
 		await _announce_pending_draws()
-		await _process_pending_tank_shots()
-		await _process_pending_rummages()
-		await _process_pending_nulls()
-		await _process_pending_buff_friendly_health()
-		await _process_pending_tank_specialist_buffs()
-		await _process_pending_on_reinforce_damages()
-		await _process_pending_overwatch_challenges()
+		await _resolve_all_pending()
 		if game_state.current_phase == GameState.Phase.GAME_OVER:
 			_handle_game_over()
 			_end_turn_in_progress = false
@@ -735,7 +771,7 @@ func _handle_game_over() -> void:
 		var old_bracket := Auth.rank_bracket
 		var old_in_legend := Auth.rank_in_legend
 		var old_legend_rating := Auth.rank_legend_rating
-		Auth.report_ranked_result(won)
+		Auth.report_ranked_result(won, -1, _ranked_match_id)
 		board.show_game_over(won, true, old_bracket, old_in_legend, old_legend_rating)
 	elif is_campaign:
 		board.show_game_over(won, false, 0, false, 0, true)

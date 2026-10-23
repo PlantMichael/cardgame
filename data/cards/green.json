@@ -88,7 +88,7 @@
 		"effect_value": 0
 	},
 	{
-		"id": "g_009",
+		"id": "g_025",
 		"card_name": "SS4 Blackwidow",
 		"cost": 3,
 		"color": "GREEN",
@@ -343,6 +343,24 @@
 		"effect_value": 0
 	},
 	{
+		"id": "g_022",
+		"card_name": "Requisitioner",
+		"cost": 5,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "tank",
+		"description": "On play: Gains +0/+1 for each other friendly creature on the board.",
+		"attack": 2,
+		"health": 5,
+		"abilities": [
+			"on_play_health_per_friendly"
+		],
+		"art": "res://assets/green/requistioner.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "g_013",
 		"card_name": "A4SI Python",
 		"cost": 7,
@@ -377,6 +395,24 @@
 			"on_play_damage_8"
 		],
 		"art": "res://assets/green/bigbertha.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_021",
+		"card_name": "Corporal Garrick, the Intimidating",
+		"cost": 5,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "LEGENDARY",
+		"tribe": "tank",
+		"description": "The first time a friendly creature would die each turn, reinforce it.",
+		"attack": 4,
+		"health": 5,
+		"abilities": [
+			"on_friendly_death_reinforce"
+		],
+		"art": "res://assets/green/corporalgarrick.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -443,5 +479,58 @@
 		"art": "res://assets/green/commandingshout.png",
 		"effect": "buff_all_friendly_health",
 		"effect_value": 1
+	},
+	{
+		"id": "g_026",
+		"card_name": "Sapien Rifle Squad",
+		"cost": 2,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "",
+		"attack": 3,
+		"health": 2,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0,
+		"is_token": false,
+		"in_starter": false
+	},
+	{
+		"id": "g_027",
+		"card_name": "T6 Ironclad",
+		"cost": 5,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "tank",
+		"description": "",
+		"attack": 5,
+		"health": 6,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0,
+		"is_token": false,
+		"in_starter": false
+	},
+	{
+		"id": "g_028",
+		"card_name": "Commander Maurice, Local Legend",
+		"cost": 5,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "LEGENDARY",
+		"tribe": "",
+		"description": "Reinforce 4.",
+		"attack": 1,
+		"health": 2,
+		"abilities": [
+			"reinforce_4"
+		],
+		"effect": "",
+		"effect_value": 0,
+		"is_token": false,
+		"in_starter": false
 	}
 ]

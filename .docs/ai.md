@@ -41,6 +41,42 @@ Main menu → RANKED → deck select → `_show_ranked_start()` (`scripts/game/m
 
 `--live-ai-test` (`main.gd`'s `_run_live_ai_test_cli()`) drives one real game through the actual `Board`/`GameManagerAutoload`/`AIController` glue instead of the headless `HeadlessTurn` path — tweens, `board.refresh()`, `board.log_action()` and all — forcing the human side to end its turn immediately each round so the AI's turn (the one place the other CLI hooks don't exercise) repeats back-to-back. It flags a stall via a structural state fingerprint (board/hand/health), not `turn_number`/`active_player_id`, since those legitimately hold steady for the whole multi-action span of a real AI turn. This is the tool that originally reproduced the "AI turn reads as a hang" issue tree reuse (above) fixes: `godot --headless --path <project> -- --live-ai-test`.
 
+## Actions are values, not objects
+
+`list_legal_actions()` emits dictionaries that name entities by `card_uid` /
+`attacker_instance_id` / `target_instance_id`, never live `CardData` or
+`Minion` objects, and `apply_action()` hands them to `GameState.execute()`,
+which resolves them against the state being mutated.
+
+That is what makes search expansion sound: actions are enumerated against a
+parent node and applied to a freshly copied child. While actions carried
+objects, an attack enumerated on the parent mutated the *parent's* minions
+while the child's death cleanup inspected the child, and a card play failed to
+leave the child's hand because `Array.erase()` was handed a different instance.
+A `_translate_to_real()` shim patched the boundary on the way out of the
+search but did nothing for parent-to-child expansion; it is gone.
+
+`apply_action()` returns `false` when a command is rejected (an action
+enumerated elsewhere can legitimately be illegal here) — callers must not
+treat that as a mutation.
+
+## Randomness
+
+`MCTSEngine._search_rng` is the search's own generator — expansion order and
+the deliberate-mistake roll. It is separate from the match's `GameState.rng`
+on purpose: changing the search budget, or searching at all, must not change
+what the match itself rolls. Both are separate from the global stream.
+
+## Tree-reuse fingerprint
+
+`_fingerprint()` decides whether a search tree may be reused, so two states
+sharing one must be genuinely interchangeable. It encodes phase/active
+player/turn, both players' resources, hands (with each copy's `cost_modifier`
+and `rummage_count`), **board order** (never sorted — Feast Attendant targets
+by adjacency), per-minion readiness/shield/pilot/abilities, and the sizes of
+every pending-effect queue. Anything added to the rules that changes legal
+play must be added here too, or reuse starts certifying unequal states.
+
 ## Extending the AI
 
 Behavioral additions (new abilities affecting combat/play decisions) belong in `AIHeuristics` and/or `HeadlessTurn`'s on-play/pending-resolution logic so both the greedy policy and the search see them consistently — avoid adding a third copy of scoring/target-pick logic directly in `AIController`.

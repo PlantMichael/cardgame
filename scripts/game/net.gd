@@ -171,8 +171,14 @@ func resume_session(token: String) -> void:
 func logout(token: String) -> void:
 	send({"type": "logout", "token": token})
 
-func report_ranked_result(token: String, won: bool, opponent_rating: int = -1) -> void:
-	var msg := {"type": "report_ranked_result", "token": token, "won": won}
+## `match_id` names WHICH match this result settles. The server requires it:
+## it is what makes settlement idempotent (a retry replays the stored outcome
+## instead of moving the ladder again) and what ties a reported result to a
+## match the server actually started. `opponent_rating` is still sent for
+## older servers but is no longer trusted - the server reads the opponent's
+## rating from its own record of the match.
+func report_ranked_result(token: String, won: bool, opponent_rating: int = -1, match_id: String = "") -> void:
+	var msg := {"type": "report_ranked_result", "token": token, "won": won, "match_id": match_id}
 	if opponent_rating >= 0:
 		msg["opponent_rating"] = opponent_rating
 	send(msg)

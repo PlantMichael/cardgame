@@ -102,6 +102,24 @@
 		"effect_value": 0
 	},
 	{
+		"id": "o_026",
+		"card_name": "Mech Station",
+		"cost": 2,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "At the end of your turn, heal all friendly mechs 2.",
+		"attack": 0,
+		"health": 5,
+		"abilities": [
+			"end_turn_heal_mechs"
+		],
+		"art": "res://assets/orange/juniorpilot.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "o_007",
 		"card_name": "Nervous Flyer",
 		"cost": 3,

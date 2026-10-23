@@ -18,6 +18,7 @@ Each doc file has a specific source of truth in the codebase. If the code has ch
 | `.docs/abilities.md` | Read `scripts/game/abilities.gd`. Update the constants list and any death-trigger / on-play logic described in the doc. |
 | `.docs/ai.md` | Read `scripts/game/ai_controller.gd`. Update the decision-priority list and any behavioral notes. |
 | `.docs/card-data.md` | Read `scripts/cards/card_data.gd` and one JSON file from `data/cards/`. Update the schema table and JSON format example. |
+| `.docs/quests.md` | Read `data/quests.json`. Update the field table, track keys, and filters only if the data's actual shape has diverged. Once a quest loader/UI exists, also verify the "Not built yet" list against the code and move anything implemented out of it. |
 | `.docs/conventions.md` | Only update if a convention is provably violated across multiple files (e.g., naming scheme changed). Do not modify conventions based on a single outlier. |
 | `.docs/overview.md` | Only update the "What's Working" summary bullet and the main scene path if they change. Leave design intent text alone. |
 

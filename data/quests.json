@@ -1,0 +1,180 @@
+[
+	{
+		"id": "daily_play_vs_ai_3",
+		"pool": "daily",
+		"name": "Play 3 Versus AI games",
+		"description": "Finish 3 matches against the AI. Wins and losses both count.",
+		"track": "games_played",
+		"goal": 3,
+		"filters": {
+			"mode": ["vs_ai"]
+		},
+		"reward": {
+			"currency": "glimmer",
+			"amount": 50
+		},
+		"weight": 12
+	},
+	{
+		"id": "daily_play_any_8",
+		"pool": "daily",
+		"name": "Play 8 games",
+		"description": "Finish 8 matches in any mode. Wins and losses both count.",
+		"track": "games_played",
+		"goal": 8,
+		"reward": {
+			"currency": "glimmer",
+			"amount": 100
+		},
+		"weight": 8
+	},
+	{
+		"id": "daily_win_ranked_2",
+		"pool": "daily",
+		"name": "Win 2 Ranked games",
+		"description": "Take 2 wins on the ranked ladder.",
+		"track": "games_won",
+		"goal": 2,
+		"filters": {
+			"mode": ["ranked"]
+		},
+		"reward": {
+			"currency": "glimmer",
+			"amount": 100
+		},
+		"weight": 6
+	},
+	{
+		"id": "daily_play_creatures_20",
+		"pool": "daily",
+		"name": "Play 20 creatures",
+		"description": "Play 20 creature cards from your hand across any mode.",
+		"track": "cards_played",
+		"goal": 20,
+		"filters": {
+			"card_type": ["CREATURE"]
+		},
+		"reward": {
+			"currency": "glimmer",
+			"amount": 75
+		},
+		"weight": 10
+	},
+	{
+		"id": "daily_play_teal_15",
+		"pool": "daily",
+		"name": "Play 15 Teal cards",
+		"description": "Play 15 cards from the Teal faction. Generic cards do not count.",
+		"track": "cards_played",
+		"goal": 15,
+		"filters": {
+			"color": ["TEAL"]
+		},
+		"reward": {
+			"currency": "glimmer",
+			"amount": 75
+		},
+		"weight": 10
+	},
+	{
+		"id": "daily_play_cheap_25",
+		"pool": "daily",
+		"name": "Play 25 cards costing 3 or less",
+		"description": "Play 25 cards with an effective cost of 3 or less.",
+		"track": "cards_played",
+		"goal": 25,
+		"filters": {
+			"max_cost": 3
+		},
+		"reward": {
+			"currency": "glimmer",
+			"amount": 75
+		},
+		"weight": 10
+	},
+	{
+		"id": "daily_destroy_creatures_12",
+		"pool": "daily",
+		"name": "Destroy 12 enemy creatures",
+		"description": "Destroy 12 enemy creatures by any means - combat, challenge, or stratagem.",
+		"track": "creatures_destroyed",
+		"goal": 12,
+		"reward": {
+			"currency": "glimmer",
+			"amount": 75
+		},
+		"weight": 10
+	},
+	{
+		"id": "daily_face_damage_40",
+		"pool": "daily",
+		"name": "Deal 40 damage to enemy heroes",
+		"description": "Deal 40 total damage to enemy heroes across any number of matches.",
+		"track": "damage_to_hero",
+		"goal": 40,
+		"reward": {
+			"currency": "glimmer",
+			"amount": 75
+		},
+		"weight": 10
+	},
+	{
+		"id": "daily_flawless_win_25",
+		"pool": "daily",
+		"name": "Win a game with 25 or more health left",
+		"description": "Win a match without dropping below 25 hero health. Counts your best single match, not a running total.",
+		"track": "hero_health_remaining",
+		"goal": 25,
+		"accumulate": "best_in_match",
+		"filters": {
+			"result": "win"
+		},
+		"reward": {
+			"currency": "glimmer",
+			"amount": 100
+		},
+		"weight": 4
+	},
+	{
+		"id": "weekly_play_25",
+		"pool": "weekly",
+		"name": "Play 25 games",
+		"description": "Finish 25 matches in any mode this week. Wins and losses both count.",
+		"track": "games_played",
+		"goal": 25,
+		"reward": {
+			"currency": "cyllats",
+			"amount": 200
+		},
+		"weight": 10
+	},
+	{
+		"id": "weekly_win_15",
+		"pool": "weekly",
+		"name": "Win 15 games",
+		"description": "Take 15 wins in any mode this week.",
+		"track": "games_won",
+		"goal": 15,
+		"reward": {
+			"currency": "cyllats",
+			"amount": 250
+		},
+		"weight": 8
+	},
+	{
+		"id": "weekly_play_legendary_5",
+		"pool": "weekly",
+		"name": "Play 5 Legendary cards",
+		"description": "Play 5 Legendary cards from your hand this week.",
+		"track": "cards_played",
+		"goal": 5,
+		"filters": {
+			"rarity": ["LEGENDARY"]
+		},
+		"reward": {
+			"currency": "cyllats",
+			"amount": 200
+		},
+		"weight": 6
+	}
+]

@@ -218,7 +218,7 @@
 		"effect": "",
 		"effect_value": 0
 	},
-{
+	{
 		"id": "t_022",
 		"card_name": "Wrangling crew",
 		"cost": 4,
@@ -237,6 +237,24 @@
 		"effect_value": 0
 	},
 	{
+		"id": "t_021",
+		"card_name": "Tutkiun, the last Surveyor",
+		"cost": 4,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "LEGENDARY",
+		"tribe": "",
+		"description": "At the end of your turn, reduce the cost of Yetis in your hand by 1.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"end_turn_yeti_discount"
+		],
+		"art": "res://assets/teal/recoverysled.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "t_019",
 		"card_name": "Serene Yeti",
 		"cost": 4,
@@ -249,6 +267,24 @@
 		"health": 4,
 		"abilities": [
 			"ambush"
+		],
+		"art": "res://assets/teal/sereneyeti_t_019.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "t_024",
+		"card_name": "Rampant Yetiling",
+		"cost": 4,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "yeti",
+		"description": "Trample",
+		"attack": 5,
+		"health": 3,
+		"abilities": [
+			"trample"
 		],
 		"art": "res://assets/teal/sereneyeti_t_019.png",
 		"effect": "",
@@ -403,6 +439,24 @@
 		"effect_value": 0
 	},
 	{
+		"id": "t_0",
+		"card_name": "Ancient Abominable",
+		"cost": 10,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "yeti",
+		"description": "Colossal",
+		"attack": 15,
+		"health": 15,
+		"abilities": [
+			"two_slot"
+		],
+		"art": "res://assets/teal/motheryeti.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
 		"id": "t_str_001",
 		"card_name": "Avalanche",
 		"cost": 3,
@@ -449,5 +503,39 @@
 		"art": "res://assets/teal/icewhip.png",
 		"effect": "force_challenge",
 		"effect_value": 2
+	},
+	{
+		"id": "t_025",
+		"card_name": "Tundra Forager",
+		"cost": 2,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "yeti",
+		"description": "",
+		"attack": 2,
+		"health": 3,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0,
+		"is_token": false,
+		"in_starter": false
+	},
+	{
+		"id": "t_026",
+		"card_name": "Glacierback Yeti",
+		"cost": 3,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "yeti",
+		"description": "",
+		"attack": 3,
+		"health": 4,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0,
+		"is_token": false,
+		"in_starter": false
 	}
 ]

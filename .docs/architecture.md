@@ -7,11 +7,15 @@ The codebase has a clean split between **game logic** (pure GDScript classes, no
 | Script | Role |
 |---|---|
 | `scripts/game/game_state.gd` | Authoritative game state; drives all rule enforcement |
+| `scripts/game/core_tests.gd` | `CoreTests` — rules-core regression suite (copy isolation, command validation, card identity, tree-reuse fingerprint, Crypt Hunger, aura lifetime). Run via `--core-tests`; **exits with the failure count**, unlike the older hooks |
 | `scripts/game/player_state.gd` | Per-player state (hand, board, mana, deck) |
 | `scripts/game/minion.gd` | Runtime minion instance (stats, abilities, instance_id) |
 | `scripts/cards/card_data.gd` | `Resource` subclass defining the card schema |
 | `scripts/game/abilities.gd` | Ability constants + death-trigger logic (**Autoload: `Abilities`**) |
 | `scripts/cards/card_database.gd` | Loads JSON card files at startup (**Autoload: `CardDatabase`**) |
+| `scripts/cards/card.gd` | `Card` — the one scene/script every card on screen uses, at any of three sizes (`Card.Size.SMALL`/`MEDIUM`/`LARGE`); draws a per-color frame from `assets/card_assets/` plus the mana orb, rarity gem and tribe-symbol row laid into that frame's slots |
+| `scripts/cards/card_3d_layer.gd` | **Unused.** The retired 3D card-mesh layer. Nothing instantiates it any more — cards are flat 2D again (see `card.gd`). Left on disk only so the approach can be picked back up |
+| `scripts/cards/legendary_animations.gd` | `LegendaryAnimations` — per-legendary one-off "spectacle" animations (`play_flight()` and the landing half), kept out of `card.gd` so it doesn't grow a per-card-id switch |
 | `scripts/game/game_manager.gd` | Orchestrates game flow, wires board signals to game_state (**Autoload: `GameManagerAutoload`**) |
 | `scripts/game/ai_controller.gd` | Drives the opponent's turn: asks `MCTSEngine` for one action at a time, applies it to the real `GameState`/`Board` with pacing/logging/animations |
 | `scripts/game/ai_heuristics.gd` | Stateless scoring/target-selection heuristics (trade scoring, face pressure, removal/challenge/pilot/heal target pickers) and the search leaf evaluator `evaluate_state`; shared by `AIController`, `HeadlessTurn`, `MCTSEngine` |
@@ -27,7 +31,7 @@ The codebase has a clean split between **game logic** (pure GDScript classes, no
 | `scripts/ui/card_list_screen.gd` | `CardListScreen` — read-only browsable list of every card, grouped by color, with color/type/cost filters and search; reached from the main menu's "CARD LIST" button |
 | `scripts/ui/campaign_map_screen.gd` | `CampaignMapScreen` — landscape trail map shown before the first Campaign node and between every subsequent one; nodes laid out along a path, click-to-preview modifiers, 30s countdown before the next match |
 | `scripts/game/board.gd` | `Board` scene script; pure UI, emits signals upward to game_manager |
-| `scripts/game/card_preview.gd` | Large card preview panel shown on hover (right side of screen) |
+| `scripts/game/card_preview.gd` | **Unused.** An older hand-built preview Panel. No scene attaches it and nothing references it (it was already orphaned before the card-frame rework); the board's hover preview is a plain `Card` at `Card.Size.LARGE` |
 | `scripts/game/drop_zone.gd` | `DropZone` Control node; highlights and accepts creature card drops |
 | `scripts/game/net.gd` | WebSocket client for the relay server: lobbies, ranked matchmaking queue, account auth, ranked result reporting, currency/shop/crafting messages (**Autoload: `Net`**) |
 | `scripts/game/auth.gd` | Account/session state (login/register/resume, ranked ladder fields, matchmaking Elo) synced from `Net` (**Autoload: `Auth`**) |
@@ -50,11 +54,15 @@ res://
 │   │   ├── teal.json
 │   │   └── generic.json        (cross-faction cards; color = GENERIC)
 │   ├── campaign_modifiers.json (Campaign mode node-modifier pool)
-│   └── shop_packs.json         (Shop pack definitions: price, card count, rarity odds, dust value)
+│   ├── shop_packs.json         (Shop pack definitions: price, card count, rarity odds, dust value)
+│   ├── quests.json             (Daily/weekly quest pool: track key, goal, reward)
+│   ├── keywords.json           (Keyword -> tooltip text; read by board.gd, deck builder, card list)
+│   └── starters.json           (Starter deck lists per faction; read by DeckManager)
 ├── scenes/
 │   ├── cards/
-│   │   ├── Card.tscn       (Area2D root, card.gd attached)
-│   │   └── CardBack.tscn   (Panel, face-down opponent cards)
+│   │   ├── Card.tscn         (Area2D root, card.gd attached)
+│   │   ├── Card3DLayer.tscn  (unused — retired 3D mesh layer)
+│   │   └── CardBack.tscn     (TextureRect, face-down opponent cards / deck icon)
 │   ├── game/
 │   │   ├── Board.tscn      (Node2D root, board.gd attached)
 │   │   └── Main.tscn       (Node root, main.gd attached)
@@ -64,7 +72,9 @@ res://
     ├── cards/
     │   ├── card_data.gd        (Resource, card blueprint)
     │   ├── card_database.gd    (Autoload: "CardDatabase")
-    │   └── card.gd             (Card scene script, Area2D; handles visuals, drag/drop, badges)
+    │   ├── card.gd             (Card scene script, Area2D; handles visuals, drag/drop, badges)
+    │   ├── card_3d_layer.gd    (unused — retired 3D mesh layer)
+    │   └── legendary_animations.gd (Per-legendary spectacle animations)
     ├── game/
     │   ├── minion.gd             (Runtime creature instance)
     │   ├── player_state.gd       (Hand, board, deck, mana, HP)
@@ -86,7 +96,7 @@ res://
     │   ├── economy.gd            (Autoload: "Economy"; currency/dust/owned-card collection)
     │   ├── pack_opener.gd        (PackOpener: pure pack-rolling/duplicate-to-dust logic)
     │   ├── mp_game_manager.gd    (MpGameManager: live host/guest multiplayer match)
-    │   ├── card_preview.gd       (Hover preview panel, right side)
+    │   ├── card_preview.gd       (unused — orphaned older preview panel)
     │   ├── drop_zone.gd          (DropZone Control, creature drop target)
     │   └── main.gd               (Entry point, main menu, deck select)
     └── ui/

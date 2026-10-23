@@ -174,5 +174,170 @@
 		"effect": "",
 		"effect_value": 0,
 		"in_starter": false
+	},
+	{
+		"id": "gen_011",
+		"card_name": "Frontier Mercenary",
+		"cost": 2,
+		"color": "GENERIC",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "",
+		"attack": 2,
+		"health": 2,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0,
+		"is_token": false,
+		"in_starter": false
+	},
+	{
+		"id": "gen_012",
+		"card_name": "Cargo Loader",
+		"cost": 4,
+		"color": "GENERIC",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "",
+		"attack": 4,
+		"health": 4,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0,
+		"is_token": false,
+		"in_starter": false
+	},
+	{
+		"id": "gen_013",
+		"card_name": "Checkpoint Sentry",
+		"cost": 2,
+		"color": "GENERIC",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Guardian.",
+		"attack": 1,
+		"health": 3,
+		"abilities": [
+			"guardian"
+		],
+		"effect": "",
+		"effect_value": 0,
+		"is_token": false,
+		"in_starter": false
+	},
+	{
+		"id": "gen_014",
+		"card_name": "Archive Courier",
+		"cost": 3,
+		"color": "GENERIC",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "On death: Draw a card.",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"deathrattle_draw_card"
+		],
+		"effect": "",
+		"effect_value": 0,
+		"is_token": false,
+		"in_starter": false
+	},
+	{
+		"id": "gen_015",
+		"card_name": "Frontier Medic",
+		"cost": 3,
+		"color": "GENERIC",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "On play: Restore 1 health to a creature.",
+		"attack": 2,
+		"health": 3,
+		"abilities": [
+			"on_play_restore_health"
+		],
+		"effect": "",
+		"effect_value": 0,
+		"is_token": false,
+		"in_starter": false
+	},
+	{
+		"id": "gen_016",
+		"card_name": "Supply Quartermaster",
+		"cost": 4,
+		"color": "GENERIC",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "On play: Give another friendly creature +1/+1.",
+		"attack": 3,
+		"health": 3,
+		"abilities": [
+			"on_play_buff_other_friendly"
+		],
+		"effect": "",
+		"effect_value": 0,
+		"is_token": false,
+		"in_starter": false
+	},
+	{
+		"id": "gen_017",
+		"card_name": "Heavy Bounty Hunter",
+		"cost": 5,
+		"color": "GENERIC",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "On play: Deal 4 damage to an enemy creature with 5 or more attack.",
+		"attack": 3,
+		"health": 3,
+		"abilities": [
+			"on_play_damage_high_attack"
+		],
+		"effect": "",
+		"effect_value": 0,
+		"is_token": false,
+		"in_starter": false
+	},
+	{
+		"id": "gen_018",
+		"card_name": "Convoy Defender",
+		"cost": 6,
+		"color": "GENERIC",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Guardian.",
+		"attack": 4,
+		"health": 7,
+		"abilities": [
+			"guardian"
+		],
+		"effect": "",
+		"effect_value": 0,
+		"is_token": false,
+		"in_starter": false
+	},
+	{
+		"id": "gen_019",
+		"card_name": "Wasteland Behemoth",
+		"cost": 8,
+		"color": "GENERIC",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "",
+		"attack": 7,
+		"health": 8,
+		"abilities": [],
+		"effect": "",
+		"effect_value": 0,
+		"is_token": false,
+		"in_starter": false
 	}
 ]

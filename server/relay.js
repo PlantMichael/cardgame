@@ -89,6 +89,20 @@ async function initDb() {
       PRIMARY KEY (player_id, card_id)
     )
   `);
+  // One row per (match, player) that has been settled, holding the outcome
+  // that was awarded. The primary key is what makes settlement idempotent:
+  // a retry hits the existing row and is replayed the stored result instead
+  // of moving the ladder a second time.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ranked_settlements (
+      match_id TEXT NOT NULL,
+      player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      won BOOLEAN NOT NULL,
+      outcome JSONB NOT NULL,
+      settled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (match_id, player_id)
+    )
+  `);
 }
 
 async function decksOf(playerId) {
@@ -422,8 +436,23 @@ function sweepRankedQueue() {
   }
 }
 
+// Ranked matches the server itself started, keyed by lobby id.
+//
+// Settlement reads the participants and their ratings FROM HERE rather than
+// from the reporting client. A client could previously name any opponent
+// rating it liked and have the ladder move by it.
+const rankedMatches = new Map();
+
 function startRankedMatch(wsHost, host, wsGuest, guest) {
   const id = 'rk_' + Math.random().toString(36).slice(2, 10);
+  rankedMatches.set(id, {
+    host_name: host.username, guest_name: guest.username,
+    host_rating: host.rating, guest_rating: guest.rating,
+    startedAt: Date.now(),
+    // Each side's claimed outcome, so a pair that both claim a win can be
+    // spotted instead of both being awarded one.
+    claims: {},
+  });
   const lobby = {
     id, name: 'Ranked', host_ws: wsHost, guest_ws: wsGuest,
     host_name: host.username, guest_name: guest.username, status: 'full',
@@ -828,15 +857,14 @@ async function main() {
         case 'report_ranked_result': {
           const token = msg.token;
           const won = !!msg.won;
-          // Present and non-negative only for a matchmade PvP result — the
-          // opponent's rating at the time the match was found (see
-          // ranked_match_found), used to move this player's own Elo. Absent
-          // for AI ranked matches, which don't touch rating at all.
-          const opponentRating = Number.isFinite(msg.opponent_rating) && msg.opponent_rating >= 0
-            ? msg.opponent_rating : null;
+          // Identifies WHICH match this result is for. Required: without it
+          // every retry of the same message awarded the ladder again, and
+          // there was nothing tying a reported result to a match the server
+          // had actually started.
+          const matchId = typeof msg.match_id === 'string' ? msg.match_id.trim() : '';
           try {
             const result = await pool.query(
-              `SELECT p.id, p.rating, p.rank_bracket, p.rank_in_legend, p.rank_legend_rating, p.rank_lp,
+              `SELECT p.id, p.username, p.rating, p.rank_bracket, p.rank_in_legend, p.rank_legend_rating, p.rank_lp,
                       p.ranked_win_streak, p.ranked_wins, p.ranked_losses
                FROM sessions s JOIN players p ON p.id = s.player_id WHERE s.token = $1`,
               [token]
@@ -846,16 +874,97 @@ async function main() {
               sendTo(ws, { type: 'ranked_result_ack', success: false, message: 'Session expired.' });
               return;
             }
+            if (!matchId) {
+              sendTo(ws, { type: 'ranked_result_ack', success: false, message: 'Missing match id.' });
+              return;
+            }
+
+            // Already settled? Replay the stored outcome. A retry after a
+            // dropped ack must be safe, and must return what was actually
+            // awarded rather than recomputing from the current ladder.
+            const prior = await pool.query(
+              'SELECT outcome FROM ranked_settlements WHERE match_id = $1 AND player_id = $2',
+              [matchId, player.id]
+            );
+            if (prior.rows[0]) {
+              sendTo(ws, { type: 'ranked_result_ack', success: true, replayed: true, ...prior.rows[0].outcome });
+              return;
+            }
+
+            // A PvP ranked match the server itself started: take the
+            // opponent's rating from the server's own record, never from the
+            // client. A match id the server does not know settles with no
+            // rating change (an AI ranked match), so a fabricated id cannot
+            // manufacture Elo.
+            const match = rankedMatches.get(matchId);
+            let opponentRating = null;
+            if (match) {
+              const isHost = match.host_name === player.username;
+              const isGuest = match.guest_name === player.username;
+              if (!isHost && !isGuest) {
+                sendTo(ws, { type: 'ranked_result_ack', success: false, message: 'Not a participant in that match.' });
+                return;
+              }
+              // Both sides claiming a win means at least one is wrong. Until
+              // the rules run on a trusted server there is no way to tell
+              // which, so neither claim moves Elo - the ladder stays put
+              // rather than rewarding whoever lies.
+              const seat = isHost ? 'host' : 'guest';
+              const otherSeat = isHost ? 'guest' : 'host';
+              match.claims[seat] = won;
+              const otherClaim = match.claims[otherSeat];
+              const contradicted = otherClaim !== undefined && otherClaim === won;
+              if (contradicted) {
+                console.warn('ranked result conflict', matchId, match.host_name, match.guest_name);
+              } else {
+                opponentRating = isHost ? match.guest_rating : match.host_rating;
+              }
+            }
+
             const next = nextRankState(player, won);
             next.rating = opponentRating !== null ? nextElo(player.rating, opponentRating, won) : player.rating;
-            await pool.query(
-              `UPDATE players
-               SET rank_bracket = $1, rank_in_legend = $2, rank_legend_rating = $3, rank_lp = $4,
-                   ranked_win_streak = $5, ranked_wins = $6, ranked_losses = $7, rating = $8
-               WHERE id = $9`,
-              [next.rank_bracket, next.rank_in_legend, next.rank_legend_rating, next.rank_lp,
-               next.ranked_win_streak, next.ranked_wins, next.ranked_losses, next.rating, player.id]
-            );
+
+            // Record the settlement and apply it together, so a crash
+            // between the two cannot leave a match awarded but unrecorded
+            // (which would let the next retry award it again).
+            const client = await pool.connect();
+            try {
+              await client.query('BEGIN');
+              const claimed = await client.query(
+                `INSERT INTO ranked_settlements (match_id, player_id, won, outcome)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (match_id, player_id) DO NOTHING
+                 RETURNING match_id`,
+                [matchId, player.id, won, JSON.stringify(next)]
+              );
+              if (!claimed.rows[0]) {
+                // Another concurrent report won the race; replay theirs.
+                await client.query('ROLLBACK');
+                const existing = await pool.query(
+                  'SELECT outcome FROM ranked_settlements WHERE match_id = $1 AND player_id = $2',
+                  [matchId, player.id]
+                );
+                sendTo(ws, {
+                  type: 'ranked_result_ack', success: true, replayed: true,
+                  ...(existing.rows[0] ? existing.rows[0].outcome : next),
+                });
+                return;
+              }
+              await client.query(
+                `UPDATE players
+                 SET rank_bracket = $1, rank_in_legend = $2, rank_legend_rating = $3, rank_lp = $4,
+                     ranked_win_streak = $5, ranked_wins = $6, ranked_losses = $7, rating = $8
+                 WHERE id = $9`,
+                [next.rank_bracket, next.rank_in_legend, next.rank_legend_rating, next.rank_lp,
+                 next.ranked_win_streak, next.ranked_wins, next.ranked_losses, next.rating, player.id]
+              );
+              await client.query('COMMIT');
+            } catch (txErr) {
+              await client.query('ROLLBACK');
+              throw txErr;
+            } finally {
+              client.release();
+            }
             sendTo(ws, { type: 'ranked_result_ack', success: true, ...next });
           } catch (err) {
             console.error('report_ranked_result error', err);
@@ -863,7 +972,6 @@ async function main() {
           }
           break;
         }
-
         case 'logout': {
           try {
             await pool.query('DELETE FROM sessions WHERE token = $1', [msg.token]);

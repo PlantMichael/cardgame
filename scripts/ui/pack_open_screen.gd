@@ -14,7 +14,8 @@ extends Control
 signal finished
 
 const CardScene := preload("res://scenes/cards/Card.tscn")
-const CARD_DISPLAY_W := 240.0
+## Pack pulls are revealed at Card's LARGE preset - see Card.Size.
+const CARD_DISPLAY_W := Card.PIXELS_LARGE.x
 
 var _cards: Array = []
 var _dust_awarded: int = 0
@@ -92,7 +93,6 @@ func _build_card_node(entry: Dictionary) -> Card:
 		child.queue_free()
 	var data := CardDatabase.get_card(str(entry.get("card_id", "")))
 	var card_node: Card = CardScene.instantiate()
-	card_node.use_text_overlay = false
 	card_node.input_pickable = false
 	card_node.set_process_input(false)
 	_card_slot.add_child(card_node)

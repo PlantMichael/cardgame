@@ -291,12 +291,12 @@
 	{
 		"id": "b_010",
 		"card_name": "Junk Blockade",
-		"cost": 5,
+		"cost": 4,
 		"color": "BLACK",
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "",
-		"description": "Guardian",
+		"description": "If you have less cards in your hand than your opponent, Recon.",
 		"attack": 0,
 		"health": 7,
 		"abilities": [
@@ -322,6 +322,24 @@
 			"rummage_equal_cost"
 		],
 		"art": "res://assets/black/clutterpunk.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_024",
+		"card_name": "Salvager",
+		"cost": 5,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "",
+		"description": "On play: Rummage. A creature rummaged this way gets +1/+1 permanently.",
+		"attack": 5,
+		"health": 5,
+		"abilities": [
+			"rummage_buff_creature"
+		],
+		"art": "res://assets/black/debrishauler.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -400,6 +418,24 @@
 			"stinkpile_passive"
 		],
 		"art": "res://assets/black/stinkpile.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_023",
+		"card_name": "Junksquatch",
+		"cost": 10,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "",
+		"description": "On play: This creature's stats become the number of cards in your graveyard.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"stats_from_graveyard"
+		],
+		"art": "res://assets/black/trashcolossus.png",
 		"effect": "",
 		"effect_value": 0
 	},

@@ -30,6 +30,12 @@ static func score_trade(attacker: Minion, target: Minion, game_state: GameState)
 
 	if we_kill and we_survive:
 		return target.current_attack * 2 + target.current_health + 10
+	# A location can't hit back, so chipping one costs nothing but the swing.
+	# Rated just above the -5 "pointless attack" default (and below any real
+	# trade or a lethal face push) so the AI actually works enemy locations
+	# down instead of ignoring their passive buff all game.
+	elif target.is_location():
+		return 2
 	elif we_kill:
 		var target_value   = target.current_attack   + target.current_health
 		var attacker_value = attacker.current_attack + attacker.current_health

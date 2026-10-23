@@ -15,6 +15,9 @@ var _is_host: bool
 ## whether game-over reports a ladder result and moves matchmaking Elo.
 var is_ranked: bool = false
 var _opponent_rating: int = -1
+## The server's id for this match (the ranked lobby id). Sent with the result
+## so settlement can be made idempotent and tied to a real match.
+var match_id: String = ""
 ## Set when this match is one node of a PvP Campaign run (see main.gd's
 ## _start_campaign_pvp_match) — drives whether game-over shows the
 ## "Continue" (campaign_continue_requested) button instead of "Play Again".
@@ -157,7 +160,9 @@ func start_as_guest(board_node: Board, opponent_name: String = "", ranked: bool 
 # ── Shared helpers ─────────────────────────────────────────────────────────
 
 func _send_state() -> void:
-	Net.relay({"type": "state_update", "state": game_state.to_net_dict()})
+	# Built FOR THE GUEST: the host's hand is reduced to a count, so the
+	# guest's client never receives the identities of cards it must not see.
+	Net.relay({"type": "state_update", "state": game_state.to_net_dict(GUEST_ID)})
 
 func _apply_state(d: Dictionary) -> void:
 	game_state = GameState.from_net_dict(d, GUEST_ID)
@@ -402,14 +407,34 @@ func _host_run_guest_turn() -> void:
 
 # ── Host: pending effects ──────────────────────────────────────────────────
 
+## Works off every queued effect in the order the rules core defines
+## (GameState.PENDING_QUEUES), repeating until nothing is pending.
+##
+## This used to be a fixed six-call sequence. It was missing
+## pending_tank_specialist_buffs entirely - a queue local play does drain - so
+## that buff never happened in a networked match, and it only made one pass,
+## so an effect queued by a later entry sat unresolved.
 func _host_process_pending() -> void:
 	await _host_announce_pending_draws()
-	await _host_process_tank_shots()
-	await _host_process_rummages()
-	await _host_process_nulls()
-	await _host_process_buff_friendly()
-	await _host_process_reinforce_damages()
-	await _host_process_overwatch()
+	for _pass in 16:  # safety cap against a pathological trigger loop
+		if not game_state.has_pending():
+			return
+		for queue_name in GameState.PENDING_QUEUES:
+			if game_state.current_phase == GameState.Phase.GAME_OVER:
+				return
+			var queue: Array = game_state.get(queue_name)
+			if queue.is_empty():
+				continue
+			match queue_name:
+				"pending_tank_shots": await _host_process_tank_shots()
+				"pending_rummages": await _host_process_rummages()
+				"pending_nulls": await _host_process_nulls()
+				"pending_buff_friendly_health": await _host_process_buff_friendly()
+				"pending_tank_specialist_buffs": await _host_process_tank_specialist_buffs()
+				"pending_on_reinforce_damages": await _host_process_reinforce_damages()
+				"pending_overwatch_challenges": await _host_process_overwatch()
+			if not is_instance_valid(board):
+				return
 
 func _host_announce_pending_draws() -> void:
 	if game_state.pending_drawn_cards.is_empty() and game_state.pending_fatigue_damage.is_empty():
@@ -472,6 +497,7 @@ func _host_process_rummages() -> void:
 		var type_filter: String = entry.get("type_filter", "")
 		var play_it: bool = entry.get("play_it", false)
 		var discount: bool = entry.get("discount", true)
+		var buff_creature: bool = entry.get("buff_creature", false)
 		var options = game_state.get_rummage_options(player_id, max_cost, type_filter)
 		if options.is_empty():
 			continue
@@ -490,7 +516,7 @@ func _host_process_rummages() -> void:
 					chosen = o
 					break
 		if chosen != null:
-			var placed: Minion = game_state.complete_rummage(player_id, chosen, play_it, discount)
+			var placed: Minion = game_state.complete_rummage(player_id, chosen, play_it, discount, buff_creature)
 			board.refresh()
 			_send_state()
 			if placed != null:
@@ -550,6 +576,42 @@ func _host_process_buff_friendly() -> void:
 				board.log_action("Opponent's Moonchild gave %s +1 max health" % t.data.card_name)
 				_relay_log("Your Moonchild gave %s +1 max health" % t.data.card_name)
 				game_state.apply_buff_friendly_health(t)
+		board.refresh()
+		_send_state()
+
+## Tank Specialist's +1/+2 after a friendly Tank dies.
+##
+## This queue had no multiplayer handler at all: _host_process_pending() ran
+## six of the rules core's seven queues and simply never drained
+## pending_tank_specialist_buffs, so the buff that fires in a local match
+## silently never happened in a networked one. Entries also accumulated in the
+## queue for the rest of the match.
+func _host_process_tank_specialist_buffs() -> void:
+	while not game_state.pending_tank_specialist_buffs.is_empty():
+		var player_id: String = game_state.pending_tank_specialist_buffs.pop_front()
+		var p := game_state.player if player_id == HOST_ID else game_state.opponent
+		var tanks: Array[Minion] = []
+		for m in p.board:
+			if m.data.tribe == "tank":
+				tanks.append(m)
+		if tanks.is_empty():
+			continue
+		if player_id == HOST_ID:
+			board.start_buff_friendly_targeting(null, "tank")
+			var target: Minion = await board.buff_friendly_target_selected
+			if target != null and target in game_state.player.board and target.data.tribe == "tank":
+				board.log_action("Tank Specialist buffed %s (+1/+2)" % target.data.card_name)
+				_relay_log("Opponent's Tank Specialist buffed %s (+1/+2)" % target.data.card_name)
+				game_state.apply_tank_specialist_buff(target)
+		else:
+			Net.relay({"type": "prompt_tank_specialist"})
+			_send_state()
+			var resp: Dictionary = await Net.await_relay_of_type("response_tank_specialist")
+			var t := _find_minion_anywhere(str(resp.get("target_id", "")))
+			if t != null and t in game_state.opponent.board and t.data.tribe == "tank":
+				board.log_action("Opponent's Tank Specialist buffed %s (+1/+2)" % t.data.card_name)
+				_relay_log("Your Tank Specialist buffed %s (+1/+2)" % t.data.card_name)
+				game_state.apply_tank_specialist_buff(t)
 		board.refresh()
 		_send_state()
 
@@ -875,10 +937,12 @@ func _host_stratagem_followup(card_data: CardData, target_minion: Minion) -> voi
 			game_state.apply_heal_buff(recipient, 2)
 			board.refresh()
 			_send_state()
-	if card_data.effect == "sanguine" and not game_state.player.board.is_empty():
-		board.start_buff_friendly_targeting()
+	# "...give it to ANOTHER creature you control" - donor excluded.
+	var sanguine_targets := game_state.sanguine_recipients(HOST_ID, target_minion)
+	if card_data.effect == "sanguine" and not sanguine_targets.is_empty():
+		board.start_buff_friendly_targeting(target_minion)
 		var recipient: Minion = await board.buff_friendly_target_selected
-		if recipient != null and recipient in game_state.player.board:
+		if recipient != null and recipient in sanguine_targets:
 			game_state.apply_heal_buff(recipient, 2)
 			board.refresh()
 			_send_state()
@@ -902,6 +966,23 @@ func _host_stratagem_followup_for_guest(card_data: CardData, target_minion: Mini
 					game_state._try_heal_to_draw(target_minion, target_minion.current_health - pre)
 				board.refresh()
 				_send_state()
+	# Poke Bear's challenge: the host path has always had this, the guest path
+	# never did, so a guest playing it got no challenge at all. Latent today -
+	# no card currently carries effect "poke_bear" - but the handler exists on
+	# one side only, which is exactly the asymmetry that bites when one is
+	# added.
+	if card_data.effect == "poke_bear" and target_minion != null:
+		if target_minion in game_state.opponent.board and target_minion.has_ability(Abilities.YETI) 				and not game_state.player.board.is_empty():
+			Net.relay({"type": "prompt_challenge", "challenger_id": target_minion.instance_id})
+			_send_state()
+			var poke_resp: Dictionary = await Net.await_relay_of_type("response_challenge")
+			var poke_target := _find_minion(HOST_ID, str(poke_resp.get("target_id", "")))
+			if poke_target != null:
+				game_state.apply_challenge(target_minion, poke_target)
+				await board.animate_creature_challenge(target_minion.instance_id, GUEST_ID, poke_target.instance_id)
+				_relay_animate_challenge(target_minion.instance_id, GUEST_ID, poke_target.instance_id)
+				board.refresh()
+				_send_state()
 	if card_data.effect == "blood_transfusion" and target_minion != null and not game_state.opponent.board.is_empty():
 		Net.relay({"type": "prompt_buff_friendly"})
 		_send_state()
@@ -911,12 +992,15 @@ func _host_stratagem_followup_for_guest(card_data: CardData, target_minion: Mini
 			game_state.apply_heal_buff(t, 2)
 			board.refresh()
 			_send_state()
-	if card_data.effect == "sanguine" and not game_state.opponent.board.is_empty():
+	# "...give it to ANOTHER creature you control" - donor excluded, same as
+	# the host and simulation paths.
+	var guest_sanguine_targets := game_state.sanguine_recipients(GUEST_ID, target_minion)
+	if card_data.effect == "sanguine" and not guest_sanguine_targets.is_empty():
 		Net.relay({"type": "prompt_buff_friendly"})
 		_send_state()
 		var resp: Dictionary = await Net.await_relay_of_type("response_buff_friendly")
 		var t := _find_minion(GUEST_ID, str(resp.get("target_id", "")))
-		if t != null and t in game_state.opponent.board:
+		if t != null and t in guest_sanguine_targets:
 			game_state.apply_heal_buff(t, 2)
 			board.refresh()
 			_send_state()
@@ -1049,6 +1133,10 @@ func _guest_respond_to_prompt(prompt: Dictionary) -> void:
 			board.start_buff_friendly_targeting()
 			var target: Minion = await board.buff_friendly_target_selected
 			Net.relay({"type": "response_buff_friendly", "target_id": target.instance_id if target != null else ""})
+		"prompt_tank_specialist":
+			board.start_buff_friendly_targeting(null, "tank")
+			var tank_target: Minion = await board.buff_friendly_target_selected
+			Net.relay({"type": "response_tank_specialist", "target_id": tank_target.instance_id if tank_target != null else ""})
 		"prompt_on_play_damage":
 			board.start_on_play_damage_targeting()
 			var result = await board.on_play_damage_target_selected
@@ -1151,7 +1239,7 @@ func _report_and_show_game_over(won: bool) -> void:
 		var old_bracket := Auth.rank_bracket
 		var old_in_legend := Auth.rank_in_legend
 		var old_legend_rating := Auth.rank_legend_rating
-		Auth.report_ranked_result(won, _opponent_rating)
+		Auth.report_ranked_result(won, _opponent_rating, match_id)
 		board.show_game_over(won, true, old_bracket, old_in_legend, old_legend_rating)
 	elif is_campaign:
 		board.show_game_over(won, false, 0, false, 0, true)

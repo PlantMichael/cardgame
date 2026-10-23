@@ -47,6 +47,16 @@ const MONSTROSITY                    = "monstrosity"
 const BROODTENDER_AURA               = "broodtender_aura"
 const GROWVIN_AURA                   = "growvin_aura"
 const ON_FRIENDLY_TRANSFORM_BUFF_SELF = "on_friendly_transform_buff_self"
+const ON_FRIENDLY_DEATH_REINFORCE     = "on_friendly_death_reinforce"
+const ON_PLAY_HEALTH_PER_FRIENDLY     = "on_play_health_per_friendly"
+const DEATHRATTLE_TRANSFORM           = "deathrattle_transform"
+const END_TURN_DRAIN_RANDOM_ENEMY     = "end_turn_drain_random_enemy"
+const STATS_FROM_GRAVEYARD            = "stats_from_graveyard"
+const RUMMAGE_BUFF_CREATURE           = "rummage_buff_creature"
+const END_TURN_HEAL_MECHS             = "end_turn_heal_mechs"
+const END_TURN_YETI_DISCOUNT          = "end_turn_yeti_discount"
+const TWO_SLOT                        = "two_slot"
+const TRAMPLE                         = "trample"
 
 const DEFINITIONS: Dictionary = {
 	GUARDIAN:              { "display": "Guardian",    "color": Color(0.55, 0.42, 0.08) },
@@ -79,6 +89,9 @@ const DEFINITIONS: Dictionary = {
 	ON_PLAY_TRANSFORM_CHOICE:     { "display": "On Play: Morph",  "color": Color(0.80, 0.25, 0.10) },
 	ON_PLAY_TRANSFORM:            { "display": "On Play: Morph",  "color": Color(0.80, 0.25, 0.10) },
 	ON_PLAY_BUFF_FRIENDLY_HEALTH: { "display": "On Play:",        "color": Color(0.20, 0.55, 0.75) },
+	ON_PLAY_RESTORE_HEALTH:      { "display": "On Play:",        "color": Color(0.20, 0.55, 0.75) },
+	ON_PLAY_BUFF_OTHER_FRIENDLY: { "display": "On Play:",        "color": Color(0.20, 0.55, 0.75) },
+	ON_PLAY_DAMAGE_HIGH_ATTACK:  { "display": "On Play:",        "color": Color(0.20, 0.55, 0.75) },
 	WHEN_ATTACKED_BUFF_FRIENDLY:  { "display": "Lifegift",        "color": Color(0.70, 0.25, 0.45) },
 	APOTHECARY:                   { "display": "Apothecary",      "color": Color(0.25, 0.65, 0.35) },
 	MIRROR_TRANSFORM:             { "display": "Mimic",           "color": Color(0.80, 0.25, 0.10) },
@@ -118,6 +131,16 @@ const DEFINITIONS: Dictionary = {
 	ON_PLAY_VOIDTOUCH_IF_RUMMAGED:    { "display": "On Play:",       "color": Color(0.45, 0.10, 0.65) },
 	FEAST_ATTENDANT:                  { "display": "Feast",          "color": Color(0.70, 0.25, 0.45) },
 	ON_PLAY_DEVOUR_ALL:               { "display": "On Play:",       "color": Color(0.55, 0.10, 0.20) },
+	ON_FRIENDLY_DEATH_REINFORCE:      { "display": "Rally",          "color": Color(0.15, 0.55, 0.25) },
+	ON_PLAY_HEALTH_PER_FRIENDLY:      { "display": "On Play:",       "color": Color(0.20, 0.55, 0.75) },
+	DEATHRATTLE_TRANSFORM:            { "display": "On Death:",      "color": Color(0.50, 0.20, 0.60) },
+	END_TURN_DRAIN_RANDOM_ENEMY:      { "display": "Siphon",         "color": Color(0.65, 0.10, 0.20) },
+	STATS_FROM_GRAVEYARD:             { "display": "Scrapbuilt",     "color": Color(0.30, 0.08, 0.42) },
+	RUMMAGE_BUFF_CREATURE:            { "display": "Refurbish",      "color": Color(0.30, 0.08, 0.42) },
+	END_TURN_HEAL_MECHS:              { "display": "Repair Bay",     "color": Color(0.60, 0.38, 0.08) },
+	END_TURN_YETI_DISCOUNT:           { "display": "Provision",      "color": Color(0.45, 0.70, 0.85) },
+	TWO_SLOT:                         { "display": "Colossal",       "color": Color(0.45, 0.70, 0.85) },
+	TRAMPLE:                          { "display": "Trample",        "color": Color(0.70, 0.30, 0.10) },
 }
 
 const ON_PLAY_DAMAGE             = "on_play_damage"
@@ -130,6 +153,13 @@ const COMBAT_IMMUNE              = "combat_immune"
 const ON_PLAY_TRANSFORM_CHOICE   = "on_play_transform_choice"
 const ON_PLAY_TRANSFORM          = "on_play_transform"
 const ON_PLAY_BUFF_FRIENDLY_HEALTH = "on_play_buff_friendly_health"
+## Targeted on-play effects. Each opens a GameState pending choice rather than
+## resolving against a target the caller picked, so legality is decided once
+## in the rules core and every mode (human, AI, host, guest, search) answers
+## the same question. See GameState's "Pending choices" section.
+const ON_PLAY_RESTORE_HEALTH       = "on_play_restore_health"
+const ON_PLAY_BUFF_OTHER_FRIENDLY  = "on_play_buff_other_friendly"
+const ON_PLAY_DAMAGE_HIGH_ATTACK   = "on_play_damage_high_attack"
 const WHEN_ATTACKED_BUFF_FRIENDLY  = "when_attacked_buff_friendly"
 const APOTHECARY                   = "apothecary"
 const MIRROR_TRANSFORM                    = "mirror_transform"
@@ -167,8 +197,40 @@ const KEYWORD_TOOLTIPS: Array[String] = [
 	ON_FRIENDLY_YETI_DEATH_BUFF, ON_FRIENDLY_MECH_DEATH_BUFF,
 	STINKPILE_PASSIVE, HEAL_TO_DRAW,
 	DUAL_STRIKE, VOIDTOUCH, AMBUSH, REJUVENATE, FEAST_ATTENDANT,
+	TRAMPLE, TWO_SLOT,
 	YETI, MECH, TANK, SPRITE,
 ]
+
+## Reinforce with a finite number of returns. "reinforce" is one return;
+## "reinforce_4" is four (Commander Maurice).
+##
+## Deliberately ONE ability carrying its remaining count, not N repeated
+## "reinforce" entries. With repeats, a single death fires the handler once
+## per entry - several copies from one death - and each copy drops only one
+## entry while inheriting the rest from the card definition, so the budget
+## never really runs down.
+func is_reinforce(ability: String) -> bool:
+	return ability == REINFORCE or ability.begins_with(REINFORCE + "_")
+
+func get_reinforce_uses(ability: String) -> int:
+	if ability == REINFORCE:
+		return 1
+	if ability.begins_with(REINFORCE + "_"):
+		return maxi(0, int(ability.substr(REINFORCE.length() + 1)))
+	return 0
+
+## Returns left on a live creature, across however it is spelled.
+func reinforce_uses_of(minion: Minion) -> int:
+	var best := 0
+	for ability in minion.abilities:
+		best = maxi(best, get_reinforce_uses(ability))
+	return best
+
+## The ability string for `uses` remaining, or "" for none left.
+func reinforce_ability(uses: int) -> String:
+	if uses <= 0:
+		return ""
+	return REINFORCE if uses == 1 else "%s_%d" % [REINFORCE, uses]
 
 func is_tribe(ability: String) -> bool:
 	return ability in TRIBES
@@ -369,14 +431,16 @@ func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 					gs.apply_transform_choice(minion, minion.data.transform_into)
 			ON_PLAY_BUFF_FRIENDLY_HEALTH:
 				gs.pending_buff_friendly_health.append(owner.player_id)
+			ON_PLAY_RESTORE_HEALTH:
+				gs.request_choice(owner.player_id, GameState.CHOICE_RESTORE_HEALTH, 1, minion)
+			ON_PLAY_BUFF_OTHER_FRIENDLY:
+				gs.request_choice(owner.player_id, GameState.CHOICE_BUFF_OTHER_FRIENDLY, 1, minion)
+			ON_PLAY_DAMAGE_HIGH_ATTACK:
+				gs.request_choice(owner.player_id, GameState.CHOICE_DAMAGE_HIGH_ATTACK, 4, minion)
 			ON_PLAY_RUMMAGE_BUFF:
 				if minion.data.rummage_count > 0:
 					minion.current_attack += minion.data.rummage_count
-					var pre := minion.current_health
-					minion.current_health += minion.data.rummage_count
-					minion.max_health += minion.data.rummage_count
-					gs._try_heal_to_draw(minion, minion.current_health - pre)
-					gs._try_apothecary_bonus(owner.player_id, minion)
+					gs.gain_max_health(minion, minion.data.rummage_count)
 			ON_PLAY_BUFF_FRIENDLY_YETI_ATK:
 				for m in owner.board:
 					if m != minion and m.has_ability(YETI):
@@ -385,27 +449,31 @@ func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 				for m in owner.board:
 					if m != minion and m.has_ability(YETI):
 						minion.current_attack += 2
-						var pre := minion.current_health
-						minion.current_health += 1
-						minion.max_health += 1
-						gs._try_heal_to_draw(minion, minion.current_health - pre)
-						gs._try_apothecary_bonus(owner.player_id, minion)
+						gs.gain_max_health(minion, 1)
 						break
 			GROWVIN_AURA:
 				for m in owner.board:
 					if m != minion and m.has_ability(MECH):
 						gs._apply_growvin_aura_to_mech(m, owner.player_id)
 			ON_PLAY_BUFF_ALL_FRIENDLY_HEALTH:
-				for m in owner.board:
-					var pre := m.current_health
-					m.current_health += 1
-					m.max_health += 1
-					gs._try_heal_to_draw(m, m.current_health - pre)
 				for m in owner.board.duplicate():
-					gs._try_apothecary_bonus(owner.player_id, m)
+					gs.gain_max_health(m, 1)
 			ON_PLAY_VOIDTOUCH_IF_RUMMAGED:
 				if minion.data.rummage_count > 0 and not minion.has_ability(VOIDTOUCH):
 					minion.abilities.append(VOIDTOUCH)
+			ON_PLAY_HEALTH_PER_FRIENDLY:
+				var others: int = owner.board.size() - 1
+				if others > 0:
+					gs.gain_max_health(minion, others)
+			STATS_FROM_GRAVEYARD:
+				# Floors at 1 so playing this on an empty graveyard doesn't put
+				# a 0/0 on the board that instantly dies.
+				var pile: int = maxi(1, owner.graveyard.size())
+				minion.current_attack = pile
+				minion.max_health = pile
+				minion.current_health = pile
+			RUMMAGE_BUFF_CREATURE:
+				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": minion.data.cost, "type_filter": "", "buff_creature": true})
 			ON_PLAY_DEVOUR_ALL:
 				var total_atk := 0
 				var total_hp := 0
@@ -419,18 +487,24 @@ func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 				gs._remove_dead_minions()
 				if minion in owner.board:
 					minion.current_attack += total_atk
-					var pre := minion.current_health
-					minion.current_health += total_hp
-					minion.max_health += total_hp
-					gs._try_heal_to_draw(minion, minion.current_health - pre)
-					gs._try_apothecary_bonus(owner.player_id, minion)
+					gs.gain_max_health(minion, total_hp)
 				gs._check_win_condition()
 	for ability in minion.abilities:
 		if is_on_play_aoe_enemy(ability):
 			var damage = get_on_play_aoe_enemy_value(ability)
 			var enemy = gs.opponent if owner == gs.player else gs.player
+			# Through the shared damage path, with this creature's controller
+			# as the source: take_damage() writes to the creature directly and
+			# skips the enemy-damage amplification that every other on-play
+			# damage route applies, so an amplified board wiped for the
+			# printed number instead of the amplified one.
+			#
+			# Damage is dealt to the whole group BEFORE any removal, so
+			# simultaneous lethal damage stays simultaneous (see
+			# GameState._remove_dead_minions).
+			var amp := gs._get_enemy_damage_amp(owner.player_id)
 			for m in enemy.board.duplicate():
-				m.take_damage(damage)
+				m.take_damage(damage + amp)
 			gs._remove_dead_minions()
 			gs._check_win_condition()
 			break
@@ -440,12 +514,8 @@ func fire_on_attack(attacker: Minion, owner: PlayerState, gs: GameState) -> void
 		match ability:
 			ATTACK_BUFF_FRIENDLY_HEALTH:
 				if not owner.board.is_empty():
-					var target := owner.board[randi() % owner.board.size()]
-					var pre := target.current_health
-					target.current_health += 1
-					target.max_health += 1
-					gs._try_heal_to_draw(target, target.current_health - pre)
-					gs._try_apothecary_bonus(owner.player_id, target)
+					var target: Minion = gs.rand_pick(owner.board)
+					gs.gain_max_health(target, 1)
 			ATTACK_RUMMAGE:
 				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": attacker.data.cost, "type_filter": ""})
 
@@ -453,47 +523,43 @@ func fire_on_defend(defender: Minion, owner: PlayerState, gs: GameState) -> void
 	for ability in defender.abilities:
 		match ability:
 			WHEN_ATTACKED_BUFF_FRIENDLY:
-				for m in owner.board:
-					var pre := m.current_health
-					m.current_health += 1
-					m.max_health += 1
-					gs._try_heal_to_draw(m, m.current_health - pre)
 				for m in owner.board.duplicate():
-					gs._try_apothecary_bonus(owner.player_id, m)
+					gs.gain_max_health(m, 1)
+
+## Where to put a replacement creature back on the board.
+##
+## The slot recorded when a creature died can be past the end of the board by
+## the time its death trigger runs: deaths resolve in GROUPS (see
+## GameState._remove_dead_minions), so several creatures may have been removed
+## between the position being recorded and this firing. Array.insert() with an
+## out-of-range index logs an error and does nothing at all, so the
+## replacement was silently never placed - a Reinforce that simply did not
+## happen whenever its creature died alongside others.
+func _safe_board_index(owner: PlayerState, board_index: int) -> int:
+	return clampi(board_index, 0, owner.board.size())
 
 func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: PlayerState, gs: GameState) -> Dictionary:
 	var drawn: Array[CardData] = []
 	var tank_shots: int = 0
+	# Reinforce resolves once per death, before the ability loop, so a
+	# creature with several returns left still comes back exactly once and
+	# the replacement carries the reduced budget.
+	var reinforce_uses := reinforce_uses_of(minion)
+	if reinforce_uses > 0:
+		_reinforce_minion(minion, owner, board_index, gs, reinforce_uses - 1)
 	for ability in minion.abilities:
 		match ability:
-			REINFORCE:
-				var copy = Minion.new(minion.data, minion.owner_id)
-				copy.abilities.erase(REINFORCE)
-				copy.is_newly_reinforced = true
-				owner.board.insert(board_index, copy)
-				for m in owner.board:
-					if m != copy and m.has_ability(TACTICAL_OFFICER):
-						copy.current_attack += 1
-				for ab in minion.abilities:
-					if is_on_reinforce_damage(ab):
-						gs.pending_on_reinforce_damages.append({"player_id": owner.player_id, "damage": get_on_reinforce_damage_value(ab), "source": minion.data.card_name})
-						break
-				for watcher in owner.board:
-					for ab in watcher.abilities:
-						if is_on_any_reinforce_shot(ab):
-							gs.pending_on_reinforce_damages.append({"player_id": watcher.owner_id, "damage": get_on_any_reinforce_shot_value(ab), "source": watcher.data.card_name})
-							break
 			DEATHRATTLE_DRAW_YETI:
-				var card = _draw_by_tag(owner, YETI)
+				var card = _draw_by_tag(owner, YETI, gs)
 				if card:
 					drawn.append(card)
 			DEATHRATTLE_DRAW_TANK:
-				var card = _draw_by_tag(owner, TANK)
+				var card = _draw_by_tag(owner, TANK, gs)
 				if card:
 					drawn.append(card)
 			DEATHRATTLE_DRAW_CARD:
 				if not owner.deck.is_empty() and owner.hand.size() < owner.MAX_HAND_SIZE:
-					var card: CardData = owner.deck.pop_back().duplicate()
+					var card: CardData = owner.deck.pop_back().new_instance(owner.mint_card_uid())
 					owner.hand.append(card)
 					drawn.append(card)
 			RUMMAGE_ON_DEATH:
@@ -504,7 +570,20 @@ func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": -1, "type_filter": "stratagem", "discount": false})
 			DEATHRATTLE_RUMMAGE_CREATURE:
 				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": -1, "type_filter": "creature_nonlegendary", "discount": false})
+			DEATHRATTLE_TRANSFORM:
+				if not minion.data.transform_into.is_empty():
+					var new_data = CardDatabase.get_card(minion.data.transform_into)
+					if new_data != null:
+						var new_minion = Minion.new(new_data, minion.owner_id)
+						new_minion.is_newly_reinforced = true
+						owner.board.insert(_safe_board_index(owner, board_index), new_minion)
 			DEATHRATTLE_AOE_TRANSFORM:
+				# Unamplified, deliberately. _get_enemy_damage_amp() is the
+				# bonus a player's own board adds to damage THEY deal to the
+				# enemy; this hits both boards symmetrically, so there is no
+				# single amp that applies to all of it. Amplifying only the
+				# enemy half is defensible but is a rules decision nobody has
+				# made - see .docs/abilities.md, "damage amplification scope".
 				for p in [gs.player, gs.opponent]:
 					for m in p.board:
 						m.take_damage(1)
@@ -513,13 +592,13 @@ func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 					if new_data != null:
 						var new_minion = Minion.new(new_data, minion.owner_id)
 						new_minion.is_newly_reinforced = true
-						owner.board.insert(board_index, new_minion)
+						owner.board.insert(_safe_board_index(owner, board_index), new_minion)
 			EJECT_PILOT_ON_DEATH:
 				if minion.is_piloted and minion.piloted_by != null:
-					if owner.board.size() < PlayerState.MAX_BOARD_SIZE:
+					if owner.has_room_for(minion.piloted_by.abilities):
 						var pilot_minion = Minion.new(minion.piloted_by, minion.owner_id)
 						pilot_minion.is_newly_reinforced = true
-						owner.board.insert(board_index, pilot_minion)
+						owner.board.insert(_safe_board_index(owner, board_index), pilot_minion)
 					elif owner.hand.size() < owner.MAX_HAND_SIZE:
 						owner.hand.append(minion.piloted_by)
 			GROWVIN_AURA:
@@ -527,6 +606,8 @@ func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 	for ability in minion.abilities:
 		if is_deathrattle_damage_all_except_mech(ability):
 			var damage = get_deathrattle_damage_all_except_mech_value(ability)
+			# Unamplified for the same reason as DEATHRATTLE_AOE_TRANSFORM
+			# above: this hits both boards.
 			for p in [gs.player, gs.opponent]:
 				for m in p.board:
 					if m.has_ability(MECH):
@@ -536,11 +617,7 @@ func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 	if YETI in minion.abilities:
 		for watcher in owner.board:
 			if watcher.has_ability(ON_FRIENDLY_YETI_DEATH_BUFF):
-				var pre := watcher.current_health
-				watcher.current_health += 2
-				watcher.max_health += 2
-				gs._try_heal_to_draw(watcher, watcher.current_health - pre)
-				gs._try_apothecary_bonus(owner.player_id, watcher)
+				gs.gain_max_health(watcher, 2)
 		for watcher in owner.board:
 			if watcher.has_ability(ON_YETI_DEATH_CHALLENGE):
 				gs.pending_overwatch_challenges.append(owner.player_id)
@@ -549,37 +626,77 @@ func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 		for watcher in owner.board:
 			if watcher.has_ability(ON_FRIENDLY_MECH_DEATH_BUFF):
 				watcher.current_attack += 1
-				var pre := watcher.current_health
-				watcher.current_health += 1
-				watcher.max_health += 1
-				gs._try_heal_to_draw(watcher, watcher.current_health - pre)
-				gs._try_apothecary_bonus(owner.player_id, watcher)
+				gs.gain_max_health(watcher, 1)
+	# Corporal Garrick. The dying minion is already off the board by the time
+	# this runs, so a lone Garrick can never save itself - only the creatures
+	# it outlives.
+	if owner.player_id not in gs.death_reinforce_used:
+		for watcher in owner.board:
+			if not watcher.has_ability(ON_FRIENDLY_DEATH_REINFORCE):
+				continue
+			if not owner.has_room_for(minion.data.abilities):
+				break
+			gs.death_reinforce_used.append(owner.player_id)
+			# Garrick's save is its own effect, not a Reinforce use: a saved
+			# creature keeps whatever returns it still had.
+			_reinforce_minion(minion, owner, board_index, gs, reinforce_uses_of(minion))
+			break
 	return {"drawn": drawn, "tank_shots": tank_shots}
+
+## Puts a fresh copy of `minion` back on the board at `board_index` and fires
+## everything that watches for a reinforce. Shared by the Reinforce keyword
+## and Corporal Garrick's once-per-turn save. The copy never keeps REINFORCE
+## itself, so nothing can chain-revive forever.
+func _reinforce_minion(minion: Minion, owner: PlayerState, board_index: int, gs: GameState,
+					   remaining_uses: int = 0) -> Minion:
+	var copy := Minion.new(minion.data, minion.owner_id)
+	# The copy is built from the card DEFINITION, so it starts with whatever
+	# Reinforce is printed on the card. Strip that and put back only what is
+	# actually left, or a returned Maurice would be handed a fresh four.
+	var kept: Array[String] = []
+	for ab in copy.abilities:
+		if not is_reinforce(ab):
+			kept.append(ab)
+	copy.abilities = kept
+	var carried := reinforce_ability(remaining_uses)
+	if not carried.is_empty():
+		copy.abilities.append(carried)
+	copy.is_newly_reinforced = true
+	owner.board.insert(_safe_board_index(owner, board_index), copy)
+	for m in owner.board:
+		if m != copy and m.has_ability(TACTICAL_OFFICER):
+			copy.current_attack += 1
+	for ab in minion.abilities:
+		if is_on_reinforce_damage(ab):
+			gs.pending_on_reinforce_damages.append({"player_id": owner.player_id, "damage": get_on_reinforce_damage_value(ab), "source": minion.data.card_name})
+			break
+	for watcher in owner.board:
+		for ab in watcher.abilities:
+			if is_on_any_reinforce_shot(ab):
+				gs.pending_on_reinforce_damages.append({"player_id": watcher.owner_id, "damage": get_on_any_reinforce_shot_value(ab), "source": watcher.data.card_name})
+				break
+	return copy
 
 func fire_on_rummage(owner: PlayerState, gs: GameState) -> void:
 	for m in owner.board:
 		if m.has_ability(RUMMAGE_BUFF):
-			var pre := m.current_health
-			m.current_health += 1
-			m.max_health += 1
-			gs._try_heal_to_draw(m, m.current_health - pre)
-			gs._try_apothecary_bonus(owner.player_id, m)
+			gs.gain_max_health(m, 1)
 	for m in owner.board:
 		if m.has_ability(RUMMAGE_DRAW):
 			var drawn = owner.draw_card()
 			if drawn != null and owner.player_id == gs.player.player_id:
 				gs.pending_drawn_cards.append(drawn)
 
-func _draw_by_tag(owner: PlayerState, tag: String) -> CardData:
+func _draw_by_tag(owner: PlayerState, tag: String, gs: GameState) -> CardData:
 	var matching: Array[CardData] = []
 	for card in owner.deck:
 		if tag in card.abilities:
 			matching.append(card)
 	if matching.is_empty() or owner.hand.size() >= owner.MAX_HAND_SIZE:
 		return null
-	var chosen: CardData = matching[randi() % matching.size()]
+	var chosen: CardData = gs.rand_pick(matching)
 	owner.deck.erase(chosen)
-	var copy: CardData = chosen.duplicate()
+	var copy: CardData = chosen.new_instance(owner.mint_card_uid())
 	owner.hand.append(copy)
 	return copy
 	return copy

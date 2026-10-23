@@ -50,11 +50,10 @@ static func play_flight(card_id: String, ghost: Card, board: Node2D, start_pos: 
 ## loop below covers a lot more ground in less time than the original pass,
 ## so it reads as noticeably quicker despite the longer path.
 ##
-## Pure cubic-Bezier position/scale tween - no node rotation - card.gd's
-## _update_mesh_transform() reads the node's full transform (including
-## rotation) to size the 3D mesh rect, and a rotated bounding box there
-## reads as a skewed/stretched card rather than a banked one, so this keeps
-## the card upright and only moves position and scale. A single continuous
+## Pure cubic-Bezier position/scale tween - no node rotation. A card's frame
+## art, stat boxes and text all read as upright plates, so banking one mid-
+## flight reads as a skewed card rather than a turning one; this keeps it
+## upright and only moves position and scale. A single continuous
 ## Bezier eased with TRANS_QUART (see below) is what keeps a faster,
 ## farther loop with a real speed-up/slow-down feel still reading as smooth
 ## flight rather than a jerky cut between speeds.
@@ -146,30 +145,30 @@ static func _shake_board(board: Node2D) -> void:
 
 ## A rough puddle of black sludge (a handful of overlapping dark blobs, not
 ## a single perfect circle) centered on where `card` landed - holds briefly
-## then dissolves quickly. Inserted right before Card3DLayer in Board's
-## child list (found via its "card_3d_layer" group - see card.gd's _ready())
-## rather than just appended last: same z_index as Board's own full-screen
-## Background, so draw order between same-z_index siblings falls back to
-## tree order - appending last put it after (on top of) Card3DLayer, but
-## slotting it in right before instead puts it after Background yet still
-## under the card's own 3D mesh, where a landing puddle actually belongs.
+## then dissolves quickly. Slotted in right after Board's own full-screen
+## Background rather than just appended last: it shares that Background's
+## z_index, so draw order between same-z_index siblings falls back to tree
+## order - appending last put the puddle on top of every board zone (and so
+## on top of the card itself), while sitting right after Background puts it
+## above the battlefield but under the cards, where a landing puddle
+## actually belongs.
 static func _spawn_sludge(card: Card, board: Node2D, target_scale: Vector2) -> void:
 	var card_size: Vector2 = Card.CARD_SIZE * target_scale
 	var center: Vector2 = card.global_position + card_size * 0.5
 	var puddle := Node2D.new()
 	puddle.modulate.a = 0.0
 	board.add_child(puddle)
-	var card_layer := board.get_tree().get_first_node_in_group("card_3d_layer")
-	if card_layer and card_layer.get_parent() == board:
-		board.move_child(puddle, card_layer.get_index())
+	var background := board.get_node_or_null(^"Background")
+	if background:
+		board.move_child(puddle, background.get_index() + 1)
 	puddle.global_position = center
 
 	# Spread scaled off the card's own on-screen size, wide enough that
 	# blobs land past its edges (roughly its half-width/half-height, biased
 	# a bit further down than up - sludge pooling at the base of impact)
-	# instead of sitting entirely underneath it, fully hidden by its opaque
-	# mesh - see this function's earlier note on why it draws behind the
-	# card in the first place.
+	# instead of sitting entirely underneath it, fully hidden by the card's
+	# own opaque frame - see this function's earlier note on why it draws
+	# behind the card in the first place.
 	const NUM_BLOBS := 8
 	for i in NUM_BLOBS:
 		var blob := Panel.new()

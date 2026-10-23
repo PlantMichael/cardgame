@@ -152,16 +152,35 @@
 		"effect_value": 0
 	},
 	{
-		"id": "cr_021",
-		"card_name": "Flesh Priest",
+		"id": "cr_027",
+		"card_name": "Cornered Hunter",
 		"cost": 3,
 		"color": "CRIMSON",
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "When a friendly creature transforms, give it Ambush.",
+		"description": "On death: Transform into a 3/3 monstrosity.",
 		"attack": 3,
 		"health": 3,
+		"abilities": [
+			"deathrattle_transform"
+		],
+		"transform_into": "cr_009t",
+		"art": "res://assets/crimson/ghoulhunter.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_021",
+		"card_name": "Crypt Chapel",
+		"cost": 3,
+		"color": "CRIMSON",
+		"card_type": "LOCATION",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "When a friendly creature transforms, give it Ambush.",
+		"attack": 0,
+		"health": 8,
 		"abilities": [
 			"on_friendly_transform_give_ambush"
 		],
@@ -389,6 +408,24 @@
 		"effect_value": 0
 	},
 	{
+		"id": "cr_028",
+		"card_name": "Animus Hoarder",
+		"cost": 7,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "monstrosity",
+		"description": "At the end of your turn, steal 1 health from a random enemy creature.",
+		"attack": 7,
+		"health": 6,
+		"abilities": [
+			"end_turn_drain_random_enemy"
+		],
+		"art": "res://assets/crimson/fleshraker.png",
+		"effect": "",
+		"effect_value": 0
+	},
+{
 		"id": "cr_013",
 		"card_name": "Fleshraker",
 		"cost": 8,
@@ -683,6 +720,24 @@
 		"description": "",
 		"attack": 1,
 		"health": 1,
+		"abilities": [],
+		"transform_into": "",
+		"is_token": true,
+		"art": "res://assets/crimson/wardinggargoyle.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "cr_009t",
+		"card_name": "Desperate Mauler",
+		"cost": 1,
+		"color": "CRIMSON",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "monstrosity",
+		"description": "",
+		"attack": 3,
+		"health": 3,
 		"abilities": [],
 		"transform_into": "",
 		"is_token": true,

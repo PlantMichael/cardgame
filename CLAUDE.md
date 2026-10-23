@@ -14,5 +14,6 @@ Guidance for Claude Code when working in this repository.
 | [Game Logic](.docs/game-logic.md) | minion.gd, player_state.gd, game_state.gd reference |
 | [Abilities](.docs/abilities.md) | Ability constants, how to add new abilities |
 | [AI](.docs/ai.md) | AI controller decision priority and behavior |
+| [Quests](.docs/quests.md) | Daily/weekly quest pool schema, track keys, filters, reward sizing |
 | [Conventions](.docs/conventions.md) | Coding style, IDs, board refresh rules, input handling, scene structure |
 | [Status](.docs/status.md) | What's working, TODO list, next steps |

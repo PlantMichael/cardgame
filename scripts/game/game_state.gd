@@ -20,6 +20,11 @@ var pending_tank_specialist_buffs: Array[String] = []
 var pending_on_reinforce_damages: Array[Dictionary] = []
 var temp_shielded: Array[Dictionary] = []
 var growvin_granted: Array[Dictionary] = []
+## Whoever has already spent Corporal Garrick's once-per-turn save. Cleared at
+## every turn boundary rather than only on its owner's turn, since creatures
+## die on the enemy's turn too and the card promises one save per turn either
+## way.
+var death_reinforce_used: Array[String] = []
 ## Campaign mode only (see campaign_state.gd): battlefield-wide ability
 ## granted to every creature either side plays, e.g. "ambush" for a Dunes
 ## node. Empty outside Campaign matches.
@@ -35,10 +40,56 @@ var _opening_hand_dealt: bool = false
 ## anyone's first turn" check on its own.
 var _first_turn_taken: Dictionary = {}
 
+## The match's own gameplay randomness.
+##
+## Everything a rule rolls - shuffles, a random target, a random rummage pick -
+## comes from here rather than the global randi()/randf(). Two reasons:
+##
+##  1. A simulation branch must not disturb the real match. The AI copies this
+##     state hundreds of times per turn and rolls inside each copy; on the
+##     global stream, merely thinking changed what the real game would roll
+##     next.
+##  2. A match is reproducible from its starting state plus this generator's
+##     state, which is what makes a replay or a bug report re-runnable.
+##
+## Search exploration and cosmetic effects deliberately do NOT use this - see
+## MCTSEngine's own generator. Copying a state copies the generator's position,
+## so a clone continues the same sequence independently of its parent.
+var rng := RandomNumberGenerator.new()
+
 func _init(local_player_id: String, opponent_player_id: String,
 		   player_deck: Array[CardData], opponent_deck: Array[CardData]) -> void:
 	player = PlayerState.new(local_player_id, player_deck)
 	opponent = PlayerState.new(opponent_player_id, opponent_deck)
+	# Shuffled here, not in PlayerState, so the opening decks come off the
+	# match's generator and a seeded match deals the same opening hands.
+	shuffle_array(player.deck)
+	shuffle_array(opponent.deck)
+
+## Fixes the match's gameplay randomness, for a reproducible match.
+func set_gameplay_seed(seed_value: int) -> void:
+	# Assigning `seed` is what resets the generator. Do NOT also zero `state`:
+	# that replaces the seed-derived state with a degenerate one, and every
+	# seed then produced the same sequence.
+	rng.seed = seed_value
+
+## A uniform index into a collection of `size` items, or -1 when it is empty.
+func rand_index(size: int) -> int:
+	return rng.randi_range(0, size - 1) if size > 0 else -1
+
+## A uniform element of `arr`, or null when empty.
+func rand_pick(arr: Array):
+	var i := rand_index(arr.size())
+	return arr[i] if i >= 0 else null
+
+## Fisher-Yates on the match's generator. Array.shuffle() would use the global
+## stream, which is the thing this all exists to stay off.
+func shuffle_array(arr: Array) -> void:
+	for i in range(arr.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var tmp = arr[i]
+		arr[i] = arr[j]
+		arr[j] = tmp
 
 func start_game(first_player_id: String) -> void:
 	active_player_id = first_player_id
@@ -73,12 +124,13 @@ func mulligan_swap(acting_player_id: String, cards_to_swap: Array[CardData]) -> 
 		swapped_count += 1
 	if swapped_count == 0:
 		return
-	acting.deck.shuffle()
+	shuffle_array(acting.deck)
 	for i in swapped_count:
 		acting.draw_card()
 
 func _begin_turn() -> void:
 	var active = _get_active_player()
+	death_reinforce_used.clear()
 	active.gain_mana_crystal()
 	if not _first_turn_taken.get(active.player_id, false):
 		_first_turn_taken[active.player_id] = true
@@ -96,6 +148,9 @@ func end_turn() -> void:
 	_expire_temp_shields_for(active_player_id)
 	_apply_rejuvenate(active_player_id)
 	_apply_feast_attendant(active_player_id)
+	_apply_mech_repair(active_player_id)
+	_apply_life_siphon(active_player_id)
+	_apply_yeti_discount(active_player_id)
 	if active_player_id == player.player_id:
 		active_player_id = opponent.player_id
 		current_phase = Phase.OPPONENT_TURN
@@ -104,6 +159,410 @@ func end_turn() -> void:
 		current_phase = Phase.PLAYER_TURN
 		turn_number += 1
 	_begin_turn()
+
+# --- Effect resolution order (the timing specification) ---
+#
+# An action does not finish when its own effect resolves: it can leave work in
+# the pending_* queues (a tank's free shot, a rummage, a silence, ...) that has
+# to be worked off before the next command is accepted.
+#
+# PENDING_QUEUES is the authoritative order that work is taken in, and every
+# adapter - local play, multiplayer host, and the headless search - resolves
+# against this list rather than hard-coding a sequence of its own. They used to
+# each keep their own: local play and the search disagreed about whether tank
+# shots or rummages went first, and multiplayer simply never drained
+# pending_tank_specialist_buffs, so a Tank Specialist's buff silently never
+# happened in a networked match. Ordering differences like that are invisible
+# until two players disagree about the board.
+#
+# The rules this encodes:
+#
+#  1. Queues are drained in PENDING_QUEUES order, earlier queues first.
+#  2. Within a queue, entries resolve in the order they were added (FIFO).
+#  3. Resolution repeats until nothing is pending. An effect may enqueue more
+#     work, including into a queue that has already been drained this pass, and
+#     that work must still resolve rather than being stranded until some later
+#     unrelated action happens to drain it.
+#  4. Resolution stops immediately once the match is over.
+#
+# Deliberately NOT claimed here: that a single FIFO list answers every timing
+# question. Interacting triggers that need genuine simultaneity are handled
+# where they arise - see _remove_dead_minions(), which collects a whole lethal
+# group before resolving any of its death triggers.
+const PENDING_QUEUES: Array[String] = [
+	"pending_tank_shots",
+	"pending_rummages",
+	"pending_nulls",
+	"pending_buff_friendly_health",
+	"pending_tank_specialist_buffs",
+	"pending_on_reinforce_damages",
+	"pending_overwatch_challenges",
+]
+
+## Legal recipients for Drain / Sanguine (cr_str_003): "Take 2 health from a
+## creature you control and give it to ANOTHER creature you control."
+##
+## The donor is excluded, per that "another". Each mode used to decide this
+## for itself and they disagreed: the simulation excluded the donor while
+## local play and multiplayer let the player hand the health straight back to
+## the creature it came from, making the card a no-op that drew no card and
+## cost nothing. Targeting legality is a rule, so it lives here and every mode
+## asks rather than re-implementing it.
+func sanguine_recipients(acting_player_id: String, donor: Minion) -> Array[Minion]:
+	var out: Array[Minion] = []
+	var acting := find_player(acting_player_id)
+	if acting == null:
+		return out
+	for m in acting.board:
+		if m != donor:
+			out.append(m)
+	return out
+
+## True while any queued effect still has to resolve. Adapters loop on this so
+## effects created by a late queue still get their turn (rule 3 above).
+func has_pending() -> bool:
+	if current_phase == Phase.GAME_OVER:
+		return false
+	for queue_name in PENDING_QUEUES:
+		var queue: Array = get(queue_name)
+		if not queue.is_empty():
+			return true
+	return false
+
+# --- Pending choices ---
+#
+# A decision a player has to make before the match can continue, held as match
+# STATE rather than as a suspended function waiting on a UI signal.
+#
+# The difference matters for three reasons:
+#  1. Legality is computed once, here, and handed to whoever presents the
+#     choice. The UI highlights exactly the options the rules produced instead
+#     of re-deriving them and possibly disagreeing.
+#  2. An answer is checked against the choice that is actually open. A stale,
+#     duplicated or wrong-player reply is rejected instead of resolving an
+#     effect a second time.
+#  3. The choice is plain data, so it survives being copied with the state and
+#     could be written to a save. A continuation captured inside a suspended
+#     `await` cannot.
+#
+# Ordinary commands are refused while a choice is open (see validate()), so a
+# match cannot be driven forward around an unanswered decision.
+#
+# Scope: the three targeted on-play effects below are built on this. The older
+# prompts (rummage, tank shot, null, buff-friendly, overwatch, transform,
+# devour, challenge, pilot) still suspend on board signals and have NOT been
+# migrated - doing one effect family first and proving it is the intended
+# order, not an oversight.
+
+## What an answered choice does. Each is resolved through a shared operation,
+## never by touching the creature directly.
+const CHOICE_RESTORE_HEALTH := "restore_health"
+const CHOICE_BUFF_OTHER_FRIENDLY := "buff_other_friendly"
+const CHOICE_DAMAGE_HIGH_ATTACK := "damage_high_attack"
+
+## Attack threshold Heavy Bounty Hunter's target must meet. Measured against
+## CURRENT attack, so a buffed or debuffed creature counts as it stands now.
+const BOUNTY_HUNTER_MIN_ATTACK := 5
+
+## The open choice, or {} when none. Shape:
+##   id                 unique within the match; answers must quote it
+##   player_id          who must answer
+##   effect             one of the CHOICE_* constants above
+##   amount             how much (heal 1, buff 1, damage 4)
+##   source_instance_id the creature whose ability asked
+##   options            legal target instance_ids, computed by the rules
+var pending_choice: Dictionary = {}
+var _next_choice_id: int = 0
+
+func has_pending_choice() -> bool:
+	return not pending_choice.is_empty()
+
+## Can `actor_id` target `target` at all? Enemy creatures hiding behind
+## Cloaked or Ambush cannot be chosen; a player's own creatures always can.
+func is_targetable_by(target: Minion, actor_id: String) -> bool:
+	if target == null:
+		return false
+	if target.owner_id == actor_id:
+		return true
+	return not target.has_ability(Abilities.CLOAKED) and not target.has_ability(Abilities.AMBUSH)
+
+## The legal targets for `effect`, as instance_ids. Returning an empty list
+## means the effect simply does not happen - no choice is opened, and the
+## creature still enters play (handoff: "do not leave an impossible mandatory
+## prompt waiting").
+func choice_options_for(effect: String, actor_id: String, source: Minion) -> Array[String]:
+	var out: Array[String] = []
+	var actor := find_player(actor_id)
+	if actor == null:
+		return out
+	var enemy := find_player(_opponent_id(actor_id))
+	match effect:
+		CHOICE_RESTORE_HEALTH:
+			# Any living creature on either board. A full-health creature is
+			# still a legal target - it just gains nothing - and heroes never
+			# are.
+			for p in [actor, enemy]:
+				for m in p.board:
+					if is_targetable_by(m, actor_id):
+						out.append(m.instance_id)
+		CHOICE_BUFF_OTHER_FRIENDLY:
+			# "ANOTHER friendly creature" - the source cannot pick itself.
+			for m in actor.board:
+				if m != source:
+					out.append(m.instance_id)
+		CHOICE_DAMAGE_HIGH_ATTACK:
+			for m in enemy.board:
+				if m.current_attack >= BOUNTY_HUNTER_MIN_ATTACK and is_targetable_by(m, actor_id):
+					out.append(m.instance_id)
+	return out
+
+## Opens a choice if it has any legal target. Returns false (and opens
+## nothing) when it does not, so the caller can simply continue.
+func request_choice(player_id: String, effect: String, amount: int, source: Minion) -> bool:
+	var options := choice_options_for(effect, player_id, source)
+	if options.is_empty():
+		return false
+	_next_choice_id += 1
+	pending_choice = {
+		"id": "choice-%d" % _next_choice_id,
+		"player_id": player_id,
+		"effect": effect,
+		"amount": amount,
+		"source_instance_id": source.instance_id if source != null else "",
+		"options": options,
+	}
+	return true
+
+## The open choice's legal targets as live minions, for a caller that needs
+## objects (the UI highlighting them, the AI scoring them).
+func pending_choice_targets() -> Array[Minion]:
+	var out: Array[Minion] = []
+	if not has_pending_choice():
+		return out
+	for iid in pending_choice["options"]:
+		var m := find_minion(str(iid))
+		if m != null:
+			out.append(m)
+	return out
+
+## Answers the open choice. `selection_instance_id` must be one of its
+## options, or "" to decline.
+##
+## Returns {"ok": true} or {"ok": false, "error": ...}. A rejection resolves
+## nothing and leaves the choice open, so a wrong answer cannot consume it.
+func answer_choice(choice_id: String, selection_instance_id: String) -> Dictionary:
+	if not has_pending_choice():
+		return _reject("no choice is pending")
+	if choice_id != str(pending_choice["id"]):
+		# A reply to a choice that has already been answered - a duplicate or
+		# a message that arrived late. Dropping it is the whole point of
+		# carrying the id.
+		return _reject("stale choice id")
+	var effect := str(pending_choice["effect"])
+	var amount := int(pending_choice["amount"])
+	var actor_id := str(pending_choice["player_id"])
+
+	if selection_instance_id.is_empty():
+		pending_choice = {}
+		return {"ok": true, "declined": true}
+	if selection_instance_id not in pending_choice["options"]:
+		return _reject("selection is not a legal target")
+	var target := find_minion(selection_instance_id)
+	if target == null:
+		return _reject("target is no longer on the board")
+
+	# Clear BEFORE resolving: the effect can itself queue work or open the
+	# next choice, and it must not find this one still occupying the slot.
+	pending_choice = {}
+	match effect:
+		CHOICE_RESTORE_HEALTH:
+			restore_health(target, amount)
+		CHOICE_BUFF_OTHER_FRIENDLY:
+			target.current_attack += amount
+			gain_max_health(target, amount)
+		CHOICE_DAMAGE_HIGH_ATTACK:
+			apply_on_play_damage(target, amount, actor_id)
+	_check_win_condition()
+	return {"ok": true}
+
+## Abandons the open choice without resolving it - used when a match is torn
+## down, so nothing is left waiting on an answer that will never come.
+func cancel_pending_choice() -> void:
+	pending_choice = {}
+
+# --- Validated command boundary ---
+#
+# Every player-initiated action goes through validate()/execute(). Commands
+# are plain values - player ids, a card's uid, a minion's instance_id - never
+# live CardData/Minion objects. Two reasons:
+#
+#  1. Objects cannot cross a state boundary. AI search copies a GameState and
+#     applies actions to the copy; an action holding the parent's Minion
+#     mutated the PARENT while the copy's death cleanup ran against the copy,
+#     and hand.erase(parent_card) silently removed nothing from the child.
+#     Resolving ids against the state receiving the command makes that
+#     impossible to express.
+#  2. The id has to be re-checked anyway. A command naming a card that has
+#     left hand, or a minion that has died, must be rejected rather than
+#     resolved against a stale reference.
+#
+# validate() must not mutate. execute() validates first and only then
+# commits, so a rejected command leaves the state untouched.
+
+## Command types accepted by execute().
+const CMD_PLAY_CREATURE := "play_creature"
+const CMD_PLAY_STRATAGEM := "play_stratagem"
+const CMD_ATTACK := "attack"
+const CMD_END_TURN := "end_turn"
+
+## Unknown ids map to null rather than silently falling through to the
+## opponent the way _get_player_by_id() does - a command from an unrecognised
+## actor must fail, not be credited to whoever happens not to be `player`.
+func find_player(id: String) -> PlayerState:
+	if id == player.player_id:
+		return player
+	if id == opponent.player_id:
+		return opponent
+	return null
+
+func find_minion(instance_id: String) -> Minion:
+	if instance_id.is_empty():
+		return null
+	for p in [player, opponent]:
+		for m in p.board:
+			if m.instance_id == instance_id:
+				return m
+	return null
+
+static func _reject(reason: String) -> Dictionary:
+	return {"ok": false, "error": reason}
+
+## Checks a command completely without changing anything. Returns
+## {"ok": true, ...resolved objects...} or {"ok": false, "error": reason}.
+## The resolved entries let execute() avoid looking everything up twice.
+func validate(cmd: Dictionary) -> Dictionary:
+	var cmd_type: String = str(cmd.get("type", ""))
+	if cmd_type.is_empty():
+		return _reject("missing command type")
+	if current_phase == Phase.GAME_OVER:
+		return _reject("game is over")
+	if has_pending_choice():
+		# The match cannot be driven forward around an unanswered decision.
+		return _reject("a pending choice must be answered first")
+
+	var actor_id: String = str(cmd.get("actor", ""))
+	var actor := find_player(actor_id)
+	if actor == null:
+		return _reject("unknown actor")
+	if actor_id != active_player_id:
+		return _reject("not this player's turn")
+
+	match cmd_type:
+		CMD_END_TURN:
+			return {"ok": true, "actor": actor}
+		CMD_PLAY_CREATURE:
+			return _validate_play(actor, cmd, true)
+		CMD_PLAY_STRATAGEM:
+			return _validate_play(actor, cmd, false)
+		CMD_ATTACK:
+			return _validate_attack(actor, cmd)
+	return _reject("unknown command type")
+
+func _validate_play(actor: PlayerState, cmd: Dictionary, as_creature: bool) -> Dictionary:
+	var card := actor.find_card_in_hand(str(cmd.get("card_uid", "")))
+	if card == null:
+		return _reject("card not in hand")
+	if as_creature:
+		if not card.occupies_board():
+			return _reject("card does not go to the board")
+	elif card.card_type != CardData.CardType.STRATAGEM:
+		return _reject("card is not a stratagem")
+	if not actor.can_play_card(card):
+		return _reject("cannot afford card")
+	if not actor.can_fit_card(card):
+		return _reject("no board room")
+
+	var target: Minion = null
+	var target_id: String = str(cmd.get("target_instance_id", ""))
+	if not target_id.is_empty():
+		target = find_minion(target_id)
+		if target == null:
+			return _reject("target minion is no longer on the board")
+	if as_creature:
+		return {"ok": true, "actor": actor, "card": card}
+
+	var target_player_id: String = str(cmd.get("target_player_id", ""))
+	if not target_player_id.is_empty() and find_player(target_player_id) == null:
+		return _reject("unknown target player")
+	# Targeting protection is a rule, not a UI convenience: enforce it here so
+	# AI, multiplayer and a hand-built command all obey it, not just the
+	# pointer-based board code that used to be the only thing checking.
+	if target != null and card.effect != "eject_pilot" and target.owner_id != actor.player_id:
+		if target.has_ability(Abilities.CLOAKED) or target.has_ability(Abilities.AMBUSH):
+			return _reject("target cannot be targeted")
+	return {"ok": true, "actor": actor, "card": card, "target": target, "target_player_id": target_player_id}
+
+func _validate_attack(actor: PlayerState, cmd: Dictionary) -> Dictionary:
+	var attacker := find_minion(str(cmd.get("attacker_instance_id", "")))
+	if attacker == null:
+		return _reject("attacker is no longer on the board")
+	if attacker.owner_id != actor.player_id or attacker not in actor.board:
+		return _reject("attacker does not belong to this player")
+	if not attacker.can_attack():
+		return _reject("attacker cannot attack right now")
+
+	var defending := find_player(_opponent_id(actor.player_id))
+	var guardians := defending.get_guardian_minions()
+	var target_id: String = str(cmd.get("target_instance_id", ""))
+	var target_player_id: String = str(cmd.get("target_player_id", ""))
+
+	if target_id.is_empty():
+		if target_player_id.is_empty():
+			return _reject("attack names no target")
+		if target_player_id != defending.player_id:
+			return _reject("can only attack the opposing hero")
+		if not guardians.is_empty():
+			return _reject("a Guardian must be attacked first")
+		return {"ok": true, "actor": actor, "attacker": attacker, "target": null, "target_player_id": target_player_id}
+
+	var target := find_minion(target_id)
+	if target == null:
+		return _reject("target is no longer on the board")
+	if target not in defending.board:
+		return _reject("can only attack an enemy creature")
+	if not guardians.is_empty() and target not in guardians:
+		return _reject("a Guardian must be attacked first")
+	if target.has_ability(Abilities.AMBUSH):
+		return _reject("target cannot be attacked")
+	return {"ok": true, "actor": actor, "attacker": attacker, "target": target, "target_player_id": ""}
+
+## Validates `cmd` and, only if it passes, commits it. Never mutates on a
+## rejection. On success returns {"ok": true} plus whatever the command
+## produced ("minion" for a creature play), so callers that need the result
+## do not have to re-find it.
+func execute(cmd: Dictionary) -> Dictionary:
+	var check := validate(cmd)
+	if not check["ok"]:
+		return check
+	var actor: PlayerState = check["actor"]
+	match str(cmd["type"]):
+		CMD_END_TURN:
+			end_turn()
+			return {"ok": true}
+		CMD_PLAY_CREATURE:
+			var minion := play_creature(actor.player_id, check["card"], int(cmd.get("at_index", -1)))
+			if minion == null:
+				return _reject("play failed after validation")
+			return {"ok": true, "minion": minion}
+		CMD_PLAY_STRATAGEM:
+			var ok := play_stratagem(actor.player_id, check["card"], check["target"], check["target_player_id"])
+			if not ok:
+				return _reject("stratagem failed after validation")
+			return {"ok": true, "card": check["card"], "target": check["target"]}
+		CMD_ATTACK:
+			attack(check["attacker"], check["target"], check["target_player_id"])
+			return {"ok": true}
+	return _reject("unhandled command type")
 
 # --- Actions ---
 
@@ -131,30 +590,58 @@ func play_creature(acting_player_id: String, card: CardData, at_index: int = -1)
 			_apply_growvin_aura_to_mech(minion, acting_player_id)
 	return minion
 
-func apply_buff_friendly_health(target: Minion) -> void:
-	var pre := target.current_health
-	target.current_health += 1
-	target.max_health += 1
-	_try_heal_to_draw(target, target.current_health - pre)
-	_try_apothecary_bonus(target.owner_id, target)
-	_try_health_transform(target)
+# --- Shared health operations ---
+#
+# Every route that raises a creature's health goes through one of these two.
+# They exist because the reaction chain that has to follow a health gain -
+# Crypt Hunger's replacement, Apothecary's bonus, the max-health transform
+# check - was previously open-coded at each call site, and most sites
+# remembered only part of it. Ten places in abilities.gd raised max health and
+# ran Crypt Hunger and Apothecary but never the transform check, so a creature
+# buffed over its transform threshold by an ability simply did not transform,
+# while the same creature buffed by Supply Drop did.
+#
+# Adding a new effect that grants health means calling one of these, not
+# copying a four-line sequence and hoping it is the current one.
 
-func apply_heal_buff(target: Minion, amount: int) -> void:
+## +amount to BOTH current and maximum health (a buff: Supply Drop, Apothecary,
+## tank specialist, the on-play and death-trigger buffs).
+func gain_max_health(target: Minion, amount: int) -> void:
+	if target == null or amount <= 0:
+		return
 	var pre := target.current_health
 	target.current_health += amount
 	target.max_health += amount
-	_try_heal_to_draw(target, target.current_health - pre)
+	_try_heal_to_draw(target, target.current_health - pre, amount)
 	_try_apothecary_bonus(target.owner_id, target)
 	_try_health_transform(target)
 
+## Restores up to `amount` damage, capped at the existing maximum (Rejuvenate,
+## Mech Station, the heal stratagem on a wounded target). Maximum health is
+## untouched, which is why Crypt Hunger is told 0 was gained there.
+##
+## No transform check: _try_health_transform() triggers off max_health, and a
+## pure heal cannot raise it.
+func restore_health(target: Minion, amount: int) -> void:
+	if target == null or amount <= 0:
+		return
+	var pre := target.current_health
+	target.current_health = mini(target.current_health + amount, target.max_health)
+	var gained := target.current_health - pre
+	if gained <= 0:
+		return
+	_try_heal_to_draw(target, gained, 0)
+	_try_apothecary_bonus(target.owner_id, target)
+
+func apply_buff_friendly_health(target: Minion) -> void:
+	gain_max_health(target, 1)
+
+func apply_heal_buff(target: Minion, amount: int) -> void:
+	gain_max_health(target, amount)
+
 func apply_tank_specialist_buff(target: Minion) -> void:
 	target.current_attack += 1
-	var pre := target.current_health
-	target.current_health += 2
-	target.max_health += 2
-	_try_heal_to_draw(target, target.current_health - pre)
-	_try_apothecary_bonus(target.owner_id, target)
-	_try_health_transform(target)
+	gain_max_health(target, 2)
 
 ## Silences the target: strips abilities and reverts attack/health to the
 ## card's printed base stats (damage already taken carries over, clamped so
@@ -169,8 +656,15 @@ func apply_null(target: Minion) -> void:
 		target.piloted_by = null
 		target.pilot_atk_bonus = 0
 		target.pilot_hp_bonus = 0
+	var had_aura := target.has_ability(Abilities.GROWVIN_AURA)
 	target.abilities.clear()
 	target.is_nulled = true
+	# Silencing an aura SOURCE has to withdraw what that source granted.
+	# Clearing its ability list alone left every mech it had buffed holding
+	# Cloaked/Shielded/Rejuvenate for the rest of the match, with stale
+	# growvin_granted bookkeeping that nothing would ever clean up.
+	if had_aura:
+		reconcile_lasting_effects(target.owner_id)
 	var damage_taken := target.max_health - target.current_health
 	target.current_attack = target.data.attack
 	target.max_health = target.data.health
@@ -213,9 +707,7 @@ func attack(attacker: Minion, target_minion: Minion = null,
 	if target_minion:
 		var target_shield := _get_shield_value(target_minion)
 		if not target_minion.has_ability(Abilities.COMBAT_IMMUNE):
-			target_minion.take_damage(maxi(0, attacker.current_attack + attacker_amp - target_shield))
-			if attacker.has_ability(Abilities.VOIDTOUCH):
-				target_minion.current_health = mini(target_minion.current_health, 0)
+			_strike_minion(attacker, target_minion, attacker_amp, target_shield, defending)
 		if not attacker.has_ability(Abilities.COMBAT_IMMUNE):
 			attacker.take_damage(maxi(0, target_minion.current_attack - attacker_shield))
 		Abilities.fire_on_attack(attacker, _get_player_by_id(attacker.owner_id), self)
@@ -227,9 +719,7 @@ func attack(attacker: Minion, target_minion: Minion = null,
 		# Dual Strike: automatic second hit on same target
 		if attacker.has_ability(Abilities.DUAL_STRIKE) and attacker in acting.board and target_minion in defending.board:
 			if not target_minion.has_ability(Abilities.COMBAT_IMMUNE):
-				target_minion.take_damage(maxi(0, attacker.current_attack + attacker_amp - target_shield))
-				if attacker.has_ability(Abilities.VOIDTOUCH):
-					target_minion.current_health = mini(target_minion.current_health, 0)
+				_strike_minion(attacker, target_minion, attacker_amp, target_shield, defending)
 			if not attacker.has_ability(Abilities.COMBAT_IMMUNE):
 				attacker.take_damage(maxi(0, target_minion.current_attack - attacker_shield))
 			Abilities.fire_on_attack(attacker, acting, self)
@@ -253,9 +743,7 @@ func apply_challenge(challenger: Minion, target: Minion) -> void:
 	var target_shield := _get_shield_value(target)
 	var challenger_amp := _get_enemy_damage_amp(challenger.owner_id)
 	if not target.has_ability(Abilities.COMBAT_IMMUNE):
-		target.take_damage(maxi(0, challenger.current_attack + challenger_amp - target_shield))
-		if challenger.has_ability(Abilities.VOIDTOUCH):
-			target.current_health = mini(target.current_health, 0)
+		_strike_minion(challenger, target, challenger_amp, target_shield, _get_player_by_id(target.owner_id))
 	if not challenger.has_ability(Abilities.COMBAT_IMMUNE):
 		challenger.take_damage(maxi(0, target.current_attack - challenger_shield))
 	_remove_dead_minions()
@@ -283,9 +771,7 @@ func apply_challenge(challenger: Minion, target: Minion) -> void:
 			var t_shield := _get_shield_value(target)
 			var m_amp := _get_enemy_damage_amp(owner_id)
 			if not target.has_ability(Abilities.COMBAT_IMMUNE):
-				target.take_damage(maxi(0, m.current_attack + m_amp - t_shield))
-				if m.has_ability(Abilities.VOIDTOUCH):
-					target.current_health = mini(target.current_health, 0)
+				_strike_minion(m, target, m_amp, t_shield, enemy)
 			if not m.has_ability(Abilities.COMBAT_IMMUNE):
 				m.take_damage(maxi(0, target.current_attack - m_shield))
 			m.has_attacked = true
@@ -295,6 +781,20 @@ func apply_challenge(challenger: Minion, target: Minion) -> void:
 				_try_transform(m, owner)
 
 	_check_win_condition()
+
+## One attacker-to-minion hit, shared by attacks, the Dual Strike follow-up,
+## and both challenge paths: damage after shields and amplify, Voidtouch's
+## instant kill, then Trample spilling whatever exceeded the defender's health
+## onto `defending`'s hero. Overkill is measured against health *before* the
+## hit, so it reflects the damage that was actually wasted.
+func _strike_minion(attacker: Minion, target: Minion, amp: int, target_shield: int, defending: PlayerState) -> void:
+	var dealt := maxi(0, attacker.current_attack + amp - target_shield)
+	var overkill := dealt - maxi(0, target.current_health)
+	target.take_damage(dealt)
+	if attacker.has_ability(Abilities.VOIDTOUCH):
+		target.current_health = mini(target.current_health, 0)
+	if overkill > 0 and attacker.has_ability(Abilities.TRAMPLE):
+		defending.hero_health -= overkill
 
 func apply_swap_friendly_health(minion_a: Minion, minion_b: Minion) -> void:
 	var a_health := minion_a.current_health
@@ -384,7 +884,7 @@ func apply_eject_pilot(target_mech: Minion, owner: PlayerState) -> Minion:
 	target_mech.piloted_by = null
 	target_mech.pilot_atk_bonus = 0
 	target_mech.pilot_hp_bonus = 0
-	if owner.board.size() < PlayerState.MAX_BOARD_SIZE:
+	if owner.has_room_for(pilot_data.abilities):
 		var pilot_minion := Minion.new(pilot_data, owner.player_id)
 		owner.place_minion(pilot_minion)
 		return pilot_minion
@@ -402,6 +902,7 @@ func apply_transform_choice(minion: Minion, chosen_id: String) -> void:
 	minion.max_health = new_data.health
 	minion.current_health = max(1, new_data.health - damage_taken)
 	minion.abilities = new_data.abilities.duplicate()
+	reconcile_lasting_effects(minion.owner_id)
 	if minion.has_ability(Abilities.RUSH):
 		minion.is_exhausted = false
 	minion.is_newly_transformed = true
@@ -424,6 +925,7 @@ func _try_health_transform(minion: Minion) -> void:
 		minion.max_health = new_data.health
 		minion.current_health = max(1, new_data.health - damage_taken)
 		minion.abilities = new_data.abilities.duplicate()
+		reconcile_lasting_effects(minion.owner_id)
 		if minion.has_ability(Abilities.RUSH):
 			minion.is_exhausted = false
 		minion.is_newly_transformed = true
@@ -447,6 +949,7 @@ func _try_transform(minion: Minion, owner: PlayerState) -> void:
 		minion.max_health = new_data.health
 		minion.current_health = max(1, new_data.health - damage_taken)
 		minion.abilities = new_data.abilities.duplicate()
+		reconcile_lasting_effects(minion.owner_id)
 		minion.transform_counter = 0
 		if minion.has_ability(Abilities.RUSH):
 			minion.is_exhausted = false
@@ -584,7 +1087,7 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 				if target_minion.owner_id == acting_player_id:
 					var pre := target_minion.current_health
 					target_minion.current_health = mini(target_minion.current_health + card.effect_value, target_minion.max_health)
-					_try_heal_to_draw(target_minion, target_minion.current_health - pre)
+					_try_heal_to_draw(target_minion, target_minion.current_health - pre, 0)
 					_try_apothecary_bonus(target_minion.owner_id, target_minion)
 				else:
 					var amp := _get_enemy_damage_amp(acting_player_id) if acting_player_id != "" else 0
@@ -609,7 +1112,7 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 					_try_health_transform(target_minion)
 				else:
 					target_minion.current_health = min(target_minion.current_health + card.effect_value, target_minion.max_health)
-					_try_heal_to_draw(target_minion, target_minion.current_health - pre)
+					_try_heal_to_draw(target_minion, target_minion.current_health - pre, 0)
 		"eject_pilot":
 			if target_minion != null and target_minion.is_piloted:
 				apply_eject_pilot(target_minion, _get_player_by_id(acting_player_id))
@@ -631,27 +1134,67 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 					"expires_after": _opponent_id(acting_player_id)
 				})
 
+## Removes everything that has died and resolves its death triggers.
+##
+## Deaths are resolved in GROUPS, not one at a time. Each pass collects every
+## creature that is lethal right now, removes the whole group from the board,
+## and only then fires any of their death triggers. The pass repeats while
+## those triggers kill more.
+##
+## That grouping is the rule, not an implementation detail. Resolving one
+## death completely before looking at the next - which is what this used to do
+## - meant an area-damage effect that left three creatures at 0 health could
+## have the first one's deathrattle heal or buff the second back above 0
+## before anything had checked it, so it never died. Whether a creature dies
+## then depended on board order. Collecting the group first makes simultaneous
+## lethal damage actually simultaneous: everything that was dead at the
+## checkpoint dies, and nothing can be rescued out of the group afterwards.
+##
+## Order within a group (deterministic, so every mode agrees): the active
+## player's creatures first, then the opponent's; within a board, left to
+## right by board position. Positions are captured before any removal, so a
+## trigger that cares where its creature died sees where it actually was.
 func _remove_dead_minions() -> void:
-	var any_removed := true
-	while any_removed:
-		any_removed = false
-		for p in [player, opponent]:
-			for minion in p.board.duplicate():
-				if minion.is_dead():
-					any_removed = true
-					var idx = p.board.find(minion)
-					p.remove_minion(minion)
-					p.graveyard.append(minion.data)
-					var enemy = _get_player_by_id(_opponent_id(p.player_id))
-					var death_result := Abilities.fire_on_death(minion, p, idx, enemy, self)
-					if p.player_id == player.player_id:
-						pending_drawn_cards.append_array(death_result["drawn"])
-					for _i in death_result["tank_shots"]:
-						pending_tank_shots.append(p.player_id)
-					if minion.data.tribe == "tank":
-						for watcher in p.board:
-							if watcher.has_ability(Abilities.ON_FRIENDLY_TANK_DEATH_BUFF_TANK):
-								pending_tank_specialist_buffs.append(p.player_id)
+	for _pass in 32:  # safety cap: a trigger loop must not hang the match
+		# 1. Collect the group.
+		var dying: Array[Dictionary] = []
+		var first := _get_active_player()
+		var second := opponent if first == player else player
+		for p in [first, second]:
+			for i in p.board.size():
+				var m: Minion = p.board[i]
+				if m.is_dead():
+					dying.append({"minion": m, "owner": p, "index": i})
+		if dying.is_empty():
+			return
+
+		# 2. Remove the whole group before any trigger runs.
+		for entry in dying:
+			var m: Minion = entry["minion"]
+			var p: PlayerState = entry["owner"]
+			p.remove_minion(m)
+			p.graveyard.append(m.data)
+
+		# 3. Only now resolve what each death triggers.
+		for entry in dying:
+			var minion: Minion = entry["minion"]
+			var p: PlayerState = entry["owner"]
+			var idx: int = entry["index"]
+			var enemy := _get_player_by_id(_opponent_id(p.player_id))
+			var death_result := Abilities.fire_on_death(minion, p, idx, enemy, self)
+			if p.player_id == player.player_id:
+				pending_drawn_cards.append_array(death_result["drawn"])
+			for _i in death_result["tank_shots"]:
+				pending_tank_shots.append(p.player_id)
+			if minion.data.tribe == "tank":
+				for watcher in p.board:
+					if watcher.has_ability(Abilities.ON_FRIENDLY_TANK_DEATH_BUFF_TANK):
+						pending_tank_specialist_buffs.append(p.player_id)
+			# An aura source that just died stops granting (see
+			# reconcile_lasting_effects); death is the third way a source can
+			# stop qualifying, alongside silence and transformation.
+			if minion.has_ability(Abilities.GROWVIN_AURA):
+				reconcile_lasting_effects(p.player_id)
 
 func _check_win_condition() -> void:
 	if opponent.is_dead():
@@ -685,19 +1228,24 @@ func get_rummage_options(player_id: String, max_cost: int = -1, type_filter: Str
 			options.append(card)
 	return options
 
-func complete_rummage(player_id: String, card: CardData, play_it: bool = false, discount: bool = true) -> Minion:
+func complete_rummage(player_id: String, card: CardData, play_it: bool = false, discount: bool = true, buff_creature: bool = false) -> Minion:
 	var p = _get_player_by_id(player_id)
 	for i in p.graveyard.size():
 		if p.graveyard[i].id == card.id:
 			p.graveyard.remove_at(i)
 			break
+	# Salvager's +1/+1 rides on the CardData itself, so it sticks for the rest
+	# of the match. Applied before anything below reads the card's stats.
+	if buff_creature and card.card_type == CardData.CardType.CREATURE:
+		card.attack += 1
+		card.health += 1
 	var has_stinkpile := false
 	for m in p.board:
 		if m.has_ability(Abilities.STINKPILE_PASSIVE):
 			has_stinkpile = true
 			break
 	var placed: Minion = null
-	if (has_stinkpile or play_it) and card.card_type == CardData.CardType.CREATURE and p.board.size() < PlayerState.MAX_BOARD_SIZE:
+	if (has_stinkpile or play_it) and card.card_type == CardData.CardType.CREATURE and p.has_room_for(card.abilities):
 		card.rummage_count += 1
 		placed = Minion.new(card, player_id)
 		p.place_minion(placed)
@@ -724,7 +1272,10 @@ func duplicate_for_sim() -> GameState:
 	gs.active_player_id = active_player_id
 	gs.turn_number = turn_number
 	gs.winner_id = winner_id
-	gs.pending_drawn_cards = pending_drawn_cards.duplicate()
+	# Not copied: these hold references to THIS state's own card objects
+	# (they exist only to tell the UI what was just drawn). Carrying them
+	# into a clone would leave the clone pointing at the parent's cards.
+	gs.pending_drawn_cards = []
 	gs.pending_fatigue_damage = pending_fatigue_damage.duplicate()
 	gs.pending_rummages = pending_rummages.duplicate(true)
 	gs.pending_tank_shots = pending_tank_shots.duplicate()
@@ -735,19 +1286,39 @@ func duplicate_for_sim() -> GameState:
 	gs.pending_on_reinforce_damages = pending_on_reinforce_damages.duplicate(true)
 	gs.temp_shielded = temp_shielded.duplicate(true)
 	gs.growvin_granted = growvin_granted.duplicate(true)
+	gs.death_reinforce_used = death_reinforce_used.duplicate()
 	gs.node_modifier_ability = node_modifier_ability
 	gs._opening_hand_dealt = _opening_hand_dealt
 	gs._first_turn_taken = _first_turn_taken.duplicate()
+	# Copy the generator's POSITION, not just its seed: the clone has to
+	# continue the same sequence the parent is partway through, and must then
+	# advance on its own without touching the parent.
+	gs.rng.seed = rng.seed
+	gs.rng.state = rng.state
+	gs.pending_choice = pending_choice.duplicate(true)
+	gs._next_choice_id = _next_choice_id
 	return gs
 
-func to_net_dict() -> Dictionary:
+## Builds the view for ONE recipient: their own hand in full, the opponent's
+## reduced to a count. Pass "" only for an internal dump where both sides are
+## already known.
+##
+## This is a player VIEW, not a save. It omits deck contents and the match
+## generator's state on purpose, so it cannot be used to resume a match - see
+## the handoff's split between internal snapshots and per-player views.
+func to_net_dict(for_player_id: String = "") -> Dictionary:
+	var reveal_host := for_player_id.is_empty() or for_player_id == "host"
+	var reveal_guest := for_player_id.is_empty() or for_player_id == "guest"
+	var host_state: PlayerState = player if player.player_id == "host" else opponent
+	var guest_state: PlayerState = opponent if player.player_id == "host" else player
 	return {
 		"phase": current_phase,
 		"active_player_id": active_player_id,
 		"turn_number": turn_number,
 		"winner_id": winner_id,
-		"host_state": player.to_net_dict() if player.player_id == "host" else opponent.to_net_dict(),
-		"guest_state": opponent.to_net_dict() if player.player_id == "host" else player.to_net_dict(),
+		"host_state": host_state.to_net_dict(reveal_host),
+		"guest_state": guest_state.to_net_dict(reveal_guest),
+		"pending_choice": pending_choice.duplicate(true),
 		"pending_rummages": pending_rummages.duplicate(true),
 		"pending_tank_shots": pending_tank_shots.duplicate(),
 		"pending_nulls": pending_nulls.duplicate(true),
@@ -768,6 +1339,7 @@ static func from_net_dict(d: Dictionary, my_id: String) -> GameState:
 	gs.active_player_id = str(d["active_player_id"])
 	gs.turn_number = int(d["turn_number"])
 	gs.winner_id = str(d.get("winner_id", ""))
+	gs.pending_choice = (d.get("pending_choice", {}) as Dictionary).duplicate(true)
 	gs.pending_rummages.clear()
 	for r in d.get("pending_rummages", []):
 		gs.pending_rummages.append(r)
@@ -810,11 +1382,26 @@ func _try_apothecary_bonus(owner_id: String, target: Minion) -> void:
 			_try_heal_to_draw(target, target.current_health - pre)
 			return
 
-func _try_heal_to_draw(target: Minion, gained: int) -> void:
+## Crypt Hunger (Delos, cr_019): "When this creature gains health, lose it
+## and draw a card." The gain is handed back, then a card is drawn.
+##
+## Handing it back has to revert exactly what was raised, which is why the
+## caller states both deltas:
+##  - `gained` is the rise in CURRENT health.
+##  - `max_gained` is the rise in MAXIMUM health. It defaults to `gained`
+##    because most callers are +N/+N style buffs (Apothecary, Supply Drop,
+##    tank specialist) where both moved together and both must come back, so
+##    the creature ends where it started and the drawn card is the effect.
+##
+## A pure heal - restoring damage, capped at the existing maximum - passes 0,
+## because nothing raised the maximum and taking it away permanently shrank
+## the creature. That was the bug: a 3-max/1-current Delos healed for 2 came
+## out 1-max/1-current, and repeated healing ground it down to nothing.
+func _try_heal_to_draw(target: Minion, gained: int, max_gained: int = -1) -> void:
 	if gained <= 0 or not target.has_ability(Abilities.HEAL_TO_DRAW):
 		return
 	target.current_health -= gained
-	target.max_health -= gained
+	target.max_health -= gained if max_gained < 0 else max_gained
 	_get_player_by_id(target.owner_id).draw_card()
 
 func _try_mirror_transform(new_data: CardData, transforming: Minion, owner: PlayerState) -> void:
@@ -836,6 +1423,7 @@ func _try_mirror_transform(new_data: CardData, transforming: Minion, owner: Play
 		m.max_health = target_data.health
 		m.current_health = max(1, target_data.health - damage_taken)
 		m.abilities = target_data.abilities.duplicate()
+		reconcile_lasting_effects(m.owner_id)
 		if m.has_ability(Abilities.RUSH):
 			m.is_exhausted = false
 		m.is_newly_transformed = true
@@ -855,6 +1443,13 @@ func _try_mirror_transform(new_data: CardData, transforming: Minion, owner: Play
 				_try_apothecary_bonus(owner.player_id, m)
 				_try_health_transform(m)
 
+## One creature healed by `amount`, capped at its existing maximum - the
+## shape every "restore damage" effect shares. Split out so the rules (and
+## tests) have a single pure-heal entry point rather than each caller
+## open-coding the cap and the Crypt Hunger follow-up.
+func _apply_rejuvenate_to(m: Minion, amount: int) -> void:
+	restore_health(m, amount)
+
 func _apply_rejuvenate(player_id: String) -> void:
 	var owner := _get_player_by_id(player_id)
 	var broodtender_active := owner.board.any(func(m): return m.has_ability(Abilities.BROODTENDER_AURA))
@@ -871,7 +1466,7 @@ func _apply_rejuvenate(player_id: String) -> void:
 			m.current_health = mini(m.current_health + regen, m.max_health)
 			var gained := m.current_health - pre
 			if gained > 0:
-				_try_heal_to_draw(m, gained)
+				_try_heal_to_draw(m, gained, 0)
 				_try_apothecary_bonus(player_id, m)
 
 func _apply_feast_attendant(player_id: String) -> void:
@@ -889,6 +1484,63 @@ func _apply_feast_attendant(player_id: String) -> void:
 			_try_heal_to_draw(neighbor, neighbor.current_health - pre)
 			_try_apothecary_bonus(player_id, neighbor)
 			_try_health_transform(neighbor)
+
+## Mech Station: tops the owner's mechs back up at end of turn. Two stations
+## heal twice as much, same as any other stacking board effect here.
+func _apply_mech_repair(player_id: String) -> void:
+	var owner := _get_player_by_id(player_id)
+	var heal := 0
+	for m in owner.board:
+		if m.has_ability(Abilities.END_TURN_HEAL_MECHS):
+			heal += 2
+	if heal == 0:
+		return
+	for m in owner.board:
+		if not m.has_ability(Abilities.MECH):
+			continue
+		var pre := m.current_health
+		m.current_health = mini(m.current_health + heal, m.max_health)
+		var gained := m.current_health - pre
+		if gained > 0:
+			_try_heal_to_draw(m, gained, 0)
+			_try_apothecary_bonus(player_id, m)
+
+## Animus Hoarder: takes a point of health off a random enemy creature at end
+## of turn and keeps it, so the hoarder grows every turn it survives.
+func _apply_life_siphon(player_id: String) -> void:
+	var owner := _get_player_by_id(player_id)
+	var enemy := _get_player_by_id(_opponent_id(player_id))
+	var drained := false
+	for m in owner.board:
+		if not m.has_ability(Abilities.END_TURN_DRAIN_RANDOM_ENEMY) or enemy.board.is_empty():
+			continue
+		var victim: Minion = rand_pick(enemy.board)
+		victim.take_damage(1)
+		drained = true
+		var pre := m.current_health
+		m.current_health += 1
+		m.max_health += 1
+		_try_heal_to_draw(m, m.current_health - pre)
+		_try_apothecary_bonus(player_id, m)
+		_try_health_transform(m)
+	if drained:
+		_remove_dead_minions()
+		_check_win_condition()
+
+## Tutkiun: end-of-turn discount on every Yeti still in hand. effective_cost()
+## floors at 1, so this can't drive a card below one mana however long
+## Tutkiun sticks around.
+func _apply_yeti_discount(player_id: String) -> void:
+	var owner := _get_player_by_id(player_id)
+	var discount := 0
+	for m in owner.board:
+		if m.has_ability(Abilities.END_TURN_YETI_DISCOUNT):
+			discount += 1
+	if discount == 0:
+		return
+	for card in owner.hand:
+		if Abilities.YETI in card.abilities:
+			card.cost_modifier -= discount
 
 func _expire_temp_shields_for(ending_player_id: String) -> void:
 	var keep: Array[Dictionary] = []
@@ -920,6 +1572,15 @@ func _apply_growvin_aura_to_mech(mech: Minion, owner_id: String) -> void:
 				continue
 		mech.abilities.append(ab)
 		growvin_granted.append({"instance_id": mech.instance_id, "ability": ab, "owner_id": owner_id})
+
+## Re-checks every lasting contribution owned by `owner_id` and withdraws the
+## ones whose source no longer qualifies. Call this after ANYTHING that can
+## strip or replace a creature's abilities - silence, transformation, death -
+## rather than leaving each of those paths to remember the bookkeeping.
+## Safe to call when nothing changed: each withdrawal re-checks for a still-
+## active source first.
+func reconcile_lasting_effects(owner_id: String) -> void:
+	_remove_growvin_aura(owner_id)
 
 func _remove_growvin_aura(owner_id: String) -> void:
 	for m in _get_player_by_id(owner_id).board:

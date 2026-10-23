@@ -10,10 +10,11 @@ extends Control
 signal back_pressed
 
 const CardScene := preload("res://scenes/cards/Card.tscn")
-const CardPreviewScene := preload("res://scenes/cards/CardPreview.tscn")
 
-const CARD_W := 190
-const PREVIEW_SCALE := 1.7
+## Grid thumbnails and the hover preview both use one of Card's three size
+## presets rather than a scale of their own - see Card.Size.
+const CARD_W := int(Card.PIXELS_MEDIUM.x)
+const PREVIEW_SCALE := Card.SCALE_LARGE.x
 const PREVIEW_PANEL_WIDTH := 420.0
 const PREVIEW_MARGIN := 14.0
 const TOOLBAR_BG := Color(0.08, 0.06, 0.05)
@@ -37,7 +38,7 @@ var _cost_btns: Dictionary = {}           # bucket -> Button
 
 var _keywords: Dictionary = {}
 var _content_vbox: VBoxContainer
-var _preview_card_node: CardPreview
+var _preview_card_node: Card
 var _preview_keyword_vbox: VBoxContainer
 var _hide_preview_scheduled: bool = false
 
@@ -156,6 +157,11 @@ func _build_toolbar() -> Control:
 	_type_btns.append(strat_btn)
 	row1.add_child(strat_btn)
 
+	var loc_btn := _filter_toggle_btn("Locations")
+	loc_btn.pressed.connect(func(): _set_type_filter(int(CardData.CardType.LOCATION)))
+	_type_btns.append(loc_btn)
+	row1.add_child(loc_btn)
+
 	# ── Row 2: mana curve pips / search ──
 	var row2 := HBoxContainer.new()
 	row2.add_theme_constant_override("separation", 6)
@@ -211,7 +217,7 @@ func _build_preview_panel() -> Control:
 	holder.custom_minimum_size = Vector2(0, Card.CARD_SIZE.y * PREVIEW_SCALE + 20.0)
 	vbox.add_child(holder)
 
-	_preview_card_node = CardPreviewScene.instantiate()
+	_preview_card_node = CardScene.instantiate()
 	_preview_card_node.scale = Vector2(PREVIEW_SCALE, PREVIEW_SCALE)
 	_preview_card_node.input_pickable = false
 	_preview_card_node.set_process_input(false)
@@ -349,7 +355,6 @@ func _big_card(card: CardData) -> Control:
 	wrapper.mouse_filter = Control.MOUSE_FILTER_STOP
 
 	var card_node: Card = CardScene.instantiate()
-	card_node.use_text_overlay = false
 	card_node.scale = Vector2(scale_factor, scale_factor)
 	card_node.position = Vector2.ZERO
 	card_node.input_pickable = false
