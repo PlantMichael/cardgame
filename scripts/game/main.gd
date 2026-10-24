@@ -818,7 +818,7 @@ func _show_main_menu() -> void:
 ## later needs no code change.
 const PFP_DIR := "res://assets/pfps/"
 const PFP_SIZE := 52.0
-const PFP_BADGE_SIZE := 20.0
+const PFP_BADGE_SIZE := 30.0
 const PFP_PICK_SIZE := 72.0
 const PFP_RING_COLOR := Color(0.75, 0.62, 0.32)
 ## Profile menu (opened from the bar's portrait). Wider than the old
@@ -826,7 +826,7 @@ const PFP_RING_COLOR := Color(0.75, 0.62, 0.32)
 ## the two balances.
 const PROFILE_PANEL_W := 620.0
 const PROFILE_PFP_SIZE := 96.0
-const PROFILE_BADGE_SIZE := 34.0
+const PROFILE_BADGE_SIZE := 52.0
 ## Every account with no explicit choice yet (Auth.selected_pfp == "") shows
 ## this one - not just whichever file happens to sort first in PFP_DIR.
 const DEFAULT_PFP_ID := "pfp_planet.png"
@@ -947,29 +947,10 @@ func _build_pfp_control(size: float = PFP_SIZE, badge_size: float = PFP_BADGE_SI
 	return {"control": wrap, "texture": tex_rect}
 
 func _build_rank_badge(badge_size: float = PFP_BADGE_SIZE) -> Control:
-	var badge := Panel.new()
-	badge.custom_minimum_size = Vector2(badge_size, badge_size)
-	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var border := maxi(2, int(badge_size / 11.0))
-	var st := StyleBoxFlat.new()
-	st.bg_color = RankedProgress.get_tier_color(Auth.rank_bracket, Auth.rank_in_legend, Auth.rank_legend_rating)
-	st.set_corner_radius_all(int(badge_size / 2))
-	st.border_width_left = border
-	st.border_width_top = border
-	st.border_width_right = border
-	st.border_width_bottom = border
-	st.border_color = Color(0.05, 0.05, 0.07)
-	badge.add_theme_stylebox_override("panel", st)
-
-	var lbl := Label.new()
-	lbl.text = RankedProgress.get_badge_text(Auth.rank_bracket, Auth.rank_in_legend)
-	lbl.add_theme_font_size_override("font_size", int(badge_size * 0.55))
-	lbl.add_theme_color_override("font_color", Color.WHITE)
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
-	badge.add_child(lbl)
-	return badge
+	var icon := RankedProgress.make_icon_rect(
+		Auth.rank_bracket, Auth.rank_in_legend, Auth.rank_legend_rating, badge_size)
+	icon.size = Vector2(badge_size, badge_size)
+	return icon
 
 ## `kind` is "gold" or "dust" - just picks which Economy field this cell
 ## tracks, both display-wise and when Economy.balance_changed fires.
@@ -1161,19 +1142,15 @@ func _show_profile_menu() -> void:
 	tier_row.add_theme_constant_override("separation", 8)
 	ident.add_child(tier_row)
 
-	var dot := Panel.new()
-	dot.custom_minimum_size = Vector2(10, 10)
-	dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var dot_style := StyleBoxFlat.new()
-	dot_style.bg_color = tier_color
-	dot_style.set_corner_radius_all(5)
-	dot.add_theme_stylebox_override("panel", dot_style)
-	tier_row.add_child(dot)
+	tier_row.add_child(RankedProgress.make_icon_rect(
+		Auth.rank_bracket, Auth.rank_in_legend, Auth.rank_legend_rating, 36))
+	tier_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 
 	var tier_lbl := Label.new()
 	tier_lbl.text = RankedProgress.get_display_string(
 		Auth.rank_bracket, Auth.rank_in_legend, Auth.rank_legend_rating)
 	tier_lbl.add_theme_font_size_override("font_size", 15)
+	tier_lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	tier_lbl.add_theme_color_override("font_color", tier_color.lightened(0.3))
 	tier_row.add_child(tier_lbl)
 
@@ -1905,6 +1882,11 @@ func _show_ranked_start() -> void:
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.add_theme_constant_override("separation", 14)
 	center.add_child(vbox)
+
+	var menu_icon := RankedProgress.make_icon_rect(
+		Auth.rank_bracket, Auth.rank_in_legend, Auth.rank_legend_rating, 160)
+	menu_icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vbox.add_child(menu_icon)
 
 	var level_lbl := Label.new()
 	level_lbl.text = RankedProgress.get_display_string(Auth.rank_bracket, Auth.rank_in_legend, Auth.rank_legend_rating)

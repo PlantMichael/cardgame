@@ -48,6 +48,24 @@ const LEGEND_TIER_COLORS := [
 	Color(0.95, 0.35, 0.85), # Universal
 ]
 
+## One icon per tier: the 7 bracketed tiers, then the 3 legend tiers. The art
+## has no sub-rank (III/II/I) in it, so wherever an icon stands in for a rank
+## the sub-rank still has to be spelled out beside it (get_display_string).
+const TIER_ICONS := [
+	preload("res://assets/cardgame/Ranks/01-orbital.png"),
+	preload("res://assets/cardgame/Ranks/02-lunar.png"),
+	preload("res://assets/cardgame/Ranks/03-planetary.png"),
+	preload("res://assets/cardgame/Ranks/04-solar.png"),
+	preload("res://assets/cardgame/Ranks/05-nebular.png"),
+	preload("res://assets/cardgame/Ranks/06-galactic.png"),
+	preload("res://assets/cardgame/Ranks/07-cosmic.png"),
+]
+const LEGEND_TIER_ICONS := [
+	preload("res://assets/cardgame/Ranks/08-superluminal.png"),
+	preload("res://assets/cardgame/Ranks/09-celestial.png"),
+	preload("res://assets/cardgame/Ranks/10-universal.png"),
+]
+
 ## LP economy for the bracketed ladder — keep in sync with relay.js's
 ## RANK_LP_* constants, which are authoritative.
 const LP_PER_BRACKET := 100
@@ -98,6 +116,23 @@ static func get_tier_color(bracket_index: int, in_legend: bool, legend_rating: i
 		return LEGEND_TIER_COLORS[idx]
 	var tier := bracket_index / SUB_RANKS.size()
 	return TIER_COLORS[tier]
+
+## Icon art for the rank - same tier selection as get_tier_color.
+static func get_tier_icon(bracket_index: int, in_legend: bool, legend_rating: int) -> Texture2D:
+	if in_legend:
+		return LEGEND_TIER_ICONS[mini(legend_rating / LEGEND_TIER_SPAN, LEGEND_TIER_ICONS.size() - 1)]
+	return TIER_ICONS[bracket_index / SUB_RANKS.size()]
+
+## A TextureRect showing the rank icon at `px` square, mipmapped-friendly
+## (the art is 1254px). Shared by every screen that mentions the player's rank.
+static func make_icon_rect(bracket_index: int, in_legend: bool, legend_rating: int, px: float) -> TextureRect:
+	var rect := TextureRect.new()
+	rect.texture = get_tier_icon(bracket_index, in_legend, legend_rating)
+	rect.custom_minimum_size = Vector2(px, px)
+	rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return rect
 
 ## Short text for the same badge: "3"/"2"/"1" (worst->best sub-rank within a
 ## bracketed tier, i.e. III/II/I spelled as a digit) or a star once in Legend.
