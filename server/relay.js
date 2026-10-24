@@ -223,6 +223,11 @@ function rollPack(packDef, ownedCardsMap, rng = Math.random) {
 // --- Ranked ladder: see ladder.js (extracted so server-run matches settle with the same math) ---
 const { nextRankState, nextElo } = require('./ladder');
 
+// Server-authoritative ranked matches (specs/003-authoritative-ranked-server).
+// Off unless RANKED_AUTHORITATIVE=1; null means ranked works exactly as before.
+const { Authoritative, isEnabled: authoritativeEnabled } = require('./authoritative/relay_wire');
+let auth = null;
+
 // --- Auth helpers ---------------------------------------------------------
 
 const USERNAME_RE = /^[A-Za-z0-9_]{3,20}$/;
@@ -336,7 +341,8 @@ function sweepRankedQueue() {
         matched.add(wsB);
         rankedQueue.delete(wsA);
         rankedQueue.delete(wsB);
-        startRankedMatch(wsA, a, wsB, b);
+        if (auth) startServerRankedMatch(wsA, a, wsB, b);
+        else startRankedMatch(wsA, a, wsB, b);
         break;
       }
     }
@@ -375,6 +381,40 @@ function startRankedMatch(wsHost, host, wsGuest, guest) {
     type: 'ranked_match_found', lobby_id: id, role: 'guest',
     opponent_name: host.username, opponent_rating: host.rating,
   });
+}
+
+// Pairs two queued players into a match the SERVER runs. Their decks are read
+// from the database by name inside createMatch; nothing here trusts a client.
+async function startServerRankedMatch(wsA, a, wsB, b) {
+  const id = 'rk_' + crypto.randomBytes(8).toString('hex');
+  let result;
+  try {
+    result = await auth.pair(id, a, b);
+  } catch (err) {
+    console.error('server ranked pairing failed', err);
+    result = { ok: false, error: 'unavailable' };
+  }
+  if (!result.ok) {
+    // Busy/unavailable: put both back so the next sweep retries. A bad deck is
+    // that player's problem alone - tell them and keep the other one waiting.
+    const bad = result.error === 'invalid_deck' ? (result.seat === 'a' ? wsA : wsB) : null;
+    for (const [w, p] of [[wsA, a], [wsB, b]]) {
+      if (w === bad) {
+        sendTo(w, { type: 'ranked_refused', reason: 'invalid_deck' });
+      } else if (result.error === 'invalid_deck') {
+        rankedQueue.set(w, p);
+      } else {
+        sendTo(w, { type: 'ranked_refused', reason: result.error === 'busy' ? 'ranked_busy' : 'ranked_unavailable' });
+      }
+    }
+    return;
+  }
+  for (const [w, p, o] of [[wsA, a, b], [wsB, b, a]]) {
+    sendTo(w, {
+      type: 'ranked_match_found', server_run: true, match_id: id,
+      opponent_name: o.username, opponent_rating: o.rating,
+    });
+  }
 }
 
 // --- Campaign matchmaking queue ---------------------------------------------
@@ -430,6 +470,11 @@ function startCampaignMatch(wsHost, host, wsGuest, guest) {
 
 async function main() {
   await initDb();
+  if (authoritativeEnabled()) {
+    auth = new Authoritative({ pool });
+    await auth.start();
+    console.log('Ranked matches are server-authoritative (rules version', auth.rulesVersion + ')');
+  }
 
   const wss = new WebSocket.Server({ port: PORT });
 
@@ -440,6 +485,21 @@ async function main() {
     ws.on('message', async (raw) => {
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
+
+      // Messages for a server-run match: authenticated by the session token,
+      // size-capped, validated and rate-limited before anything touches the rules.
+      if (auth && auth.isMatchMessage(msg.type)) {
+        if (auth.frameTooLarge(raw)) { sendTo(ws, { type: 'match_error', reason: 'invalid' }); return; }
+        try {
+          const found = await pool.query('SELECT player_id FROM sessions WHERE token = $1', [msg.token]);
+          if (!found.rows[0]) { sendTo(ws, { type: 'match_error', reason: 'unknown_match' }); return; }
+          const { token, ...frame } = msg; // the token never travels past authentication
+          await auth.route(found.rows[0].player_id, frame, ws, sendTo);
+        } catch (err) {
+          console.error('match message error', err);
+        }
+        return;
+      }
 
       switch (msg.type) {
         case 'register': {
@@ -785,6 +845,12 @@ async function main() {
               sendTo(ws, { type: 'ranked_result_ack', success: false, message: 'Missing match id.' });
               return;
             }
+            // A match the server ran is settled by the server alone; a client's
+            // report of its result is never read.
+            if (auth && auth.owns(matchId)) {
+              sendTo(ws, { type: 'ranked_result_ack', success: false, message: 'That match is settled by the server.' });
+              return;
+            }
 
             // Already settled? Replay the stored outcome. A retry after a
             // dropped ack must be safe, and must return what was actually
@@ -892,7 +958,7 @@ async function main() {
         case 'queue_ranked': {
           try {
             const result = await pool.query(
-              `SELECT p.username, p.rating
+              `SELECT p.id, p.username, p.rating
                FROM sessions s JOIN players p ON p.id = s.player_id WHERE s.token = $1`,
               [msg.token]
             );
@@ -901,7 +967,29 @@ async function main() {
               sendTo(ws, { type: 'error', message: 'Session expired.' });
               return;
             }
-            rankedQueue.set(ws, { username: player.username, rating: player.rating, queuedAt: Date.now() });
+            const entry = { playerId: player.id, username: player.username, rating: player.rating, queuedAt: Date.now() };
+            if (auth) {
+              // A client that cannot speak this server's rules must update
+              // before it can queue; one already in a match cannot queue twice.
+              if (msg.rules_version !== auth.rulesVersion) {
+                sendTo(ws, { type: 'ranked_refused', reason: 'update_required' });
+                return;
+              }
+              if (auth.manager.matchOf(player.id)) {
+                sendTo(ws, { type: 'ranked_refused', reason: 'already_in_match' });
+                return;
+              }
+              if (typeof msg.deck_name !== 'string' || msg.deck_name.length < 1 || msg.deck_name.length > 64) {
+                sendTo(ws, { type: 'ranked_refused', reason: 'invalid_deck' });
+                return;
+              }
+              if (!auth.manager.canStart()) {
+                sendTo(ws, { type: 'ranked_refused', reason: 'ranked_busy' });
+                return;
+              }
+              entry.deckName = msg.deck_name;
+            }
+            rankedQueue.set(ws, entry);
             sweepRankedQueue();
           } catch (err) {
             console.error('queue_ranked error', err);
@@ -1014,6 +1102,7 @@ async function main() {
 
 function _handleDisconnect(ws) {
   rankedQueue.delete(ws);
+  if (auth) auth.onClose(ws);
   campaignQueue.delete(ws);
   const info = clients.get(ws);
   if (!info) return;
