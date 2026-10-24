@@ -92,6 +92,12 @@ test('decks come from the database and are validated; clients cannot supply one'
   assert.equal(ctx.store.matches.size, 0, 'no match row for a refused deck');
 });
 
+test('a shipped starter deck can be queued by name without being saved', { skip }, async () => {
+  const ctx = setup();
+  const r = await ctx.manager.createMatch({ matchId: 'st1', a: { playerId: 1, deckName: 'Sapiens Starter' }, b: { playerId: 2, deckName: 'crimson' } });
+  assert.equal(r.ok, true, JSON.stringify(r));
+});
+
 test('join gives each seat only its own view; both seated -> active', { skip }, async () => {
   const ctx = setup();
   const m = await startedMatch(ctx);

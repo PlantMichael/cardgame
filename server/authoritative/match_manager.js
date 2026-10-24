@@ -10,7 +10,7 @@
 // It is transport-agnostic: a "connection" is any object with send(obj) and
 // close(); relay.js adapts websockets to it, tests use plain fakes.
 const crypto = require('crypto');
-const { validateDeck } = require('./decks');
+const { validateDeck, loadStarters } = require('./decks');
 const { validateClientMessage, publicReason, RateLimiter } = require('./protocol');
 
 const DEFAULTS = {
@@ -57,10 +57,11 @@ class Session {
 }
 
 class MatchManager {
-  constructor({ store, host, cards, settle = null, now = () => Date.now(), config = {}, log = console }) {
+  constructor({ store, host, cards, starters = null, settle = null, now = () => Date.now(), config = {}, log = console }) {
     this.store = store;
     this.host = host;
     this.cards = cards;
+    this.starters = starters || loadStarters();
     this.settle = settle;
     this.now = now;
     this.cfg = { ...DEFAULTS, ...config };
@@ -115,7 +116,7 @@ class MatchManager {
     if (!this.canStart()) return { ok: false, error: this.host.ready ? 'busy' : 'unavailable' };
     const decks = {};
     for (const [letter, p] of [['a', a], ['b', b]]) {
-      const row = await this.store.loadDeck(p.playerId, p.deckName);
+      const row = (await this.store.loadDeck(p.playerId, p.deckName)) || this.starters.get(p.deckName) || null;
       if (!row) return { ok: false, error: 'invalid_deck', seat: letter, detail: 'no such deck' };
       const v = validateDeck(row.card_ids, row.faction_idx, this.cards);
       if (!v.ok) return { ok: false, error: 'invalid_deck', seat: letter, detail: v.error };

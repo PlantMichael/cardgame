@@ -27,6 +27,15 @@ function loadCards(dataDir = DATA_DIR) {
   return cards;
 }
 
+/** The shipped starter decks, by name: a player may queue with one without ever saving it. */
+function loadStarters(dataDir = DATA_DIR) {
+  const out = new Map();
+  for (const d of JSON.parse(fs.readFileSync(path.join(dataDir, 'starters.json'), 'utf8'))) {
+    out.set(d.name, { faction_idx: d.faction_idx, card_ids: d.card_ids });
+  }
+  return out;
+}
+
 function maxCopiesFor(card) {
   return card.rarity === 'LEGENDARY' ? 1 : MAX_COPIES;
 }
@@ -56,4 +65,4 @@ function validateDeck(cardIds, factionIdx, cards) {
   return { ok: true, cardIds: cardIds.slice() };
 }
 
-module.exports = { loadCards, validateDeck, maxCopiesFor, MAX_DECK_SIZE, MAX_COPIES, MIN_DECK_SIZE, FACTION_COLORS };
+module.exports = { loadCards, loadStarters, validateDeck, maxCopiesFor, MAX_DECK_SIZE, MAX_COPIES, MIN_DECK_SIZE, FACTION_COLORS };
