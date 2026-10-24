@@ -114,6 +114,9 @@ func _ready() -> void:
 	if "--parity-test" in OS.get_cmdline_user_args():
 		_run_parity_test_cli()
 		return
+	if "--match-host" in OS.get_cmdline_user_args():
+		_run_match_host()
+		return
 	if "--selftest-fail" in OS.get_cmdline_user_args():
 		# Deliberate failure, so the harness itself can be shown to report
 		# one (handoff regression scenario 14). Without this, "the suite
@@ -209,6 +212,19 @@ func _run_parity_test_cli() -> void:
 		if arg.begins_with("--parity-matches="):
 			count = int(arg.get_slice("=", 1))
 	get_tree().quit(ParityTest.run(count))
+
+## The server's headless rules host (spec 003). Never builds a UI or opens a
+## connection of its own; see MatchHost.
+##   godot --headless --path <project> -- --match-host --port=<n>   (secret in $MATCH_HOST_SECRET)
+func _run_match_host() -> void:
+	var port := 0
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--port="):
+			port = int(arg.get_slice("=", 1))
+	var host := MatchHost.new()
+	add_child(host)
+	if not host.start(port, OS.get_environment("MATCH_HOST_SECRET")):
+		get_tree().quit(1)
 
 func _run_fatigue_test_cli() -> void:
 	print("Testing fatigue with empty decks...")

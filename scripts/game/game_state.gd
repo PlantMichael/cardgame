@@ -330,6 +330,16 @@ var pending_choice: Dictionary = {}
 var _choice_queue: Array[Dictionary] = []
 var _next_choice_id: int = 0
 
+## player_id -> true while that player may still take their one opening-hand
+## mulligan. Empty outside a server-run match's opening (local play runs its
+## mulligan through its own screen and calls mulligan_swap directly). While any
+## entry remains, no turn action is accepted - and a player cannot mulligan twice.
+var mulligan_pending: Dictionary = {}
+
+## Opens the mulligan phase for both players (after start_game()).
+func begin_mulligan() -> void:
+	mulligan_pending = {player.player_id: true, opponent.player_id: true}
+
 func has_pending_choice() -> bool:
 	return not pending_choice.is_empty()
 
@@ -863,7 +873,7 @@ func state_hash() -> String:
 				int(m.has_attacked), int(m.is_exhausted), int(m.is_nulled), ",".join(m.abilities),
 				m.card_uid, m.piloted_by.id if m.piloted_by != null else "", m.transform_counter])
 		parts.append("B|" + ";".join(ms))
-	parts.append("G|%d|%s|%d|%s|%d" % [current_phase, active_player_id, turn_number, winner_id, _next_choice_id])
+	parts.append("G|%d|%s|%d|%s|%d|%s" % [current_phase, active_player_id, turn_number, winner_id, _next_choice_id, JSON.stringify(mulligan_pending)])
 	parts.append("R|%d|%d" % [rng.seed, rng.state])
 	parts.append("C|" + JSON.stringify(pending_choice) + "|" + JSON.stringify(_choice_queue))
 	for qn in PENDING_QUEUES:
@@ -897,6 +907,7 @@ const CMD_ATTACK := "attack"
 const CMD_END_TURN := "end_turn"
 const CMD_ANSWER_CHOICE := "answer_choice"
 const CMD_CONCEDE := "concede"
+const CMD_MULLIGAN := "mulligan"
 
 ## Unknown ids map to null rather than silently falling through to the
 ## opponent the way _get_player_by_id() does - a command from an unrecognised
@@ -939,6 +950,20 @@ func validate(cmd: Dictionary) -> Dictionary:
 	# whoever's turn it is, and either player may concede at any time.
 	if cmd_type == CMD_CONCEDE:
 		return {"ok": true, "actor": actor}
+	if cmd_type == CMD_MULLIGAN:
+		if not mulligan_pending.get(actor_id, false):
+			return _reject("no mulligan available")
+		var cards: Array[CardData] = []
+		var seen := {}
+		for uid in cmd.get("card_uids", []):
+			var card := actor.find_card_in_hand(str(uid))
+			if card == null or seen.has(card.uid):
+				return _reject("mulligan names a card not in hand")
+			seen[card.uid] = true
+			cards.append(card)
+		return {"ok": true, "actor": actor, "cards": cards}
+	if not mulligan_pending.is_empty():
+		return _reject("waiting for opening mulligans")
 	if cmd_type == CMD_ANSWER_CHOICE:
 		if not has_pending_choice():
 			return _reject("no choice is pending")
@@ -1106,6 +1131,10 @@ func _execute_validated(cmd: Dictionary) -> Dictionary:
 			return answer_choice(str(cmd.get("choice_id", "")), str(cmd.get("selection", "")))
 		CMD_CONCEDE:
 			concede(actor.player_id)
+			return {"ok": true}
+		CMD_MULLIGAN:
+			mulligan_pending.erase(actor.player_id)
+			mulligan_swap(actor.player_id, check["cards"])
 			return {"ok": true}
 	return _reject("unhandled command type")
 
@@ -2033,6 +2062,7 @@ func duplicate_for_sim() -> GameState:
 	gs._choice_queue = _choice_queue.duplicate(true)
 	gs._next_choice_id = _next_choice_id
 	gs.end_reason = end_reason
+	gs.mulligan_pending = mulligan_pending.duplicate()
 	# events_enabled stays false: a simulation copy never emits events.
 	return gs
 
@@ -2060,6 +2090,7 @@ func to_net_dict(for_player_id: String = "") -> Dictionary:
 		"pending_choice": pending_choice.duplicate(true) if (for_player_id.is_empty() or str(pending_choice.get("player_id", "")) == for_player_id) else {},
 		"choice_queue": _choice_queue.duplicate(true) if for_player_id.is_empty() else [],
 		"end_reason": end_reason,
+		"mulligan_pending": mulligan_pending.duplicate(),
 		"pending_rummages": pending_rummages.duplicate(true),
 		"pending_tank_shots": pending_tank_shots.duplicate(),
 		"pending_nulls": pending_nulls.duplicate(true),
@@ -2067,7 +2098,9 @@ func to_net_dict(for_player_id: String = "") -> Dictionary:
 		"pending_tank_specialist_buffs": pending_tank_specialist_buffs.duplicate(),
 		"pending_on_reinforce_damages": pending_on_reinforce_damages.duplicate(true),
 		"pending_overwatch_challenges": pending_overwatch_challenges.duplicate(),
-		"pending_drawn_cards": pending_drawn_cards.map(func(c): return c.id),
+		# These are the LOCAL player's draws (the host's, in a host/guest view):
+		# they must never reach the other side.
+		"pending_drawn_cards": [] if for_player_id == "guest" else pending_drawn_cards.map(func(c): return c.id),
 		"pending_fatigue_damage": pending_fatigue_damage.duplicate(),
 	}
 
@@ -2082,6 +2115,7 @@ static func from_net_dict(d: Dictionary, my_id: String) -> GameState:
 	gs.winner_id = str(d.get("winner_id", ""))
 	gs.pending_choice = (d.get("pending_choice", {}) as Dictionary).duplicate(true)
 	gs.end_reason = str(d.get("end_reason", ""))
+	gs.mulligan_pending = (d.get("mulligan_pending", {}) as Dictionary).duplicate()
 	gs.pending_rummages.clear()
 	for r in d.get("pending_rummages", []):
 		gs.pending_rummages.append(r)
