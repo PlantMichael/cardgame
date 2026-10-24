@@ -60,8 +60,11 @@ func start_local_game(board_node: Board, player_deck: Array[CardData], opponent_
 	board.setup(game_state)
 	await board.show_coinflip_result(first_player_id == LOCAL_PLAYER_ID)
 	game_state.mulligan_swap(OPPONENT_PLAYER_ID, AIHeuristics.pick_mulligan_swaps(game_state.opponent.hand))
-	var player_swaps: Array[CardData] = await board.show_mulligan_screen(game_state.player.hand.duplicate())
-	game_state.mulligan_swap(LOCAL_PLAYER_ID, player_swaps)
+	# The screen applies the swap itself (through this callback) so it can deal
+	# each replacement into the slot it replaced before closing.
+	await board.show_mulligan_screen(game_state.player.hand.duplicate(),
+		func(swaps: Array[CardData]) -> Array[CardData]:
+			return game_state.mulligan_swap(LOCAL_PLAYER_ID, swaps))
 	board.refresh()
 	if not game_state.is_local_player_turn():
 		board.log_action("--- Opponent Turn %d ---" % game_state.turn_number)

@@ -113,8 +113,11 @@ func start_game(first_player_id: String) -> void:
 ## closed for good after a single confirm) is what enforces "each card can
 ## only be mulliganed once", not anything here. Silently skips any card no
 ## longer in hand (stale reference).
-func mulligan_swap(acting_player_id: String, cards_to_swap: Array[CardData]) -> void:
+## Returns the cards that came in as replacements, in draw order, so a caller
+## can show them (the mulligan screen deals each into the slot it replaced).
+func mulligan_swap(acting_player_id: String, cards_to_swap: Array[CardData]) -> Array[CardData]:
 	var acting := _get_player_by_id(acting_player_id)
+	var incoming: Array[CardData] = []
 	var swapped_count := 0
 	for card in cards_to_swap:
 		if card not in acting.hand:
@@ -123,10 +126,13 @@ func mulligan_swap(acting_player_id: String, cards_to_swap: Array[CardData]) -> 
 		acting.deck.append(card)
 		swapped_count += 1
 	if swapped_count == 0:
-		return
+		return incoming
 	shuffle_array(acting.deck)
 	for i in swapped_count:
-		acting.draw_card()
+		var drawn := acting.draw_card()
+		if drawn != null:
+			incoming.append(drawn)
+	return incoming
 
 func _begin_turn() -> void:
 	var active = _get_active_player()

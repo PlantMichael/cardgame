@@ -94,8 +94,9 @@ func start_as_host(board_node: Board, player_deck: Array[CardData], opp_deck: Ar
 ## each time, so two copies of the same card in the guest's hand can both be
 ## swapped instead of the first match being found twice.
 func _run_host_mulligan() -> void:
-	var host_swaps: Array[CardData] = await board.show_mulligan_screen(game_state.player.hand.duplicate())
-	game_state.mulligan_swap(HOST_ID, host_swaps)
+	await board.show_mulligan_screen(game_state.player.hand.duplicate(),
+		func(swaps: Array[CardData]) -> Array[CardData]:
+			return game_state.mulligan_swap(HOST_ID, swaps))
 
 	var msg: Dictionary = await Net.await_relay_of_type("action_mulligan")
 	var guest_hand_pool: Array[CardData] = game_state.opponent.hand.duplicate()
@@ -142,10 +143,18 @@ func start_as_guest(board_node: Board, opponent_name: String = "", ranked: bool 
 	await board.show_coinflip_result(first == GUEST_ID)
 	board.refresh()
 
-	var guest_swaps: Array[CardData] = await board.show_mulligan_screen(game_state.player.hand.duplicate())
-	Net.relay({"type": "action_mulligan", "card_ids": guest_swaps.map(func(c): return c.id)})
-	var post_mulligan_msg: Dictionary = await Net.await_relay_of_type("state_update")
-	_apply_state(post_mulligan_msg["state"])
+	# The host decides the replacements, so the screen waits on its reply and
+	# deals the cards that arrived (appended to the end of the hand).
+	await board.show_mulligan_screen(game_state.player.hand.duplicate(),
+		func(swaps: Array[CardData]) -> Array[CardData]:
+			Net.relay({"type": "action_mulligan", "card_ids": swaps.map(func(c): return c.id)})
+			var post_mulligan_msg: Dictionary = await Net.await_relay_of_type("state_update")
+			_apply_state(post_mulligan_msg["state"])
+			var hand: Array[CardData] = game_state.player.hand
+			var incoming: Array[CardData] = []
+			for i in range(maxi(0, hand.size() - swaps.size()), hand.size()):
+				incoming.append(hand[i])
+			return incoming)
 
 	await _guest_announce_pending_draws()
 

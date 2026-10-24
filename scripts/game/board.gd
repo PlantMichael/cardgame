@@ -2420,6 +2420,8 @@ const MULLIGAN_MAX_ROW_WIDTH := 1700.0
 const MULLIGAN_CARD_GAP := 28.0
 const MULLIGAN_DEAL_TIME := 0.5
 const MULLIGAN_DEAL_GAP := 0.14
+const MULLIGAN_DIM_TIME := 0.7
+const MULLIGAN_READ_TIME := 1.4  # replacements stay up this long before the screen closes
 const MULLIGAN_START_DIAMETER := 132.0
 
 ## A green, round confirm button - same look at rest, hover and press.
@@ -2453,13 +2455,40 @@ static func _make_round_start_button(diameter: float) -> Button:
 		button.add_theme_stylebox_override(state, box)
 	return button
 
-func show_mulligan_screen(hand: Array[CardData]) -> Array[CardData]:
+## Flies one mulligan card from the deck into its slot (a wrapper in the cards
+## row) and waits for it to land, plus a short beat so deals read one by one.
+func _mulligan_deal_card(card: Card, wrapper: Control, deck_center: Vector2, rest_scale: Vector2, card_pixels: Vector2) -> void:
+	card.scale = rest_scale * 0.3
+	card.position = deck_center - wrapper.global_position - card_pixels * 0.15
+	card.modulate.a = 0.0
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(card, "position", Vector2.ZERO, MULLIGAN_DEAL_TIME).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(card, "scale", rest_scale, MULLIGAN_DEAL_TIME).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(card, "modulate:a", 1.0, MULLIGAN_DEAL_TIME * 0.4)
+	await tween.finished
+	await get_tree().create_timer(MULLIGAN_DEAL_GAP).timeout
+
+## `apply_swaps(swaps) -> Array[CardData]` (optional) is how the replacements
+## get on screen: after the marked cards fly back to the deck the screen calls
+## it - the caller applies the swap to the match (even for an empty `swaps`, so
+## a multiplayer guest still reports "no changes") and returns the cards that
+## came in. Each one is then dealt from the deck into the slot it replaces and
+## held there to be read, Hearthstone-style, before the screen closes. Without
+## it the screen only reports what was marked and the caller swaps afterwards.
+func show_mulligan_screen(hand: Array[CardData], apply_swaps: Callable = Callable()) -> Array[CardData]:
 	if auto_confirm_mulligan:
+		if apply_swaps.is_valid():
+			await apply_swaps.call([] as Array[CardData])
 		return [] as Array[CardData]
 	var overlay := _open_modal_overlay()
 
 	var bg = ColorRect.new()
 	bg.color = Color(0, 0, 0, 0.82)
+	# The table dims away from the (still empty) battlefield as the game
+	# starts, instead of the screen snapping to black.
+	bg.modulate.a = 0.0
+	create_tween().tween_property(bg, "modulate:a", 1.0, MULLIGAN_DIM_TIME)
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	overlay.add_child(bg)
@@ -2469,6 +2498,8 @@ func show_mulligan_screen(hand: Array[CardData]) -> Array[CardData]:
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 	panel.add_theme_constant_override("separation", 30)
+	panel.modulate.a = 0.0
+	create_tween().tween_property(panel, "modulate:a", 1.0, MULLIGAN_DIM_TIME)
 	overlay.add_child(panel)
 
 	var title = Label.new()
@@ -2552,6 +2583,7 @@ func show_mulligan_screen(hand: Array[CardData]) -> Array[CardData]:
 	# measured from the real slots, so wait for them.
 	await get_tree().process_frame
 	await get_tree().process_frame
+	await get_tree().create_timer(MULLIGAN_DIM_TIME * 0.6).timeout
 	var deck_center := Vector2(1690, 725) + Vector2(41, 60)
 	if is_instance_valid(_player_deck_icon):
 		deck_center = _player_deck_icon.global_position + Vector2(41, 60)
@@ -2563,19 +2595,8 @@ func show_mulligan_screen(hand: Array[CardData]) -> Array[CardData]:
 		if not is_instance_valid(overlay):
 			return [] as Array[CardData]
 		var card: Card = card_nodes[hand[i]]
-		var wrapper := wrappers[i]
 		card.visible = true
-		var rest_scale: Vector2 = card.scale
-		card.position = deck_center - wrapper.global_position - card_pixels * 0.15
-		card.scale = rest_scale * 0.3
-		card.modulate.a = 0.0
-		var tween := create_tween()
-		tween.set_parallel(true)
-		tween.tween_property(card, "position", Vector2.ZERO, MULLIGAN_DEAL_TIME).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-		tween.tween_property(card, "scale", rest_scale, MULLIGAN_DEAL_TIME).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		tween.tween_property(card, "modulate:a", 1.0, MULLIGAN_DEAL_TIME * 0.4)
-		await tween.finished
-		await get_tree().create_timer(MULLIGAN_DEAL_GAP).timeout
+		await _mulligan_deal_card(card, wrappers[i], deck_center, card_scale, card_pixels)
 	if is_instance_valid(deck_visual):
 		deck_visual.queue_free()
 	for wrapper in wrappers:
@@ -2616,6 +2637,37 @@ func show_mulligan_screen(hand: Array[CardData]) -> Array[CardData]:
 			last_tween = tween
 		if last_tween:
 			await last_tween.finished
+
+	if apply_swaps.is_valid():
+		var incoming: Array[CardData] = []
+		for c in await apply_swaps.call(swaps):
+			incoming.append(c)
+		# Each replacement lands in the slot of the card it replaces.
+		var deck_back: Node2D = CardBackScene.instantiate()
+		deck_back.scale = Vector2(0.75, 0.75)
+		deck_back.position = deck_center - Vector2(41, 60)
+		overlay.add_child(deck_back)
+		for i in mini(incoming.size(), swaps.size()):
+			if not is_instance_valid(overlay):
+				return swaps
+			var slot: Control = wrappers[hand.find(swaps[i])]
+			var fresh: Card = CardScene.instantiate()
+			fresh.scale = card_scale
+			slot.add_child(fresh)
+			fresh.setup(incoming[i])
+			fresh.input_pickable = false
+			fresh.set_process_input(false)
+			_ignore_control_input(fresh)
+			await _mulligan_deal_card(fresh, slot, deck_center, card_scale, card_pixels)
+		deck_back.queue_free()
+		if not incoming.is_empty():
+			# Time to actually read what you drew before it joins your hand.
+			await get_tree().create_timer(MULLIGAN_READ_TIME).timeout
+		if is_instance_valid(bg):
+			var fade := create_tween().set_parallel(true)
+			fade.tween_property(bg, "modulate:a", 0.0, 0.3)
+			fade.tween_property(panel, "modulate:a", 0.0, 0.3)
+			await fade.finished
 
 	_close_modal_overlay(overlay)
 	return swaps
