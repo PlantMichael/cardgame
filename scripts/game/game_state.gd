@@ -494,6 +494,9 @@ func _validate_play(actor: PlayerState, cmd: Dictionary, as_creature: bool) -> D
 	var target_player_id: String = str(cmd.get("target_player_id", ""))
 	if not target_player_id.is_empty() and find_player(target_player_id) == null:
 		return _reject("unknown target player")
+	var target_error := _stratagem_target_error(card, target, target_player_id, actor)
+	if not target_error.is_empty():
+		return _reject(target_error)
 	# Targeting protection is a rule, not a UI convenience: enforce it here so
 	# AI, multiplayer and a hand-built command all obey it, not just the
 	# pointer-based board code that used to be the only thing checking.
@@ -670,8 +673,36 @@ func apply_null(target: Minion) -> void:
 	target.max_health = target.data.health
 	target.current_health = max(1, target.data.health - damage_taken)
 
+## Effect names for the stratagems that need rules of their own (below).
+const EFFECT_RETURN_FRIENDLY := "return_friendly_to_hand"
+const EFFECT_DAMAGE_ENEMIES_DRAW_YETI := "deal_damage_all_enemy_draw_yeti"
+
+## Why `target` is not a legal pick for `card` - or "" when it is. Kept in the
+## rules core so every route (command, AI, host, guest) refuses the same way
+## and BEFORE any mana is spent or the card consumed.
+func _stratagem_target_error(card: CardData, target: Minion, target_player_id: String,
+							 actor: PlayerState) -> String:
+	if card.effect == EFFECT_RETURN_FRIENDLY:
+		if not target_player_id.is_empty():
+			return "a hero is not a legal target"
+		if target == null:
+			return "no creature chosen"
+		if target.owner_id != actor.player_id or target not in actor.board:
+			return "target must be a creature on your own board"
+		if target.data.card_type != CardData.CardType.CREATURE:
+			return "target must be a creature"
+		# The play removes this card from hand first, so the returned card
+		# needs the slot that frees. A hand at capacity cannot exist with the
+		# card still in it, but the rule is stated rather than assumed.
+		if actor.hand.size() > PlayerState.MAX_HAND_SIZE:
+			return "no room in hand"
+	return ""
+
 func play_stratagem(acting_player_id: String, card: CardData,
 					target_minion: Minion = null, target_player_id: String = "") -> bool:
+	if not _stratagem_target_error(card, target_minion, target_player_id,
+			_get_player_by_id(acting_player_id)).is_empty():
+		return false
 	if target_minion != null and card.effect != "eject_pilot":
 		if target_minion.has_ability(Abilities.CLOAKED) and target_minion.owner_id != acting_player_id:
 			return false
@@ -1113,6 +1144,33 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 				else:
 					target_minion.current_health = min(target_minion.current_health + card.effect_value, target_minion.max_health)
 					_try_heal_to_draw(target_minion, target_minion.current_health - pre, 0)
+		EFFECT_RETURN_FRIENDLY:
+			if target_minion != null:
+				return_minion_to_hand(target_minion)
+		EFFECT_DAMAGE_ENEMIES_DRAW_YETI:
+			var acting := _get_player_by_id(acting_player_id)
+			var enemy := opponent if acting == player else player
+			var amp := _get_enemy_damage_amp(acting_player_id) if acting_player_id != "" else 0
+			var struck: Array[Minion] = []
+			for minion in enemy.board:
+				if minion.data.card_type == CardData.CardType.CREATURE:
+					struck.append(minion)
+			for minion in struck:
+				minion.take_damage(card.effect_value + amp)
+			# Attribution is read at THIS checkpoint, before any removal runs a
+			# deathrattle or Reinforce: a creature already at 0 here died to
+			# this card's own damage. Comparing board sizes afterwards would
+			# miss a death that Reinforce refilled, and would count one caused
+			# by a later trigger.
+			var directly_killed := false
+			for minion in struck:
+				if minion.is_dead():
+					directly_killed = true
+					break
+			_remove_dead_minions()
+			_check_win_condition()
+			if directly_killed and current_phase != Phase.GAME_OVER:
+				draw_random_yeti(acting)
 		"eject_pilot":
 			if target_minion != null and target_minion.is_piloted:
 				apply_eject_pilot(target_minion, _get_player_by_id(acting_player_id))
@@ -1133,6 +1191,97 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 					"ability": ability,
 					"expires_after": _opponent_id(acting_player_id)
 				})
+
+## Takes one random Yeti out of `owner`'s deck and into their hand, using the
+## match's own generator. No Yeti in the deck means nothing happens at all -
+## no fallback draw, and no fatigue (this is a search, not a draw from an
+## empty deck). A full hand burns the pick the way an ordinary draw does.
+func draw_random_yeti(owner: PlayerState) -> CardData:
+	var candidates: Array[CardData] = []
+	for c in owner.deck:
+		if c.card_type == CardData.CardType.CREATURE and Abilities.YETI in c.abilities:
+			candidates.append(c)
+	if candidates.is_empty():
+		return null
+	var chosen: CardData = rand_pick(candidates)
+	owner.deck.erase(chosen)
+	if owner.hand.size() >= PlayerState.MAX_HAND_SIZE:
+		return null
+	var card: CardData = chosen.new_instance(owner.mint_card_uid())
+	owner.hand.append(card)
+	if owner.player_id == player.player_id:
+		pending_drawn_cards.append(card)
+	return card
+
+## Returns a creature from the board to its owner's hand. NOT a death: no
+## deathrattle, no Reinforce, no rummage, no graveyard entry - the card simply
+## changes zone and the creature stops existing.
+##
+## Lifecycle decisions (the rules had no bounce before this):
+##  - The card keeps its identity (`card_uid`) and its rummage history. It
+##    comes back in the form it currently has, so a transformed creature is
+##    not undone. A one-off cost discount is not carried: replaying it costs
+##    its normally applicable mana.
+##  - Everything that lived on the Minion - damage, buffs, silence, granted or
+##    temporary abilities, summoning state, aura grants - is gone with it.
+##  - A remaining Reinforce budget is written onto the returned card, since
+##    Minion.new() rebuilds abilities from the card: without that a half-spent
+##    Commander Maurice would replay with a fresh four.
+##  - An attached pilot is not lost or duplicated: it takes the creature's
+##    place on the board (hand, then graveyard, if there is no room).
+## Returns the card now in hand, or null if nothing moved.
+func return_minion_to_hand(minion: Minion) -> CardData:
+	var owner := find_player(minion.owner_id)
+	if owner == null or minion not in owner.board:
+		return null
+	if owner.hand.size() >= PlayerState.MAX_HAND_SIZE:
+		return null
+	var index := owner.board.find(minion)
+	owner.remove_minion(minion)
+
+	var card: CardData = minion.data.clone_instance()
+	card.uid = minion.card_uid if not minion.card_uid.is_empty() else owner.mint_card_uid()
+	card.cost_modifier = 0
+	var printed_reinforce := false
+	for printed in minion.data.abilities:
+		if Abilities.is_reinforce(printed):
+			printed_reinforce = true
+	if printed_reinforce:
+		var kept: Array[String] = []
+		for printed in card.abilities:
+			if not Abilities.is_reinforce(printed):
+				kept.append(printed)
+		var left := Abilities.reinforce_ability(Abilities.reinforce_uses_of(minion))
+		if not left.is_empty():
+			kept.append(left)
+		card.abilities = kept
+	owner.hand.append(card)
+
+	# Bookkeeping that names this creature by id and would otherwise dangle.
+	var kept_shields: Array[Dictionary] = []
+	for entry in temp_shielded:
+		if entry["instance_id"] != minion.instance_id:
+			kept_shields.append(entry)
+	temp_shielded = kept_shields
+	var kept_grants: Array[Dictionary] = []
+	for entry in growvin_granted:
+		if entry["instance_id"] != minion.instance_id:
+			kept_grants.append(entry)
+	growvin_granted = kept_grants
+
+	if minion.is_piloted and minion.piloted_by != null:
+		var pilot_card: CardData = minion.piloted_by
+		if owner.has_room_for(pilot_card.abilities):
+			var pilot_minion := Minion.new(pilot_card, owner.player_id)
+			owner.place_minion(pilot_minion, mini(index, owner.board.size()))
+		elif owner.hand.size() < PlayerState.MAX_HAND_SIZE:
+			owner.hand.append(pilot_card)
+		else:
+			owner.graveyard.append(pilot_card)
+
+	# The creature may have been an aura source.
+	reconcile_lasting_effects(owner.player_id)
+	return card
 
 ## Removes everything that has died and resolves its death triggers.
 ##

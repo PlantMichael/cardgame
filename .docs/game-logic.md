@@ -26,6 +26,7 @@ var instance_id: String
 var piloted_by: CardData = null
 var pilot_atk_bonus: int = 0
 var pilot_hp_bonus: int = 0
+var card_uid: String = ""  # uid of the physical card it came from; survives transformation (see return_minion_to_hand)
 
 func has_ability(ability: String) -> bool:
 func is_location() -> bool:
@@ -222,6 +223,8 @@ Key methods:
 - `apply_transform_choice(minion, chosen_id)` — transforms minion into the card with the given id, retaining damage taken
 - `apply_buff_friendly_health(target: Minion)` — gives target +1 max health; triggers Apothecary and health-threshold transform
 - `apply_heal_buff(target: Minion, amount: int)` — gives target +amount max and current health; triggers Apothecary and health-threshold transform
+- `return_minion_to_hand(minion)` — a board-to-hand zone move, *not* a death (no deathrattle, Reinforce, rummage or graveyard entry). The card returns in its current form with its `card_uid` and `rummage_count`; `cost_modifier` is reset; damage/buffs/silence/abilities granted on the board are gone; a partly spent Reinforce budget (`reinforce_N`) is written onto the returned card so Commander Maurice cannot refill; an attached pilot takes the creature's place on the board (hand, then graveyard if no room); `temp_shielded`/`growvin_granted` entries for it are dropped and `reconcile_lasting_effects()` runs
+- `draw_random_yeti(owner)` — moves one random Yeti from the deck to the hand using the match generator; none in deck = no effect and no fatigue; full hand burns it like an ordinary draw
 Key methods also include:
 Rummage methods:
 - `get_rummage_options(player_id, max_cost, type_filter, allow_equal_cost: bool = false)` → `Array[CardData]`; returns unique graveyard cards matching filters (`""`, `"creature"`, `"stratagem"`, `"mech"`, `"creature_nonlegendary"`); `max_cost = -1` means no cost filter; `allow_equal_cost` makes the cost filter inclusive (≤ instead of <)
@@ -248,4 +251,6 @@ Stratagem effects handled in `_apply_stratagem()`:
 - `"eject_all_pilots"` — reverses all pilot merges on all friendly piloted Mechs
 - `"destroy_all_creatures"` — sets every minion's health to 0 on both boards, then removes them all
 - `"deal_damage_all_enemy"` — deals `effect_value` damage to every enemy minion (no target needed); e.g. Noxious Bombardment
+- `"return_friendly_to_hand"` — Emergency Extraction: moves a friendly *creature* (not a hero, enemy, or Location) back to hand via `return_minion_to_hand()`. Target legality is `_stratagem_target_error()`, checked in `validate()` and `play_stratagem()` before anything is spent
+- `"deal_damage_all_enemy_draw_yeti"` — Whiteout: `effect_value` damage (plus amp) to every enemy *creature* (Locations excluded); if any creature was at 0 health at that checkpoint — read before `_remove_dead_minions()`, so a Reinforce refill or a later deathrattle cannot change it — runs `draw_random_yeti()` once
 - `"force_challenge"` — prompts player to pick a friendly Yeti to immediately challenge a chosen enemy; if `effect_value > 0` and the target dies, the Yeti gains +`effect_value`/+`effect_value`; e.g. Icewhip

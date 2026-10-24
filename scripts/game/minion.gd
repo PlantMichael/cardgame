@@ -21,6 +21,12 @@ var transform_counter: int = 0
 
 var instance_id: String
 
+## Identity of the physical card this creature came from, kept on the minion
+## because `data` is replaced by a shared catalog definition (empty uid) when
+## the creature transforms. A card returned to hand takes this uid back, so it
+## is the SAME card, not a lookalike.
+var card_uid: String = ""
+
 var piloted_by: CardData = null
 var pilot_atk_bonus: int = 0
 var pilot_hp_bonus: int = 0
@@ -31,6 +37,7 @@ var pilot_hp_bonus: int = 0
 ## resolves on both sides.
 func _init(card_data: CardData, owner: String, p_instance_id: String = "") -> void:
 	data = card_data
+	card_uid = card_data.uid
 	owner_id = owner
 	current_attack = card_data.attack
 	current_health = card_data.health
@@ -65,6 +72,7 @@ func duplicate_for_sim() -> Minion:
 	m.is_newly_reinforced = is_newly_reinforced
 	m.is_newly_transformed = is_newly_transformed
 	m.is_nulled = is_nulled
+	m.card_uid = card_uid
 	m.transform_counter = transform_counter
 	m.piloted_by = piloted_by.clone_instance() if piloted_by != null else null
 	m.pilot_atk_bonus = pilot_atk_bonus
@@ -129,6 +137,7 @@ func to_net_dict() -> Dictionary:
 		"is_exhausted": is_exhausted,
 		"is_piloted": is_piloted,
 		"is_nulled": is_nulled,
+		"card_uid": card_uid,
 		"divine_shield": divine_shield,
 		"transform_counter": transform_counter,
 		"pilot_atk_bonus": pilot_atk_bonus,
@@ -149,6 +158,7 @@ static func from_net_dict(d: Dictionary) -> Minion:
 	m.is_exhausted = bool(d["is_exhausted"])
 	m.is_piloted = bool(d["is_piloted"])
 	m.is_nulled = bool(d["is_nulled"])
+	m.card_uid = str(d.get("card_uid", ""))
 	m.divine_shield = bool(d["divine_shield"])
 	m.transform_counter = int(d["transform_counter"])
 	m.pilot_atk_bonus = int(d["pilot_atk_bonus"])

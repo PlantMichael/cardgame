@@ -885,6 +885,459 @@ static func _test_maurice_reinforce() -> void:
 			gs4._remove_dead_minions()
 			_eq("and does not return twice", gs4.player.board.size(), 0)
 
+## Part Two cards (handoff): Emergency Extraction, Whiteout, Snowdrift Matriarch.
+
+## Puts a fresh copy of a catalog card in `pid`'s hand and tops up their mana.
+static func _hand_add(gs: GameState, pid: String, card_id: String) -> CardData:
+	var p := gs.find_player(pid)
+	var c := CardDatabase.get_card(card_id).new_instance(p.mint_card_uid())
+	p.hand.append(c)
+	# PlayerState.current_mana counts mana SPENT this turn (see can_play_card),
+	# so 0 is a full pool.
+	p.max_mana = 10
+	p.current_mana = 0
+	return c
+
+static func _play_stratagem(gs: GameState, pid: String, card: CardData, target_iid: String = "", target_pid: String = "") -> Dictionary:
+	return gs.execute({"type": "play_stratagem", "actor": pid, "card_uid": card.uid,
+		"target_instance_id": target_iid, "target_player_id": target_pid})
+
+static func _first_of_type(t: CardData.CardType) -> String:
+	for d: CardData in CardDatabase.get_all_cards():
+		if d.card_type == t:
+			return d.id
+	return ""
+
+static func _count_yetis(cards: Array) -> int:
+	var n := 0
+	for c in cards:
+		if Abilities.YETI in c.abilities:
+			n += 1
+	return n
+
+static func _test_part_two_catalog() -> void:
+	print("[part two: catalog]")
+	var ex := CardDatabase.get_card("gen_str_005")
+	_check("Emergency Extraction loads", ex != null)
+	if ex != null:
+		_eq("extraction name", ex.card_name, "Emergency Extraction")
+		_eq("extraction cost", ex.cost, 2)
+		_eq("extraction color", ex.color, CardData.CardColor.GENERIC)
+		_eq("extraction rarity", ex.rarity, CardData.CardRarity.COMMON)
+		_eq("extraction type", ex.card_type, CardData.CardType.STRATAGEM)
+		_eq("extraction text", ex.description, "Return a friendly creature to your hand.")
+		_check("extraction is not a token", not ex.is_token)
+	var wo := CardDatabase.get_card("t_str_004")
+	_check("Whiteout loads", wo != null)
+	if wo != null:
+		_eq("whiteout name", wo.card_name, "Whiteout")
+		_eq("whiteout cost", wo.cost, 5)
+		_eq("whiteout color", wo.color, CardData.CardColor.TEAL)
+		_eq("whiteout type", wo.card_type, CardData.CardType.STRATAGEM)
+		_eq("whiteout damage", wo.effect_value, 2)
+		_eq("whiteout text", wo.description, "Deal 2 damage to all enemy creatures. If any die from this damage, draw a random Yeti from your deck.")
+	var sm := CardDatabase.get_card("t_027")
+	_check("Snowdrift Matriarch loads", sm != null)
+	if sm != null:
+		_eq("matriarch name", sm.card_name, "Snowdrift Matriarch")
+		_eq("matriarch cost", sm.cost, 5)
+		_eq("matriarch attack", sm.attack, 3)
+		_eq("matriarch health", sm.health, 6)
+		_eq("matriarch color", sm.color, CardData.CardColor.TEAL)
+		_eq("matriarch type", sm.card_type, CardData.CardType.CREATURE)
+		_eq("matriarch tribe", sm.tribe, "yeti")
+		_check("matriarch is a yeti", Abilities.YETI in sm.abilities)
+		_check("the yeti tag is not duplicated", sm.abilities.count(Abilities.YETI) == 1)
+	var ids := {}
+	var dupes := 0
+	for d: CardData in CardDatabase.get_all_cards():
+		if ids.has(d.id):
+			dupes += 1
+		ids[d.id] = true
+	_eq("no duplicate card ids", dupes, 0)
+
+static func _test_emergency_extraction(card_id: String) -> void:
+	print("[Emergency Extraction]")
+	var gs := _fresh_match(card_id)
+	var ally := _put_on_board(gs, "a", card_id)
+	ally.current_health = 1
+	var ally_uid := ally.card_uid
+	_check("the creature carries its card's identity", not ally_uid.is_empty())
+	var ex := _hand_add(gs, "a", "gen_str_005")
+	var hand_before := gs.player.hand.size()
+	var r := _play_stratagem(gs, "a", ex, ally.instance_id)
+	_check("play accepted", r["ok"], str(r.get("error", "")))
+	_eq("2 mana spent", gs.player.current_mana, 2)
+	_check("creature left the board", ally not in gs.player.board)
+	_eq("hand: -Extraction +returned card", gs.player.hand.size(), hand_before)
+	_check("Extraction itself was consumed", gs.player.find_card_in_hand(ex.uid) == null)
+	var back := gs.player.find_card_in_hand(ally_uid)
+	_check("the SAME card (uid) is back in hand", back != null)
+	if back != null:
+		_eq("at printed health", back.health, ally.data.health)
+	_check("returning is not dying: creature not in graveyard", not gs.player.graveyard.has(ally.data))
+	_check("no choice or queue was opened", not gs.has_pending_choice() and not gs.has_pending())
+
+	# --- illegal targets leave everything untouched ---
+	var gs2 := _fresh_match(card_id)
+	var mine := _put_on_board(gs2, "a", card_id)
+	var theirs := _put_on_board(gs2, "b", card_id)
+	var ex2 := _hand_add(gs2, "a", "gen_str_005")
+	var loc_id := _first_of_type(CardData.CardType.LOCATION)
+	var loc: Minion = null
+	if not loc_id.is_empty():
+		loc = _put_on_board(gs2, "a", loc_id)
+	var snapshot := [gs2.player.hand.size(), gs2.player.current_mana, gs2.player.board.size(), gs2.opponent.board.size()]
+	var bad_cases := {
+		"enemy creature": [theirs.instance_id, ""],
+		"a hero": ["", "a"],
+		"an enemy hero": ["", "b"],
+		"no target": ["", ""],
+		"an unknown instance": ["nope#1", ""],
+	}
+	if loc != null:
+		bad_cases["a Location"] = [loc.instance_id, ""]
+	for label in bad_cases:
+		var rr := _play_stratagem(gs2, "a", ex2, bad_cases[label][0], bad_cases[label][1])
+		_check("rejects %s" % label, not rr["ok"])
+	_eq("rejections spent no mana", gs2.player.current_mana, snapshot[1])
+	_eq("rejections kept the hand", gs2.player.hand.size(), snapshot[0])
+	_eq("rejections kept my board", gs2.player.board.size(), snapshot[2])
+	_eq("rejections kept theirs", gs2.opponent.board.size(), snapshot[3])
+	# A stale target (already gone) is refused, and never removes someone else.
+	gs2.player.remove_minion(mine)
+	var stale := _play_stratagem(gs2, "a", ex2, mine.instance_id)
+	_check("a stale target is rejected", not stale["ok"])
+	_check("and Extraction is still in hand", gs2.player.find_card_in_hand(ex2.uid) != null)
+	# The direct (non-command) entry used by the multiplayer host/guest agrees.
+	_check("play_stratagem() refuses an enemy target too", not gs2.play_stratagem("a", ex2, theirs, ""))
+	_check("and the enemy creature is still there", theirs in gs2.opponent.board)
+
+	# --- a full hand still has room: Extraction frees its own slot ---
+	var gs3 := _fresh_match(card_id)
+	var t3 := _put_on_board(gs3, "a", card_id)
+	var ex3 := _hand_add(gs3, "a", "gen_str_005")
+	while gs3.player.hand.size() < PlayerState.MAX_HAND_SIZE:
+		gs3.player.hand.append(CardDatabase.get_card(card_id).new_instance(gs3.player.mint_card_uid()))
+	_eq("hand is full", gs3.player.hand.size(), PlayerState.MAX_HAND_SIZE)
+	var r3 := _play_stratagem(gs3, "a", ex3, t3.instance_id)
+	_check("a full hand still takes the returned card", r3["ok"])
+	_eq("and ends exactly full", gs3.player.hand.size(), PlayerState.MAX_HAND_SIZE)
+
+	# --- Archive Courier: returning is not dying, so no death draw ---
+	var gs4 := _fresh_match(card_id)
+	var courier := _put_on_board(gs4, "a", "gen_014")
+	var ex4 := _hand_add(gs4, "a", "gen_str_005")
+	var deck_before := gs4.player.deck.size()
+	var hand4 := gs4.player.hand.size()
+	_play_stratagem(gs4, "a", ex4, courier.instance_id)
+	_eq("no card drawn", gs4.player.deck.size(), deck_before)
+	_eq("hand is -Extraction +Courier only", gs4.player.hand.size(), hand4)
+	_check("no pending draw announced", gs4.pending_drawn_cards.is_empty())
+
+	# --- a Reinforce creature does not come back to the board ---
+	var plain: CardData = null
+	for d: CardData in CardDatabase.get_all_cards():
+		if d.id != "g_028" and Abilities.REINFORCE in d.abilities and not d.is_token:
+			plain = d
+			break
+	if plain != null:
+		var gs5 := _fresh_match(card_id)
+		var rf := _put_on_board(gs5, "a", plain.id)
+		var ex5 := _hand_add(gs5, "a", "gen_str_005")
+		_play_stratagem(gs5, "a", ex5, rf.instance_id)
+		_eq("no Reinforce replacement", gs5.player.board.size(), 0)
+		_check("no reinforce event queued", not gs5.has_pending())
+		var rc := gs5.player.find_card_in_hand(rf.card_uid)
+		_check("it is in hand with its Reinforce intact", rc != null and Abilities.REINFORCE in rc.abilities)
+
+	# --- Rummage history rides along; returning is not a rummage ---
+	var gs6 := _fresh_match(card_id)
+	var rm := _put_on_board(gs6, "a", card_id)
+	rm.data.rummage_count = 2
+	var ex6 := _hand_add(gs6, "a", "gen_str_005")
+	_play_stratagem(gs6, "a", ex6, rm.instance_id)
+	var rmc := gs6.player.find_card_in_hand(rm.card_uid)
+	_check("rummage history preserved", rmc != null and rmc.rummage_count == 2)
+	_check("no rummage queued", gs6.pending_rummages.is_empty())
+	_check("the shared catalog definition is untouched", CardDatabase.get_card(card_id).rummage_count == 0)
+
+	# --- a transformed creature is not undone, and keeps its identity ---
+	var gs7 := _fresh_match(card_id)
+	var tf := _put_on_board(gs7, "a", card_id)
+	var uid7 := tf.card_uid
+	tf.data = CardDatabase.get_card("gen_013")
+	var ex7 := _hand_add(gs7, "a", "gen_str_005")
+	_play_stratagem(gs7, "a", ex7, tf.instance_id)
+	var tfc := gs7.player.find_card_in_hand(uid7)
+	_check("a transformed creature returns in its current form, same uid", tfc != null and tfc.id == "gen_013")
+
+	# --- an attached pilot is neither lost nor duplicated ---
+	var gs8 := _fresh_match(card_id)
+	var mech := _put_on_board(gs8, "a", card_id)
+	mech.is_piloted = true
+	mech.piloted_by = CardDatabase.get_card("gen_013").new_instance(gs8.player.mint_card_uid())
+	var ex8 := _hand_add(gs8, "a", "gen_str_005")
+	_play_stratagem(gs8, "a", ex8, mech.instance_id)
+	_eq("exactly the pilot replaces it on the board", gs8.player.board.size(), 1)
+	if gs8.player.board.size() == 1:
+		_eq("and it is the pilot", gs8.player.board[0].data.id, "gen_013")
+
+	# --- stale bookkeeping naming the creature is cleared ---
+	var gs9 := _fresh_match(card_id)
+	var sh := _put_on_board(gs9, "a", card_id)
+	gs9.temp_shielded.append({"instance_id": sh.instance_id, "ability": "shielded_3", "expires_after": "b"})
+	var ex9 := _hand_add(gs9, "a", "gen_str_005")
+	_play_stratagem(gs9, "a", ex9, sh.instance_id)
+	_check("a temporary shield entry for it is dropped", gs9.temp_shielded.is_empty())
+
+	# --- simulation copies keep identity and stay independent ---
+	var gs10 := _fresh_match(card_id)
+	var cl := _put_on_board(gs10, "a", card_id)
+	var ex10 := _hand_add(gs10, "a", "gen_str_005")
+	var copy := gs10.duplicate_for_sim()
+	_eq("a copy keeps the card identity", copy.player.board[0].card_uid, cl.card_uid)
+	_play_stratagem(copy, "a", copy.player.find_card_in_hand(ex10.uid), copy.player.board[0].instance_id)
+	_eq("playing in the copy does not touch the original board", gs10.player.board.size(), 1)
+	_check("or the original hand", gs10.player.find_card_in_hand(ex10.uid) != null)
+
+## Maurice and the cards whose on-play must NOT fire on the return.
+static func _test_extraction_replay() -> void:
+	print("[Emergency Extraction: replay]")
+	var filler := _cheap_creature_id()
+	# Maurice with uses left keeps exactly the uses left; zero stays zero.
+	for deaths in [1, 4]:
+		var gs := _fresh_match(filler)
+		var m := Minion.new(CardDatabase.get_card("g_028").new_instance(gs.player.mint_card_uid()), "a")
+		gs.player.place_minion(m)
+		for _i in deaths:
+			gs.player.board[0].current_health = 0
+			gs._remove_dead_minions()
+		var live: Minion = gs.player.board[0]
+		var left := Abilities.reinforce_uses_of(live)
+		_eq("Maurice has %d left before extraction" % (4 - deaths), left, 4 - deaths)
+		var ex := _hand_add(gs, "a", "gen_str_005")
+		_play_stratagem(gs, "a", ex, live.instance_id)
+		var card := gs.player.find_card_in_hand(m.card_uid)
+		_check("Maurice (%d used) is back in hand" % deaths, card != null)
+		if card == null:
+			continue
+		var r := gs.execute({"type": "play_creature", "actor": "a", "card_uid": card.uid, "at_index": -1})
+		_check("and replays", r["ok"], str(r.get("error", "")))
+		if r["ok"]:
+			_eq("replayed Maurice has the same %d returns, not a fresh four" % left,
+				Abilities.reinforce_uses_of(r["minion"]), left)
+	# Replaying an on-play creature charges its cost and fires its effect once;
+	# the extraction itself fires nothing.
+	var gs2 := _fresh_match(filler)
+	var hunter := _put_on_board(gs2, "a", "gen_017")
+	var foe := _put_on_board(gs2, "b", filler)
+	foe.current_attack = 6
+	foe.max_health = 20
+	foe.current_health = 20
+	var ex2 := _hand_add(gs2, "a", "gen_str_005")
+	_play_stratagem(gs2, "a", ex2, hunter.instance_id)
+	_check("extraction opened no on-play choice", not gs2.has_pending_choice())
+	var hc := gs2.player.find_card_in_hand(hunter.card_uid)
+	_check("Heavy Bounty Hunter is in hand", hc != null)
+	if hc != null:
+		var mana := gs2.player.current_mana
+		var r2 := gs2.execute({"type": "play_creature", "actor": "a", "card_uid": hc.uid, "at_index": -1})
+		_check("replay accepted", r2["ok"])
+		_eq("replay charges its full cost", gs2.player.current_mana, mana + hc.effective_cost())
+		_check("its on-play choice opens exactly once, now", gs2.has_pending_choice())
+
+static func _test_whiteout() -> void:
+	print("[Whiteout]")
+	var filler := _cheap_creature_id()
+	var yeti_deck: Array[CardData] = []
+	for _i in 6:
+		yeti_deck.append(CardDatabase.get_card("t_025"))
+		yeti_deck.append(CardDatabase.get_card("t_026"))
+	var new_game := func(my_deck: Array[CardData]) -> GameState:
+		var g := GameState.new("a", "b", my_deck, _deck_of(filler, 20))
+		g.set_gameplay_seed(11)
+		g.start_game("a")
+		return g
+
+	# Direct kills: several die, exactly one Yeti is drawn.
+	var gs: GameState = new_game.call(yeti_deck)
+	var e1 := _put_on_board(gs, "b", filler)
+	var e2 := _put_on_board(gs, "b", filler)
+	e1.current_health = 2
+	e2.current_health = 1
+	var friend := _put_on_board(gs, "a", filler)
+	var friend_hp := friend.current_health
+	var heroes := [gs.player.hero_health, gs.opponent.hero_health]
+	var wo := _hand_add(gs, "a", "t_str_004")
+	var yetis_before := _count_yetis(gs.player.hand)
+	var deck_before := gs.player.deck.size()
+	var r := _play_stratagem(gs, "a", wo)
+	_check("untargeted play accepted", r["ok"], str(r.get("error", "")))
+	_eq("5 mana spent", gs.player.current_mana, 5)
+	_eq("both enemies died", gs.opponent.board.size(), 0)
+	_eq("exactly one Yeti drawn for two kills", _count_yetis(gs.player.hand), yetis_before + 1)
+	_eq("it came out of the deck", gs.player.deck.size(), deck_before - 1)
+	_eq("friendly creature untouched", friend.current_health, friend_hp)
+	_eq("my hero untouched", gs.player.hero_health, heroes[0])
+	_eq("their hero untouched", gs.opponent.hero_health, heroes[1])
+
+	# No kill, no draw; survivors take exactly 2.
+	var gs2: GameState = new_game.call(yeti_deck)
+	var tough := _put_on_board(gs2, "b", filler)
+	tough.max_health = 9
+	tough.current_health = 9
+	var wo2 := _hand_add(gs2, "a", "t_str_004")
+	var hand2 := gs2.player.hand.size()
+	_play_stratagem(gs2, "a", wo2)
+	_eq("survivor took 2", tough.current_health, 7)
+	_eq("no kill, no draw (hand only lost Whiteout)", gs2.player.hand.size(), hand2 - 1)
+
+	# No enemies at all is a legal play that simply does nothing.
+	var gs2b: GameState = new_game.call(yeti_deck)
+	var wo2b := _hand_add(gs2b, "a", "t_str_004")
+	_check("no enemies is still playable", _play_stratagem(gs2b, "a", wo2b)["ok"])
+
+	# Locations are not damaged.
+	var loc_id := _first_of_type(CardData.CardType.LOCATION)
+	if not loc_id.is_empty():
+		var gs3: GameState = new_game.call(yeti_deck)
+		var loc := _put_on_board(gs3, "b", loc_id)
+		var loc_hp := loc.current_health
+		var wo3 := _hand_add(gs3, "a", "t_str_004")
+		_play_stratagem(gs3, "a", wo3)
+		_eq("an enemy Location takes no damage", loc.current_health, loc_hp)
+		_check("and is still on the board", loc in gs3.opponent.board)
+
+	# A direct kill that Reinforce refills still counts (board size unchanged).
+	var rf_card: CardData = null
+	for d: CardData in CardDatabase.get_all_cards():
+		if d.card_type == CardData.CardType.CREATURE and Abilities.REINFORCE in d.abilities and d.id != "g_028" and not d.is_token:
+			rf_card = d
+			break
+	if rf_card != null:
+		var gs4: GameState = new_game.call(yeti_deck)
+		var rfm := _put_on_board(gs4, "b", rf_card.id)
+		rfm.current_health = 1
+		var wo4 := _hand_add(gs4, "a", "t_str_004")
+		var y4 := _count_yetis(gs4.player.hand)
+		_play_stratagem(gs4, "a", wo4)
+		_eq("Reinforce refilled the board", gs4.opponent.board.size(), 1)
+		_eq("but the direct kill still drew a Yeti", _count_yetis(gs4.player.hand), y4 + 1)
+
+	# No Yeti in the deck: nothing, and no fatigue. Same for an empty deck.
+	var gs5: GameState = new_game.call(_deck_of(filler, 10))
+	var d5 := _put_on_board(gs5, "b", filler)
+	d5.current_health = 1
+	var wo5 := _hand_add(gs5, "a", "t_str_004")
+	var h5 := gs5.player.hand.size()
+	var deck5 := gs5.player.deck.size()
+	_play_stratagem(gs5, "a", wo5)
+	_eq("no Yeti: no fallback draw", gs5.player.hand.size(), h5 - 1)
+	_eq("deck untouched", gs5.player.deck.size(), deck5)
+	var empty_deck: Array[CardData] = []
+	var gs6: GameState = new_game.call(empty_deck)
+	var d6 := _put_on_board(gs6, "b", filler)
+	d6.current_health = 1
+	var wo6 := _hand_add(gs6, "a", "t_str_004")
+	var hero6 := gs6.player.hero_health
+	var fatigue6 := gs6.player.fatigue_damage  # the opening deal already drew from nothing
+	_play_stratagem(gs6, "a", wo6)
+	_eq("an empty deck causes no further fatigue", gs6.player.fatigue_damage, fatigue6)
+	_eq("nor hero damage", gs6.player.hero_health, hero6)
+
+	# A full hand burns the pick like an ordinary draw.
+	var gs7: GameState = new_game.call(yeti_deck)
+	while gs7.player.hand.size() < PlayerState.MAX_HAND_SIZE:
+		gs7.player.hand.append(CardDatabase.get_card(filler).new_instance(gs7.player.mint_card_uid()))
+	var deck7 := gs7.player.deck.size()
+	gs7.draw_random_yeti(gs7.player)
+	_eq("a full hand stays full", gs7.player.hand.size(), PlayerState.MAX_HAND_SIZE)
+	_eq("the burned Yeti left the deck", gs7.player.deck.size(), deck7 - 1)
+
+	# Same seed + same state -> same Yeti; the pick is the match's own roll.
+	# (Two clones of ONE state: a copy carries the generator's position, which
+	# is exactly the property that makes the pick the match's own roll.)
+	var base: GameState = new_game.call(yeti_deck)
+	var picks: Array[String] = []
+	for _run in 2:
+		var g := base.duplicate_for_sim()
+		var c := g.draw_random_yeti(g.player)
+		picks.append(c.id if c != null else "")
+	_eq("deterministic under a fixed seed", picks[0], picks[1])
+	var pick_card := CardDatabase.get_card(picks[0])
+	_check("and it is a Yeti", pick_card != null and Abilities.YETI in pick_card.abilities)
+	var gs8: GameState = new_game.call(yeti_deck)
+	var minted := gs8.draw_random_yeti(gs8.player)
+	_check("the drawn card is a new instance with its own uid", minted != null and not minted.uid.is_empty())
+	_check("the shared catalog card was not mutated", CardDatabase.get_card(minted.id).uid.is_empty())
+
+	# Damage modifiers apply like other stratagem damage.
+	var gs9: GameState = new_game.call(yeti_deck)
+	var amp_src := _put_on_board(gs9, "a", filler)
+	amp_src.abilities.append("enemy_damage_amp_1")
+	var e9 := _put_on_board(gs9, "b", filler)
+	e9.current_health = 3
+	var wo9 := _hand_add(gs9, "a", "t_str_004")
+	_play_stratagem(gs9, "a", wo9)
+	_check("amplified damage (2+1) kills a 3-health creature", e9 not in gs9.opponent.board)
+
+static func _test_snowdrift_matriarch() -> void:
+	print("[Snowdrift Matriarch]")
+	var filler := _cheap_creature_id()
+	var gs := _fresh_match(filler)
+	var y1 := _put_on_board(gs, "a", "t_025")
+	var y2 := _put_on_board(gs, "a", "t_026")
+	var y_full := _put_on_board(gs, "a", "t_025")
+	var other := _put_on_board(gs, "a", filler)
+	var foe_yeti := _put_on_board(gs, "b", "t_025")
+	for m in [y1, y2, y_full, other, foe_yeti]:
+		m.max_health = 6
+		m.current_health = 6
+	y1.current_health = 1
+	y2.current_health = 5
+	other.current_health = 1
+	foe_yeti.current_health = 1
+	var card := _hand_add(gs, "a", "t_027")
+	var r := gs.execute({"type": "play_creature", "actor": "a", "card_uid": card.uid, "at_index": -1})
+	_check("played", r["ok"], str(r.get("error", "")))
+	_check("no per-recipient prompt", not gs.has_pending_choice())
+	_eq("a Yeti 5 below max heals the full 2", y1.current_health, 3)
+	_eq("a Yeti 1 below max heals only 1", y2.current_health, 6)
+	_eq("a full-health Yeti gains nothing", y_full.current_health, 6)
+	_eq("max health unchanged by the base effect", y1.max_health, 6)
+	_eq("a non-Yeti friend is not healed", other.current_health, 1)
+	_eq("an enemy Yeti is not healed", foe_yeti.current_health, 1)
+	if r["ok"]:
+		var matriarch: Minion = r["minion"]
+		_eq("the source is not healed (3/6 stays 6)", matriarch.current_health, 6)
+
+	# Alone: still plays normally.
+	var gs2 := _fresh_match(filler)
+	var c2 := _hand_add(gs2, "a", "t_027")
+	var r2 := gs2.execute({"type": "play_creature", "actor": "a", "card_uid": c2.uid, "at_index": -1})
+	_check("playing with no other Yeti completes", r2["ok"] and gs2.player.board.size() == 1)
+
+	# A hurt Matriarch already on board is a legal recipient for a second one.
+	var gs3 := _fresh_match(filler)
+	var first := _put_on_board(gs3, "a", "t_027")
+	first.current_health = 2
+	var c3 := _hand_add(gs3, "a", "t_027")
+	gs3.execute({"type": "play_creature", "actor": "a", "card_uid": c3.uid, "at_index": -1})
+	_eq("another Matriarch counts as an other friendly Yeti", first.current_health, 4)
+
+	# Reinforce is a summon, not a play: it must not heal.
+	var gs4 := _fresh_match(filler)
+	var hurt := _put_on_board(gs4, "a", "t_025")
+	hurt.max_health = 6
+	hurt.current_health = 2
+	var m4 := Minion.new(CardDatabase.get_card("t_027").new_instance(gs4.player.mint_card_uid()), "a")
+	gs4.player.place_minion(m4)
+	m4.abilities.append("reinforce")
+	m4.current_health = 0
+	gs4._remove_dead_minions()
+	_eq("a Reinforce return does not fire on-play healing", hurt.current_health, 2)
+
 ## Handoff items 11/12, scenario 12: a payload sent to one player must not
 ## carry the other player's hidden information.
 static func _test_player_views(card_id: String) -> void:
@@ -970,6 +1423,11 @@ static func run() -> int:
 	_test_targeted_on_play(card_id)
 	_test_choice_validation(card_id)
 	_test_maurice_reinforce()
+	_test_part_two_catalog()
+	_test_emergency_extraction(card_id)
+	_test_extraction_replay()
+	_test_whiteout()
+	_test_snowdrift_matriarch()
 	_test_player_views(card_id)
 	print("CORE TESTS: %d checks, %d failed" % [_checks, _failures])
 	print("RESULT: %s" % ("PASS" if _failures == 0 else "FAIL"))

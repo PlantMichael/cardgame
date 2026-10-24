@@ -339,5 +339,20 @@
 		"effect_value": 0,
 		"is_token": false,
 		"in_starter": false
+	},
+	{
+		"id": "gen_str_005",
+		"card_name": "Emergency Extraction",
+		"cost": 2,
+		"color": "GENERIC",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Return a friendly creature to your hand.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "return_friendly_to_hand",
+		"effect_value": 0
 	}
 ]

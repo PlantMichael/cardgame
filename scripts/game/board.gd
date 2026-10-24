@@ -1166,6 +1166,9 @@ func _on_card_dropped(card: Card) -> void:
 						elif _stratagem_needs_friendly_creature_only(card.data):
 							if zone != player_board_zone:
 								continue
+							# A Location is on the board but is not a creature.
+							if card.data.effect == GameState.EFFECT_RETURN_FRIENDLY and target_card.minion.is_location():
+								continue
 						var card_data_to_play = card.data
 						var target_minion = target_card.minion
 						card.queue_free()
@@ -2430,10 +2433,10 @@ func show_mulligan_screen(hand: Array[CardData]) -> Array[CardData]:
 	return swaps
 
 func _stratagem_needs_target(data: CardData) -> bool:
-	return data.effect not in ["destroy_all_creatures", "deal_damage_all_creatures", "deal_damage_all_enemy", "buff_all_friendly_attack", "buff_all_friendly_health", "eject_all_pilots", "sludge_spray"]
+	return data.effect not in ["destroy_all_creatures", "deal_damage_all_creatures", "deal_damage_all_enemy", "deal_damage_all_enemy_draw_yeti", "buff_all_friendly_attack", "buff_all_friendly_health", "eject_all_pilots", "sludge_spray"]
 
 func _stratagem_needs_creature_target(data: CardData) -> bool:
-	return data.effect in ["give_ability", "buff_creature", "buff_health", "force_challenge", "poke_bear", "blood_transfusion", "sanguine", "heal", "eject_pilot", "give_mech_shielded_temp", "tainted_blood", "exsanguinate", "blood_boil"]
+	return data.effect in ["give_ability", "buff_creature", "buff_health", "force_challenge", "poke_bear", "blood_transfusion", "sanguine", "heal", "eject_pilot", "give_mech_shielded_temp", "tainted_blood", "exsanguinate", "blood_boil", "return_friendly_to_hand"]
 
 func _stratagem_needs_friendly_yeti(data: CardData) -> bool:
 	return data.effect in ["force_challenge", "poke_bear"]
@@ -2442,7 +2445,7 @@ func _stratagem_needs_enemy_creature_only(data: CardData) -> bool:
 	return data.effect in ["blood_transfusion", "exsanguinate"]
 
 func _stratagem_needs_friendly_creature_only(data: CardData) -> bool:
-	return data.effect in ["sanguine", "heal", "give_ability", "tainted_blood", "blood_boil"]
+	return data.effect in ["sanguine", "heal", "give_ability", "tainted_blood", "blood_boil", "return_friendly_to_hand"]
 
 func _stratagem_needs_friendly_piloted_mech(data: CardData) -> bool:
 	return data.effect == "eject_pilot"
@@ -2616,12 +2619,20 @@ func show_game_over(won: bool, is_ranked: bool = false, old_bracket: int = 0,
 	vbox.add_child(label)
 
 	if is_ranked:
+		# Old -> new rank icons flank the text once the server acks (filled in
+		# by _connect_ranked_result_display); hidden until then.
+		var rank_icons := HBoxContainer.new()
+		rank_icons.alignment = BoxContainer.ALIGNMENT_CENTER
+		rank_icons.add_theme_constant_override("separation", 14)
+		rank_icons.visible = false
+		vbox.add_child(rank_icons)
+
 		var rank_lbl := Label.new()
 		rank_lbl.text = "Updating rank..."
 		rank_lbl.add_theme_font_size_override("font_size", 22)
 		rank_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vbox.add_child(rank_lbl)
-		_connect_ranked_result_display(rank_lbl, won, old_bracket, old_in_legend, old_legend_rating)
+		_connect_ranked_result_display(rank_lbl, won, old_bracket, old_in_legend, old_legend_rating, rank_icons)
 
 		var btn_row := HBoxContainer.new()
 		btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -2662,7 +2673,8 @@ func show_game_over(won: bool, is_ranked: bool = false, old_bracket: int = 0,
 ## up/down is visible on the game-over screen instead of only on the next
 ## visit to the Ranked menu.
 func _connect_ranked_result_display(rank_lbl: Label, won: bool, old_bracket: int,
-								   old_in_legend: bool, old_legend_rating: int) -> void:
+								   old_in_legend: bool, old_legend_rating: int,
+								   rank_icons: HBoxContainer = null) -> void:
 	Net.ranked_result_received.connect(func(success: bool, _profile: Dictionary):
 		if not is_instance_valid(rank_lbl):
 			return
@@ -2671,6 +2683,19 @@ func _connect_ranked_result_display(rank_lbl: Label, won: bool, old_bracket: int
 			return
 		var old_str := RankedProgress.get_display_string(old_bracket, old_in_legend, old_legend_rating)
 		var new_str := RankedProgress.get_display_string(Auth.rank_bracket, Auth.rank_in_legend, Auth.rank_legend_rating)
+		if rank_icons != null and is_instance_valid(rank_icons):
+			for child in rank_icons.get_children():
+				child.queue_free()
+			rank_icons.visible = true
+			if old_str != new_str:
+				rank_icons.add_child(RankedProgress.make_icon_rect(old_bracket, old_in_legend, old_legend_rating, 72))
+				var arrow := Label.new()
+				arrow.text = "->"
+				arrow.add_theme_font_size_override("font_size", 28)
+				arrow.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+				rank_icons.add_child(arrow)
+			rank_icons.add_child(RankedProgress.make_icon_rect(
+				Auth.rank_bracket, Auth.rank_in_legend, Auth.rank_legend_rating, 72))
 		var tier_str := new_str if old_str == new_str else "%s -> %s" % [old_str, new_str]
 		# A tier change only ever happens on a win under the current ladder
 		# rules (brackets/Legend rating only go up on a win; a loss can only

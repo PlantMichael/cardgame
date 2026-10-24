@@ -30,6 +30,7 @@ const ON_YETI_DEATH_CHALLENGE = "on_yeti_death_challenge"
 const ON_PLAY_RUMMAGE_BUFF           = "on_play_rummage_buff"
 const ATTACK_BUFF_FRIENDLY_HEALTH    = "attack_buff_friendly_health"
 const ON_PLAY_BUFF_FRIENDLY_YETI_ATK = "on_play_buff_friendly_yeti_attack"
+const ON_PLAY_HEAL_FRIENDLY_YETIS = "on_play_heal_friendly_yetis"
 const ON_FRIENDLY_YETI_DEATH_BUFF    = "on_friendly_yeti_death_buff"
 const ON_FRIENDLY_MECH_DEATH_BUFF    = "on_friendly_mech_death_buff"
 const ON_PLAY_BUFF_IF_YETI           = "on_play_buff_if_yeti"
@@ -98,6 +99,7 @@ const DEFINITIONS: Dictionary = {
 	ON_PLAY_RUMMAGE_BUFF:            { "display": "On Play:",        "color": Color(0.30, 0.08, 0.42) },
 	ATTACK_BUFF_FRIENDLY_HEALTH:     { "display": "On Attack:",      "color": Color(0.70, 0.25, 0.45) },
 	ON_PLAY_BUFF_FRIENDLY_YETI_ATK:  { "display": "On Play:",        "color": Color(0.45, 0.70, 0.85) },
+	ON_PLAY_HEAL_FRIENDLY_YETIS:     { "display": "On Play:",        "color": Color(0.45, 0.70, 0.85) },
 	ON_FRIENDLY_YETI_DEATH_BUFF:     { "display": "Yeti Bond",       "color": Color(0.45, 0.70, 0.85) },
 	ON_FRIENDLY_MECH_DEATH_BUFF:     { "display": "Mech Bond",       "color": Color(0.60, 0.38, 0.08) },
 	ON_PLAY_BUFF_IF_YETI:            { "display": "On Play:",        "color": Color(0.45, 0.70, 0.85) },
@@ -445,6 +447,19 @@ func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 				for m in owner.board:
 					if m != minion and m.has_ability(YETI):
 						m.current_attack += 2
+			ON_PLAY_HEAL_FRIENDLY_YETIS:
+				# One group, no target picker. The recipients are fixed up
+				# front so a reaction that changes the board mid-heal can
+				# neither skip nor repeat one; restore_health() is the shared
+				# pipeline (cap at max, Crypt Hunger/Apothecary reactions) and
+				# does nothing - fires nothing - for a full-health creature.
+				var recipients: Array[Minion] = []
+				for m in owner.board:
+					if m != minion and m.has_ability(YETI) and not m.is_location():
+						recipients.append(m)
+				for m in recipients:
+					if m in owner.board and not m.is_dead():
+						gs.restore_health(m, 2)
 			ON_PLAY_BUFF_IF_YETI:
 				for m in owner.board:
 					if m != minion and m.has_ability(YETI):
@@ -661,6 +676,7 @@ func _reinforce_minion(minion: Minion, owner: PlayerState, board_index: int, gs:
 	var carried := reinforce_ability(remaining_uses)
 	if not carried.is_empty():
 		copy.abilities.append(carried)
+	copy.card_uid = minion.card_uid
 	copy.is_newly_reinforced = true
 	owner.board.insert(_safe_board_index(owner, board_index), copy)
 	for m in owner.board:

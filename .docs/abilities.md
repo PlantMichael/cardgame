@@ -143,6 +143,7 @@ Abilities are plain strings stored on `CardData.abilities` and copied to `Minion
 | `ON_YETI_DEATH_CHALLENGE` | `"on_yeti_death_challenge"` | When a friendly Yeti dies: queue an Overwatch challenge prompt |
 | `ON_FRIENDLY_YETI_DEATH_BUFF` | `"on_friendly_yeti_death_buff"` | When a friendly Yeti dies: this minion gains +2 max health (displayed as "Yeti Bond") |
 | `ON_PLAY_BUFF_FRIENDLY_YETI_ATK` | `"on_play_buff_friendly_yeti_attack"` | On play: give all friendly Yetis +2 attack |
+| `ON_PLAY_HEAL_FRIENDLY_YETIS` | `"on_play_heal_friendly_yetis"` | On play: restore 2 health to each *other* friendly Yeti (Snowdrift Matriarch). One untargeted group: recipients are snapshotted, each goes through `restore_health()` (capped at max, no event for a full-health Yeti). A Reinforce return is a summon, not a play, so it does not fire |
 | `ON_PLAY_BUFF_IF_YETI` | `"on_play_buff_if_yeti"` | On play: if you control a friendly Yeti, this minion gains +2/+1 |
 | `DEATHRATTLE_AOE_TRANSFORM` | `"deathrattle_aoe_transform"` | On death: deal 1 damage to all creatures on both boards, then place the card specified by `CardData.transform_into` on the owner's board at the same index |
 | `STINKPILE_PASSIVE` | `"stinkpile_passive"` | Passive ("Salvage"): when the owner completes a rummage, instead of adding the card to hand, immediately play it to the board for free (if board space available) |

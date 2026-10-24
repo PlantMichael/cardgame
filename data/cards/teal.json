@@ -537,5 +537,37 @@
 		"effect_value": 0,
 		"is_token": false,
 		"in_starter": false
+	},
+	{
+		"id": "t_str_004",
+		"card_name": "Whiteout",
+		"cost": 5,
+		"color": "TEAL",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "Deal 2 damage to all enemy creatures. If any die from this damage, draw a random Yeti from your deck.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"effect": "deal_damage_all_enemy_draw_yeti",
+		"effect_value": 2
+	},
+	{
+		"id": "t_027",
+		"card_name": "Snowdrift Matriarch",
+		"cost": 5,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "yeti",
+		"description": "On play: Restore 2 health to each other friendly Yeti.",
+		"attack": 3,
+		"health": 6,
+		"abilities": ["on_play_heal_friendly_yetis"],
+		"effect": "",
+		"effect_value": 0,
+		"is_token": false,
+		"in_starter": false
 	}
 ]

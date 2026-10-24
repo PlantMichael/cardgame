@@ -295,8 +295,19 @@ static func _pick_stratagem_target(card: CardData, gs: GameState, acting_id: Str
 			result["ready"] = not enemy.board.is_empty() and enemy_power >= acting_power
 		"deal_damage_all_creatures":
 			result["ready"] = not enemy.board.is_empty()
-		"deal_damage_all_enemy":
+		"deal_damage_all_enemy", "deal_damage_all_enemy_draw_yeti":
 			result["ready"] = not enemy.board.is_empty()
+		"return_friendly_to_hand":
+			# Conservative rescue: only pull back a badly hurt creature that
+			# is worth replaying. Never a Location, never for tempo alone.
+			var rescue: Array[Minion] = []
+			for m in friendly_targetable:
+				if m.data.card_type == CardData.CardType.CREATURE and m.data.cost >= 2 \
+						and m.current_health * 2 <= m.max_health:
+					rescue.append(m)
+			if not rescue.is_empty():
+				result["minion"] = AIHeuristics.pick_lowest_health(rescue)
+				result["ready"] = true
 		"sludge_spray":
 			result["ready"] = not enemy.board.is_empty()
 		"buff_all_friendly_attack":
