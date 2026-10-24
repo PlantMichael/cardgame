@@ -1,0 +1,191 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "0.1.0-candidate.1",
+  "gameVersion": "unreleased",
+  "keywords": [
+    {
+      "id": "ambush",
+      "name": "Ambush",
+      "description": "Cannot be targeted when played. Loses Ambush after it attacks."
+    },
+    {
+      "id": "amplify",
+      "name": "Amplify",
+      "description": "While in play, all damage dealt to enemy creatures is increased by X."
+    },
+    {
+      "id": "challenge",
+      "name": "Challenge",
+      "description": "Chooses a minion to attack as soon as it's played"
+    },
+    {
+      "id": "cloaked",
+      "name": "Cloaked",
+      "description": "Cannot be targeted by spells."
+    },
+    {
+      "id": "colossal",
+      "name": "Colossal",
+      "description": "Takes up two of your seven board slots."
+    },
+    {
+      "id": "dual_strike",
+      "name": "Dual Strike",
+      "description": "Attacks twice. The second hit automatically targets the same enemy."
+    },
+    {
+      "id": "ethereal",
+      "name": "Ethereal",
+      "description": "Immune to combat damage."
+    },
+    {
+      "id": "guardian",
+      "name": "Guardian",
+      "description": "Must be targeted before other minions."
+    },
+    {
+      "id": "null",
+      "name": "Null",
+      "description": "Removes a minion's abilities."
+    },
+    {
+      "id": "pilot",
+      "name": "Pilot",
+      "description": "Can click mechs to pilot. Add's X/X to the mech's stats."
+    },
+    {
+      "id": "recon",
+      "name": "Recon",
+      "description": "Draws a card on play."
+    },
+    {
+      "id": "reinforce",
+      "name": "Reinforce",
+      "description": "Revives to full health once."
+    },
+    {
+      "id": "rummage",
+      "name": "Rummage",
+      "description": "Select a card of lesser value in your graveyard, then return it to your hand. It costs one less."
+    },
+    {
+      "id": "rush",
+      "name": "Rush",
+      "description": "Can attack the turn it's played."
+    },
+    {
+      "id": "shielded",
+      "name": "Shielded",
+      "description": "Reduces incoming combat damage by X."
+    },
+    {
+      "id": "trample",
+      "name": "Trample",
+      "description": "Damage beyond what was needed to kill the defending minion hits the enemy hero."
+    },
+    {
+      "id": "voidtouch",
+      "name": "Voidtouch",
+      "description": "Any minion it deals damage to dies instantly."
+    }
+  ],
+  "abilityKeywords": {
+    "ambush": "ambush",
+    "apothecary": null,
+    "attack_buff_friendly_health": null,
+    "attack_rummage": null,
+    "broodtender_aura": null,
+    "challenge": "challenge",
+    "challenge_all": null,
+    "cloaked": "cloaked",
+    "combat_immune": "ethereal",
+    "deathrattle_aoe_transform": null,
+    "deathrattle_damage_all_except_mech_3": null,
+    "deathrattle_draw_card": null,
+    "deathrattle_draw_tank": null,
+    "deathrattle_draw_yeti": null,
+    "deathrattle_return_stratagem": null,
+    "deathrattle_rummage_creature": null,
+    "deathrattle_transform": null,
+    "dual_strike": "dual_strike",
+    "eject_pilot_on_death": null,
+    "end_turn_drain_random_enemy": null,
+    "end_turn_heal_mechs": null,
+    "end_turn_yeti_discount": null,
+    "enemy_damage_amp_1": "amplify",
+    "feast_attendant": null,
+    "growvin_aura": null,
+    "guardian": "guardian",
+    "heal_to_draw": null,
+    "mech": null,
+    "mirror_transform": null,
+    "null": "null",
+    "on_any_reinforce_shot_1": null,
+    "on_friendly_death_reinforce": null,
+    "on_friendly_mech_death_buff": null,
+    "on_friendly_pilot_draw": null,
+    "on_friendly_tank_death_buff_tank": null,
+    "on_friendly_transform_buff_self": null,
+    "on_friendly_transform_give_ambush": null,
+    "on_friendly_yeti_death_buff": null,
+    "on_piloted_gain_cloaked": null,
+    "on_piloted_gain_rush": null,
+    "on_piloted_stat_boost": null,
+    "on_play_aoe_enemy_2": null,
+    "on_play_buff_all_friendly_health": null,
+    "on_play_buff_friendly_health": null,
+    "on_play_buff_friendly_yeti_attack": null,
+    "on_play_buff_if_yeti": null,
+    "on_play_buff_other_friendly": null,
+    "on_play_challenge_win_buff": null,
+    "on_play_damage_2": null,
+    "on_play_damage_8": null,
+    "on_play_damage_high_attack": null,
+    "on_play_devour_all": null,
+    "on_play_devour_friendly": null,
+    "on_play_health_per_friendly": null,
+    "on_play_pilot_mech": null,
+    "on_play_restore_health": null,
+    "on_play_rummage_buff": null,
+    "on_play_swap_friendly_health": null,
+    "on_play_transform": null,
+    "on_play_transform_choice": null,
+    "on_play_voidtouch_if_rummaged": null,
+    "on_play_yeti_challenge": null,
+    "on_reinforce_damage_2": null,
+    "on_yeti_challenge_attack": null,
+    "on_yeti_challenge_buff": null,
+    "on_yeti_death_challenge": null,
+    "pilot_1_3": "pilot",
+    "pilot_2_2": "pilot",
+    "pilot_3_4": "pilot",
+    "pilot_4_1": "pilot",
+    "pilot_4_3": "pilot",
+    "pilot_gives_cloaked": null,
+    "pilot_gives_guardian": null,
+    "pilot_gives_rush": null,
+    "recon": "recon",
+    "reinforce": "reinforce",
+    "reinforce_4": "reinforce",
+    "rejuvenate_1": null,
+    "rummage": "rummage",
+    "rummage_and_play": null,
+    "rummage_buff": null,
+    "rummage_buff_creature": null,
+    "rummage_draw": null,
+    "rummage_equal_cost": null,
+    "rummage_mech_on_death": null,
+    "rummage_on_death": null,
+    "rummage_spell": null,
+    "rush": "rush",
+    "shielded_1": "shielded",
+    "stats_from_graveyard": null,
+    "stinkpile_passive": null,
+    "tactical_officer": null,
+    "trample": "trample",
+    "transform_at_max_health_4": null,
+    "two_slot": "colossal",
+    "voidtouch": "voidtouch",
+    "when_attacked_buff_friendly": null
+  }
+}

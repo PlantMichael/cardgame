@@ -1,0 +1,11 @@
+{
+	"Ethereal": [
+		"combat_immune"
+	],
+	"Amplify": [
+		"enemy_damage_amp"
+	],
+	"Colossal": [
+		"two_slot"
+	]
+}

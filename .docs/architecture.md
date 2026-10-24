@@ -58,6 +58,7 @@ res://
 │   ├── quests.json             (Daily/weekly quest pool: track key, goal, reward)
 │   ├── keywords.json           (Keyword -> tooltip text; read by board.gd, deck builder, card list)
 │   └── starters.json           (Starter deck lists per faction; read by DeckManager)
+├── catalog/                  (public card catalog: export.mjs, server.mjs, release-input.json, public/ retained releases, tests; see catalog/README.md)
 ├── scenes/
 │   ├── cards/
 │   │   ├── Card.tscn         (Area2D root, card.gd attached)
