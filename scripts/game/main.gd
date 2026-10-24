@@ -111,6 +111,9 @@ func _ready() -> void:
 	if "--core-tests" in OS.get_cmdline_user_args():
 		_run_core_tests_cli()
 		return
+	if "--parity-test" in OS.get_cmdline_user_args():
+		_run_parity_test_cli()
+		return
 	if "--selftest-fail" in OS.get_cmdline_user_args():
 		# Deliberate failure, so the harness itself can be shown to report
 		# one (handoff regression scenario 14). Without this, "the suite
@@ -196,6 +199,16 @@ func _run_mcts_timing_cli() -> void:
 func _run_core_tests_cli() -> void:
 	var failures: int = CoreTestsScript.run()
 	get_tree().quit(failures)
+
+## Replays seeded AI-vs-AI matches from (seed, decks, command log) and requires
+## identical state at every step. Exit code = failed matches. See ParityTest.
+##   godot --headless --path <checkout> -- --parity-test [--parity-matches=N]
+func _run_parity_test_cli() -> void:
+	var count := ParityTest.DEFAULT_MATCHES
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--parity-matches="):
+			count = int(arg.get_slice("=", 1))
+	get_tree().quit(ParityTest.run(count))
 
 func _run_fatigue_test_cli() -> void:
 	print("Testing fatigue with empty decks...")
@@ -680,19 +693,22 @@ func _run_newcards_test_cli() -> void:
 	var salvager: CardData = CardDatabase.get_card("b_024").duplicate()
 	gs6.player.hand.append(salvager)
 	gs6.play_creature("a", salvager)
-	if gs6.pending_rummages.is_empty():
-		print("FAIL: Salvager queued no rummage")
+	# The rummage is now a rules-core choice over graveyard card ids (see
+	# GameState.CHOICE_RUMMAGE), not a queue entry for a controller.
+	if not gs6.has_pending_choice() or gs6.pending_choice["effect"] != GameState.CHOICE_RUMMAGE:
+		print("FAIL: Salvager opened no rummage choice")
 		ok = false
 	else:
-		var entry: Dictionary = gs6.pending_rummages.pop_front()
-		var options := gs6.get_rummage_options("a", entry.get("max_cost", -1), entry.get("type_filter", ""))
-		if options.is_empty():
+		var salv_choice: Dictionary = gs6.pending_choice
+		var salv_options: Array = salv_choice["options"]
+		if salv_options.is_empty():
 			print("FAIL: Salvager's rummage found no options")
 			ok = false
 		else:
-			gs6.complete_rummage("a", options[0], false, true, entry.get("buff_creature", false))
+			var salv_answer := gs6.execute({"type": GameState.CMD_ANSWER_CHOICE, "actor": "a",
+				"choice_id": str(salv_choice["id"]), "selection": str(salv_options[0])})
 			var retrieved: CardData = gs6.player.hand.back()
-			if retrieved.attack != 3 or retrieved.health != 2:
+			if not salv_answer["ok"] or retrieved.attack != 3 or retrieved.health != 2:
 				print("FAIL: Salvager's rummaged creature should be 3/2, got %d/%d" % [retrieved.attack, retrieved.health])
 				ok = false
 

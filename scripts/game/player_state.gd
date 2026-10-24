@@ -31,6 +31,15 @@ func _init(id: String, starting_deck: Array[CardData]) -> void:
 	player_id = id
 	deck = starting_deck.duplicate()
 
+## A fresh per-match identity for one creature on the board. Counter-based and
+## owned by the player (not a process-wide static) so that a match is fully
+## described by its seed and commands: replaying it - in the same process or
+## another - mints the same ids, and a command naming one still resolves.
+var _next_minion_seq: int = 0
+func mint_minion_id(card_id: String) -> String:
+	_next_minion_seq += 1
+	return "%s#%s%d" % [card_id, player_id, _next_minion_seq]
+
 ## A fresh per-match identity for one physical card. Scoped by player_id so
 ## the two players' allocators can run independently without colliding.
 func mint_card_uid() -> String:
@@ -163,6 +172,7 @@ func duplicate_for_sim() -> PlayerState:
 	p.current_mana = current_mana
 	p.fatigue_damage = fatigue_damage
 	p._next_card_uid = _next_card_uid
+	p._next_minion_seq = _next_minion_seq
 	var hand_copy: Array[CardData] = []
 	for c in hand:
 		hand_copy.append(c.clone_instance())

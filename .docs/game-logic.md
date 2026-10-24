@@ -125,6 +125,53 @@ Supply Quartermaster, Heavy Bounty Hunter) use this. The older prompts
 (rummage, tank shot, null, buff-friendly, overwatch, transform, devour,
 challenge, pilot) still suspend on board signals and have not been migrated.
 
+### Choices, events and controllers (spec 003, Phase A)
+
+**Every decision a player makes lives in `GameState`.** An effect that needs one
+calls `request_choice(player, effect, amount, source, data)`; the core computes
+the legal `options` once, opens at most one `pending_choice` (later requests
+queue), and applies the effect only when `answer_choice()` (also the command
+`answer_choice {actor, choice_id, selection}`) is given a legal selection.
+
+- `pending_choice`: `id, player_id, effect, kind, amount, source_instance_id,
+  options, allow_none, step, steps, data, default`. `kind` is `target`
+  (minion instance ids and `"hero:<player_id>"`), `pick_card` or `pick_card_id`
+  (catalog ids - transform options, rummage graveyard ids). `default` is the
+  answer used by timeouts (`""` when declining is legal, else the first option).
+- Effect families: `damage_target` (on-play damage, tank shots, reinforce
+  shots), `challenge`, `pick_challenger` (2-step, Yeti then target), `pilot_target`,
+  `swap_health` (2-step), `devour`, `transform`, `rummage`, `null_target`,
+  `buff_health_target`, `tank_buff_target`, `heal_buff_target`, plus the original
+  `restore_health`, `buff_other_friendly`, `damage_high_attack`. Rampage
+  (`challenge_all`) needs no choice and runs inside the play.
+- The seven `pending_*` queues are drained by the **core**:
+  `resolve_to_quiescence()` (called at the end of `execute`, `play_creature`,
+  `play_stratagem`, `attack`, `end_turn`, `answer_choice`) turns each entry into a
+  choice, in `PENDING_QUEUES` order, until the match is quiet or waiting on one
+  named player. Controllers no longer loop over queues.
+- Commands: `play_creature`, `play_stratagem`, `attack`, `pilot`, `end_turn`,
+  `answer_choice`, `concede`. `concede` and `answer_choice` are accepted
+  out of turn (by the choice's owner / either player); everything else is refused
+  while a choice is open.
+- `apply_timeout(actor_id)`: resolves what is open with each choice's `default`,
+  then ends the actor's turn - what a server turn clock calls.
+- **Events** (`set_events_enabled(true)`, `drain_events()`, returned by `execute`
+  as `result["events"]`): `play, attack, challenge, effect, death, draw,
+  discard_burn, turn_start, turn_end, game_over`. Advisory only - animation and
+  log; state is never read from them. `filter_events_for(seat, events)` hides
+  an opponent's draws. `duplicate_for_sim()` copies never emit.
+- **Determinism**: `GameState.new(..., seed_value)` fixes the generator before
+  the opening shuffle; minion ids are `PlayerState.mint_minion_id()` counters,
+  card uids `mint_card_uid()`; `state_hash()` digests the full state (hidden zones
+  and generator position included). With `record_commands = true`, `command_log`
+  holds each accepted command and the hash after it. `--parity-test` replays
+  1,000 seeded AI-vs-AI matches from that log and requires an identical hash at
+  every step.
+- **Controllers hold no rules.** `game_manager.gd`, `mp_game_manager.gd`,
+  `ai_controller.gd` and `board.gd` send commands, ask the player (`board.prompt_choice`)
+  or the AI (`AIHeuristics.pick_choice_answer`) for answers, and render events
+  through `EventPresenter`. A core test fails if they call a rules mutator.
+
 ### Per-player views
 
 `to_net_dict(for_player_id)` builds the view for **one** recipient: their own

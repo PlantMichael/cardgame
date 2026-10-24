@@ -58,6 +58,7 @@ func start_as_host(board_node: Board, player_deck: Array[CardData], opp_deck: Ar
 
 	game_state = GameState.new(HOST_ID, GUEST_ID, player_deck, opp_deck)
 	game_state.node_modifier_ability = node_modifier_ability
+	game_state.set_events_enabled(true)
 
 	var first := HOST_ID if randi() % 2 == 0 else GUEST_ID
 	game_state.start_game(first)
@@ -208,249 +209,57 @@ func _announce_both(card_data: CardData) -> void:
 	_relay_announce_card(card_data.id)
 	await board.announce_card(card_data)
 
-# ── Host: action handlers ─────────────────────────────────────────────────
+# ── Host: events and choices ───────────────────────────────────────────────
 
-func _host_on_play_card(card_data: CardData, at_index: int) -> void:
-	if not game_state.is_local_player_turn():
+## Presents events on the host's screen and relays them so the guest shows the
+## same log lines and animations (the guest sees them with its own point of
+## view - EventPresenter words each line from the viewer's side).
+func _host_present(events: Array) -> void:
+	if events.is_empty():
 		return
-	await _announce_both(card_data)
-	if not is_instance_valid(board):
-		return
-	var minion := game_state.play_creature(HOST_ID, card_data, at_index)
-	if minion == null:
-		return
-	board.log_action("You played %s" % card_data.card_name)
-	_relay_log("Opponent played %s" % card_data.card_name)
-	await get_tree().process_frame
-	await get_tree().process_frame
-	board.refresh()
-	# See game_manager.gd's identical wait on this same call chain for why:
-	# an on-play prompt below (a rummage picker, etc.) shouldn't race the
-	# just-played card's own landing animation.
-	await board.await_slam_landed(board.player_board_zone)
-	if not is_instance_valid(board):
-		return
-	_send_state()
-	await _host_process_pending()
-	await _host_run_on_play(minion)
-	await _host_announce_pending_draws()
-	board.refresh()
-	_send_state()
+	Net.relay({"type": "present_events", "events": GameState.filter_events_for(GUEST_ID, events)})
+	await EventPresenter.present(events, board, HOST_ID)
 
-func _host_on_attack(attacker_id: String, target_type: String, target_id: String) -> void:
-	var attacker := _find_minion(HOST_ID, attacker_id)
-	if not attacker:
-		return
-	if target_type == "minion":
-		var target := _find_minion(GUEST_ID, target_id)
-		if target:
-			board.log_action("Your %s attacked opponent's %s" % [attacker.data.card_name, target.data.card_name])
-			_relay_log("Opponent's %s attacked your %s" % [attacker.data.card_name, target.data.card_name])
-			game_state.attack(attacker, target)
-			await board.animate_creature_attack(attacker_id, HOST_ID, target_id)
-			_relay_animate_attack(attacker_id, HOST_ID, target_id)
-	elif target_type == "hero":
-		board.log_action("Your %s attacked the opponent's hero" % attacker.data.card_name)
-		_relay_log("Opponent's %s attacked your hero" % attacker.data.card_name)
-		game_state.attack(attacker, null, target_id)
-		# Empty target_id on the wire means "went face" - see the guest's
-		# animate_attack handler.
-		await board.animate_creature_attack_face(attacker_id, HOST_ID)
-		_relay_animate_attack(attacker_id, HOST_ID, "")
-	board.refresh()
-	_send_state()
-	await _host_process_pending()
-	if game_state.current_phase == GameState.Phase.GAME_OVER:
-		_handle_game_over()
-
-func _host_on_play_stratagem(card_data: CardData, target_minion: Minion, target_player_id: String) -> void:
-	if not game_state.is_local_player_turn():
-		return
-	await _announce_both(card_data)
-	if not is_instance_valid(board):
-		return
-	if not game_state.play_stratagem(HOST_ID, card_data, target_minion, target_player_id):
+## Answers every decision the rules core has open: the host's by asking the
+## host, the guest's by asking the guest over the relay. The core validates
+## every answer, so a modified guest can only pick among the legal options.
+func _host_drive_choices() -> void:
+	for _i in 64:
+		if not is_instance_valid(board) or game_state.current_phase == GameState.Phase.GAME_OVER:
+			return
+		game_state.resolve_to_quiescence()
+		if not game_state.has_pending_choice():
+			return
+		var choice: Dictionary = game_state.pending_choice.duplicate(true)
+		var owner_id := str(choice["player_id"])
+		var selection: String
+		if owner_id == HOST_ID:
+			selection = await board.prompt_choice(choice)
+		else:
+			Net.relay({"type": "prompt_choice", "choice": choice})
+			_send_state()
+			var resp: Dictionary = await Net.await_relay_of_type("response_choice")
+			# An answer to some other choice (a stale or replayed message) is
+			# treated as no answer: fall back to the choice's default.
+			selection = str(resp.get("selection", "")) if str(resp.get("choice_id", "")) == str(choice["id"]) else str(choice["default"])
+		if not is_instance_valid(board):
+			return
+		var result := game_state.execute({
+			"type": GameState.CMD_ANSWER_CHOICE, "actor": owner_id,
+			"choice_id": str(choice["id"]), "selection": selection,
+		})
+		if not result["ok"]:
+			result = game_state.execute({
+				"type": GameState.CMD_ANSWER_CHOICE, "actor": owner_id,
+				"choice_id": str(choice["id"]), "selection": str(choice["default"]),
+			})
+			if not result["ok"]:
+				game_state.cancel_pending_choice()
+				return
+		await _host_present(result["events"])
 		board.refresh()
-		return
-	board.log_action("You played %s" % card_data.card_name)
-	_relay_log("Opponent played %s" % card_data.card_name)
-	await get_tree().process_frame
-	await get_tree().process_frame
-	board.refresh()
-	_send_state()
-	await _host_stratagem_followup(card_data, target_minion)
-	await _host_process_pending()
-	if game_state.current_phase == GameState.Phase.GAME_OVER:
-		_handle_game_over()
-
-func _host_on_pilot(pilot_id: String, target_id: String) -> void:
-	var pilot := _find_minion(HOST_ID, pilot_id)
-	var target := _find_minion(HOST_ID, target_id)
-	if not pilot or not target:
-		return
-	var atk_bonus := 0
-	var hp_bonus := 0
-	for ability in pilot.abilities:
-		if Abilities.is_pilot(ability):
-			atk_bonus = Abilities.get_pilot_attack(ability)
-			hp_bonus = Abilities.get_pilot_health(ability)
-			break
-	board.log_action("Your %s piloted %s (+%d/+%d)" % [pilot.data.card_name, target.data.card_name, atk_bonus, hp_bonus])
-	_relay_log("Opponent's %s piloted %s (+%d/+%d)" % [pilot.data.card_name, target.data.card_name, atk_bonus, hp_bonus])
-	game_state.apply_pilot(pilot, target, game_state.player)
-	board.refresh()
-	_send_state()
-
-func _host_on_end_turn() -> void:
-	game_state.end_turn()
-	board.refresh()
-	_send_state()
-	board.log_action("--- Opponent Turn %d ---" % game_state.turn_number)
-	await _host_run_guest_turn()
-
-# ── Host: guest turn proxy ─────────────────────────────────────────────────
-
-func _host_run_guest_turn() -> void:
-	# Process any pending effects that fire at turn start (drawn cards)
-	await _host_process_pending()
-
-	while true:
-		if game_state.current_phase == GameState.Phase.GAME_OVER:
-			_handle_game_over()
-			return
-
-		var action: Dictionary = await Net.await_relay_action()
-		var t: String = action.get("type", "")
-
-		if t == "action_end_turn":
-			game_state.end_turn()
-			board.refresh()
-			_send_state()
-			await _host_process_pending()
-			board.log_action("--- Your Turn %d ---" % game_state.turn_number)
-			return
-
-		elif t == "action_play_card":
-			var card = _find_card_in_hand(GUEST_ID, str(action.get("card_id", "")))
-			if card == null:
-				continue
-			var at_index: int = int(action.get("at_index", -1))
-			# Registered before the announce pause rather than right before
-			# game_state.play_creature() - see ai_controller.gd's identical
-			# comment on this same call for why (avoids a stutter right at
-			# the moment the slam animation is meant to start).
-			board.play_opponent_card_with_slam(card)
-			await _announce_both(card)
-			if not is_instance_valid(board):
-				return
-			var minion := game_state.play_creature(GUEST_ID, card, at_index)
-			if minion:
-				board.log_action("Opponent played %s" % card.card_name)
-				_relay_log("You played %s" % card.card_name)
-				board.refresh()
-				# See game_manager.gd's identical wait on this same call
-				# chain for why: an on-play effect below shouldn't race the
-				# just-played card's own landing animation.
-				await board.await_slam_landed(board.opponent_board_zone)
-				if not is_instance_valid(board):
-					return
-				_send_state()
-				await _host_process_pending()
-				await _host_run_guest_on_play(minion)
-				await _guest_announce_pending_draws()
-				board.refresh()
-				_send_state()
-
-		elif t == "action_attack":
-			var attacker := _find_minion(GUEST_ID, str(action.get("attacker_id", "")))
-			if not attacker:
-				continue
-			var target_type: String = str(action.get("target_type", ""))
-			var target_id: String = str(action.get("target_id", ""))
-			if target_type == "minion":
-				var target := _find_minion(HOST_ID, target_id)
-				if target:
-					board.log_action("Opponent's %s attacked your %s" % [attacker.data.card_name, target.data.card_name])
-					_relay_log("Your %s attacked opponent's %s" % [attacker.data.card_name, target.data.card_name])
-					game_state.attack(attacker, target)
-					await board.animate_creature_attack(attacker.instance_id, GUEST_ID, target_id)
-					_relay_animate_attack(attacker.instance_id, GUEST_ID, target_id)
-			elif target_type == "hero":
-				board.log_action("Opponent's %s attacked your hero" % attacker.data.card_name)
-				_relay_log("Your %s attacked opponent's hero" % attacker.data.card_name)
-				var face_attacker_id := attacker.instance_id
-				game_state.attack(attacker, null, target_id)
-				await board.animate_creature_attack_face(face_attacker_id, GUEST_ID)
-				_relay_animate_attack(face_attacker_id, GUEST_ID, "")
-			board.refresh()
-			_send_state()
-			await _host_process_pending()
-			if game_state.current_phase == GameState.Phase.GAME_OVER:
-				_handle_game_over()
-				return
-
-		elif t == "action_play_stratagem":
-			var card := _find_card_in_hand(GUEST_ID, str(action.get("card_id", "")))
-			if card == null:
-				continue
-			var target_minion: Minion = null
-			var tmid := str(action.get("target_minion_id", ""))
-			if tmid != "":
-				target_minion = _find_minion_anywhere(tmid)
-			var target_player_id: String = str(action.get("target_player_id", ""))
-			await _announce_both(card)
-			if not is_instance_valid(board):
-				return
-			if not game_state.play_stratagem(GUEST_ID, card, target_minion, target_player_id):
-				continue
-			board.log_action("Opponent played %s" % card.card_name)
-			_relay_log("You played %s" % card.card_name)
-			board.refresh()
-			_send_state()
-			await _host_stratagem_followup_for_guest(card, target_minion, action)
-			await _host_process_pending()
-			if game_state.current_phase == GameState.Phase.GAME_OVER:
-				_handle_game_over()
-				return
-
-		elif t == "action_pilot":
-			var pilot := _find_minion(GUEST_ID, str(action.get("pilot_id", "")))
-			var target := _find_minion(GUEST_ID, str(action.get("target_id", "")))
-			if pilot and target:
-				game_state.apply_pilot(pilot, target, game_state.opponent)
-				board.refresh()
-				_send_state()
-
-# ── Host: pending effects ──────────────────────────────────────────────────
-
-## Works off every queued effect in the order the rules core defines
-## (GameState.PENDING_QUEUES), repeating until nothing is pending.
-##
-## This used to be a fixed six-call sequence. It was missing
-## pending_tank_specialist_buffs entirely - a queue local play does drain - so
-## that buff never happened in a networked match, and it only made one pass,
-## so an effect queued by a later entry sat unresolved.
-func _host_process_pending() -> void:
-	await _host_announce_pending_draws()
-	for _pass in 16:  # safety cap against a pathological trigger loop
-		if not game_state.has_pending():
-			return
-		for queue_name in GameState.PENDING_QUEUES:
-			if game_state.current_phase == GameState.Phase.GAME_OVER:
-				return
-			var queue: Array = game_state.get(queue_name)
-			if queue.is_empty():
-				continue
-			match queue_name:
-				"pending_tank_shots": await _host_process_tank_shots()
-				"pending_rummages": await _host_process_rummages()
-				"pending_nulls": await _host_process_nulls()
-				"pending_buff_friendly_health": await _host_process_buff_friendly()
-				"pending_tank_specialist_buffs": await _host_process_tank_specialist_buffs()
-				"pending_on_reinforce_damages": await _host_process_reinforce_damages()
-				"pending_overwatch_challenges": await _host_process_overwatch()
-			if not is_instance_valid(board):
-				return
+		_send_state()
+		await _host_announce_pending_draws()
 
 func _host_announce_pending_draws() -> void:
 	if game_state.pending_drawn_cards.is_empty() and game_state.pending_fatigue_damage.is_empty():
@@ -467,559 +276,229 @@ func _host_announce_pending_draws() -> void:
 	game_state.pending_fatigue_damage.clear()
 	_send_state()
 
-func _host_process_tank_shots() -> void:
-	while not game_state.pending_tank_shots.is_empty():
-		var owner_id: String = game_state.pending_tank_shots.pop_front()
-		var host_source := "Your Tank" if owner_id == HOST_ID else "Opponent's Tank"
-		var guest_source := "Opponent's Tank" if owner_id == HOST_ID else "Your Tank"
-		if owner_id == HOST_ID:
-			board.start_tank_shot_targeting()
-			var result = await board.tank_shot_resolved
-			var dmg_target: Minion = result[0]
-			var dmg_player_id: String = result[1]
-			if dmg_target != null:
-				board.log_action("%s dealt 1 damage to %s" % [host_source, dmg_target.data.card_name])
-				_relay_log("%s dealt 1 damage to %s" % [guest_source, dmg_target.data.card_name])
-				game_state.apply_on_play_damage(dmg_target, 1)
-			elif dmg_player_id != "":
-				game_state._get_player_by_id(dmg_player_id).hero_health -= 1
-				game_state._check_win_condition()
-		else:
-			Net.relay({"type": "prompt_tank_shot"})
-			_send_state()
-			var resp: Dictionary = await Net.await_relay_of_type("response_tank_shot")
-			var tmid := str(resp.get("target_minion_id", ""))
-			var tpid := str(resp.get("target_player_id", ""))
-			if tmid != "":
-				var t := _find_minion_anywhere(tmid)
-				if t:
-					board.log_action("%s dealt 1 damage to %s" % [host_source, t.data.card_name])
-					_relay_log("%s dealt 1 damage to %s" % [guest_source, t.data.card_name])
-					game_state.apply_on_play_damage(t, 1)
-			elif tpid != "":
-				game_state._get_player_by_id(tpid).hero_health -= 1
-				game_state._check_win_condition()
+## After any action by either player: show what happened, answer what is open,
+## announce draws, and sync both screens.
+func _host_after_action(events: Array) -> void:
+	board.refresh()
+	_send_state()
+	await _host_present(events)
+	await _host_drive_choices()
+	await _host_announce_pending_draws()
+	board.refresh()
+	_send_state()
+	if game_state.current_phase == GameState.Phase.GAME_OVER:
+		_handle_game_over()
+
+# ── Host: action handlers ─────────────────────────────────────────────────
+
+func _host_on_play_card(card_data: CardData, at_index: int) -> void:
+	if not game_state.is_local_player_turn():
+		return
+	await _announce_both(card_data)
+	if not is_instance_valid(board):
+		return
+	var played := game_state.execute({
+		"type": GameState.CMD_PLAY_CREATURE, "actor": HOST_ID,
+		"card_uid": card_data.uid, "at_index": at_index,
+	})
+	if not played["ok"]:
+		return
+	board.log_action("You played %s" % card_data.card_name)
+	_relay_log("Opponent played %s" % card_data.card_name)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	board.refresh()
+	# See game_manager.gd's identical wait on this same call chain for why:
+	# an on-play prompt below shouldn't race the just-played card's own landing.
+	await board.await_slam_landed(board.player_board_zone)
+	if not is_instance_valid(board):
+		return
+	await _host_after_action(played["events"])
+
+func _host_on_attack(attacker_id: String, target_type: String, target_id: String) -> void:
+	var attacker := _find_minion(HOST_ID, attacker_id)
+	if not attacker:
+		return
+	var cmd := {"type": GameState.CMD_ATTACK, "actor": HOST_ID, "attacker_instance_id": attacker_id}
+	if target_type == "minion":
+		var target := _find_minion(GUEST_ID, target_id)
+		if not target:
+			return
+		cmd["target_instance_id"] = target_id
+		var result := game_state.execute(cmd)
+		if not result["ok"]:
+			return
+		board.log_action("Your %s attacked opponent's %s" % [attacker.data.card_name, target.data.card_name])
+		_relay_log("Opponent's %s attacked your %s" % [attacker.data.card_name, target.data.card_name])
+		await board.animate_creature_attack(attacker_id, HOST_ID, target_id)
+		_relay_animate_attack(attacker_id, HOST_ID, target_id)
+		await _host_after_action(result["events"])
+	elif target_type == "hero":
+		cmd["target_player_id"] = target_id
+		var result := game_state.execute(cmd)
+		if not result["ok"]:
+			return
+		board.log_action("Your %s attacked the opponent's hero" % attacker.data.card_name)
+		_relay_log("Opponent's %s attacked your hero" % attacker.data.card_name)
+		# Empty target_id on the wire means "went face" - see the guest's
+		# animate_attack handler.
+		await board.animate_creature_attack_face(attacker_id, HOST_ID)
+		_relay_animate_attack(attacker_id, HOST_ID, "")
+		await _host_after_action(result["events"])
+
+func _host_on_play_stratagem(card_data: CardData, target_minion: Minion, target_player_id: String) -> void:
+	if not game_state.is_local_player_turn():
+		return
+	await _announce_both(card_data)
+	if not is_instance_valid(board):
+		return
+	var strat := game_state.execute({
+		"type": GameState.CMD_PLAY_STRATAGEM, "actor": HOST_ID, "card_uid": card_data.uid,
+		"target_instance_id": target_minion.instance_id if target_minion != null else "",
+		"target_player_id": target_player_id,
+	})
+	if not strat["ok"]:
 		board.refresh()
-		_send_state()
+		return
+	board.log_action("You played %s" % card_data.card_name)
+	_relay_log("Opponent played %s" % card_data.card_name)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await _host_after_action(strat["events"])
+
+func _host_on_pilot(pilot_id: String, target_id: String) -> void:
+	var result := game_state.execute({
+		"type": GameState.CMD_PILOT, "actor": HOST_ID,
+		"pilot_instance_id": pilot_id, "target_instance_id": target_id,
+	})
+	if result["ok"]:
+		await _host_after_action(result["events"])
+	else:
+		board.refresh()
+
+func _host_on_end_turn() -> void:
+	var ended := game_state.execute({"type": GameState.CMD_END_TURN, "actor": HOST_ID})
+	if not ended["ok"]:
+		return
+	await _host_after_action(ended["events"])
+	board.log_action("--- Opponent Turn %d ---" % game_state.turn_number)
+	await _host_run_guest_turn()
+
+# ── Host: guest turn proxy ─────────────────────────────────────────────────
+
+## The guest's actions arrive as relay messages and are applied here through the
+## same validated command boundary as everyone else's - a guest cannot do
+## anything the rules would not allow the host.
+func _host_run_guest_turn() -> void:
+	# Effects that fire at turn start (drawn cards, queued decisions).
+	await _host_after_action(game_state.drain_events())
+
+	while true:
 		if game_state.current_phase == GameState.Phase.GAME_OVER:
 			_handle_game_over()
 			return
 
-func _host_process_rummages() -> void:
-	while not game_state.pending_rummages.is_empty():
-		var entry = game_state.pending_rummages.pop_front()
-		var player_id: String = entry["player_id"]
-		var max_cost: int = entry["max_cost"]
-		var type_filter: String = entry.get("type_filter", "")
-		var play_it: bool = entry.get("play_it", false)
-		var discount: bool = entry.get("discount", true)
-		var buff_creature: bool = entry.get("buff_creature", false)
-		var options = game_state.get_rummage_options(player_id, max_cost, type_filter)
-		if options.is_empty():
-			continue
-		var chosen: CardData
-		if player_id == HOST_ID:
-			chosen = await board.show_graveyard_picker(options)
-		else:
-			var opt_ids = options.map(func(c): return c.id)
-			Net.relay({"type": "prompt_rummage", "options": opt_ids})
-			_send_state()
-			var resp: Dictionary = await Net.await_relay_of_type("response_rummage")
-			var cid := str(resp.get("card_id", ""))
-			chosen = null
-			for o in options:
-				if o.id == cid:
-					chosen = o
-					break
-		if chosen != null:
-			var placed: Minion = game_state.complete_rummage(player_id, chosen, play_it, discount, buff_creature)
-			board.refresh()
-			_send_state()
-			if placed != null:
-				if player_id == HOST_ID:
-					await _host_run_on_play(placed)
-				else:
-					await _host_run_guest_on_play(placed)
-				await _host_process_pending()
+		var action: Dictionary = await Net.await_relay_action()
+		var t: String = action.get("type", "")
 
-func _host_process_nulls() -> void:
-	while not game_state.pending_nulls.is_empty():
-		var entry: Dictionary = game_state.pending_nulls.pop_front()
-		var player_id: String = entry["player_id"]
-		var source_name: String = entry["source"]
-		var all_minions: Array[Minion] = game_state.player.board.duplicate()
-		all_minions.append_array(game_state.opponent.board.duplicate())
-		if all_minions.is_empty():
-			continue
-		if player_id == HOST_ID:
-			board.start_null_targeting()
-			var target: Minion = await board.null_target_selected
-			if target != null and (target in game_state.player.board or target in game_state.opponent.board):
-				board.log_action("Your %s silenced %s" % [source_name, target.data.card_name])
-				_relay_log("Opponent's %s silenced %s" % [source_name, target.data.card_name])
-				game_state.apply_null(target)
-		else:
-			Net.relay({"type": "prompt_null"})
-			_send_state()
-			var resp: Dictionary = await Net.await_relay_of_type("response_null")
-			var t := _find_minion_anywhere(str(resp.get("target_id", "")))
-			if t:
-				board.log_action("Opponent's %s silenced %s" % [source_name, t.data.card_name])
-				_relay_log("Your %s silenced %s" % [source_name, t.data.card_name])
-				game_state.apply_null(t)
-		board.refresh()
-		_send_state()
-
-func _host_process_buff_friendly() -> void:
-	while not game_state.pending_buff_friendly_health.is_empty():
-		var player_id: String = game_state.pending_buff_friendly_health.pop_front()
-		var p := game_state.player if player_id == HOST_ID else game_state.opponent
-		if p.board.is_empty():
-			continue
-		if player_id == HOST_ID:
-			board.start_buff_friendly_targeting()
-			var target: Minion = await board.buff_friendly_target_selected
-			if target != null and target in game_state.player.board:
-				board.log_action("Your Moonchild gave %s +1 max health" % target.data.card_name)
-				_relay_log("Opponent's Moonchild gave %s +1 max health" % target.data.card_name)
-				game_state.apply_buff_friendly_health(target)
-		else:
-			Net.relay({"type": "prompt_buff_friendly"})
-			_send_state()
-			var resp: Dictionary = await Net.await_relay_of_type("response_buff_friendly")
-			var t := _find_minion_anywhere(str(resp.get("target_id", "")))
-			if t and t in game_state.opponent.board:
-				board.log_action("Opponent's Moonchild gave %s +1 max health" % t.data.card_name)
-				_relay_log("Your Moonchild gave %s +1 max health" % t.data.card_name)
-				game_state.apply_buff_friendly_health(t)
-		board.refresh()
-		_send_state()
-
-## Tank Specialist's +1/+2 after a friendly Tank dies.
-##
-## This queue had no multiplayer handler at all: _host_process_pending() ran
-## six of the rules core's seven queues and simply never drained
-## pending_tank_specialist_buffs, so the buff that fires in a local match
-## silently never happened in a networked one. Entries also accumulated in the
-## queue for the rest of the match.
-func _host_process_tank_specialist_buffs() -> void:
-	while not game_state.pending_tank_specialist_buffs.is_empty():
-		var player_id: String = game_state.pending_tank_specialist_buffs.pop_front()
-		var p := game_state.player if player_id == HOST_ID else game_state.opponent
-		var tanks: Array[Minion] = []
-		for m in p.board:
-			if m.data.tribe == "tank":
-				tanks.append(m)
-		if tanks.is_empty():
-			continue
-		if player_id == HOST_ID:
-			board.start_buff_friendly_targeting(null, "tank")
-			var target: Minion = await board.buff_friendly_target_selected
-			if target != null and target in game_state.player.board and target.data.tribe == "tank":
-				board.log_action("Tank Specialist buffed %s (+1/+2)" % target.data.card_name)
-				_relay_log("Opponent's Tank Specialist buffed %s (+1/+2)" % target.data.card_name)
-				game_state.apply_tank_specialist_buff(target)
-		else:
-			Net.relay({"type": "prompt_tank_specialist"})
-			_send_state()
-			var resp: Dictionary = await Net.await_relay_of_type("response_tank_specialist")
-			var t := _find_minion_anywhere(str(resp.get("target_id", "")))
-			if t != null and t in game_state.opponent.board and t.data.tribe == "tank":
-				board.log_action("Opponent's Tank Specialist buffed %s (+1/+2)" % t.data.card_name)
-				_relay_log("Your Tank Specialist buffed %s (+1/+2)" % t.data.card_name)
-				game_state.apply_tank_specialist_buff(t)
-		board.refresh()
-		_send_state()
-
-func _host_process_reinforce_damages() -> void:
-	while not game_state.pending_on_reinforce_damages.is_empty():
-		var entry: Dictionary = game_state.pending_on_reinforce_damages.pop_front()
-		var player_id: String = entry["player_id"]
-		var damage: int = entry["damage"]
-		var source: String = entry["source"]
-		if player_id == HOST_ID:
-			board.start_on_play_damage_targeting()
-			var result = await board.on_play_damage_target_selected
-			var dmg_target: Minion = result[0]
-			var dmg_player_id: String = result[1]
-			if dmg_target != null:
-				board.log_action("Your reinforced %s dealt %d damage to %s" % [source, damage, dmg_target.data.card_name])
-				_relay_log("Opponent's reinforced %s dealt %d damage to %s" % [source, damage, dmg_target.data.card_name])
-				game_state.apply_on_play_damage(dmg_target, damage)
-			elif dmg_player_id != "":
-				game_state._get_player_by_id(dmg_player_id).hero_health -= damage
-				game_state._check_win_condition()
-		else:
-			Net.relay({"type": "prompt_on_play_damage", "damage": damage})
-			_send_state()
-			var resp: Dictionary = await Net.await_relay_of_type("response_on_play_damage")
-			var tmid := str(resp.get("target_minion_id", ""))
-			var tpid := str(resp.get("target_player_id", ""))
-			if tmid != "":
-				var t := _find_minion_anywhere(tmid)
-				if t:
-					game_state.apply_on_play_damage(t, damage)
-			elif tpid != "":
-				game_state._get_player_by_id(tpid).hero_health -= damage
-				game_state._check_win_condition()
-		board.refresh()
-		_send_state()
-		if game_state.current_phase == GameState.Phase.GAME_OVER:
-			_handle_game_over()
-			return
-
-func _host_process_overwatch() -> void:
-	while not game_state.pending_overwatch_challenges.is_empty():
-		var owner_id: String = game_state.pending_overwatch_challenges.pop_front()
-		var owner_state := game_state.player if owner_id == HOST_ID else game_state.opponent
-		var enemy_state := game_state.opponent if owner_id == HOST_ID else game_state.player
-		var available_yetis: Array[Minion] = []
-		for m in owner_state.board:
-			if m.has_ability(Abilities.YETI):
-				available_yetis.append(m)
-		if available_yetis.is_empty() or enemy_state.board.is_empty():
-			continue
-		var chosen_yeti: Minion = null
-		var target: Minion = null
-		if owner_id == HOST_ID:
-			board.start_yeti_selection()
-			chosen_yeti = await board.yeti_selected
-			if chosen_yeti != null and not enemy_state.board.is_empty():
-				board.start_challenge_targeting(chosen_yeti)
-				target = await board.challenge_target_selected
-		else:
-			Net.relay({"type": "prompt_overwatch"})
-			_send_state()
-			var resp: Dictionary = await Net.await_relay_of_type("response_overwatch")
-			var yid := str(resp.get("yeti_id", ""))
-			var tid := str(resp.get("target_id", ""))
-			chosen_yeti = _find_minion(GUEST_ID, yid) if yid != "" else null
-			target = _find_minion_anywhere(tid) if tid != "" else null
-		if chosen_yeti != null and target != null:
-			var owner_player_id = HOST_ID if owner_id == HOST_ID else GUEST_ID
-			board.log_action("Overwatch: %s's %s challenged %s" % [owner_id, chosen_yeti.data.card_name, target.data.card_name])
-			_relay_log("Overwatch: %s's %s challenged %s" % [owner_id, chosen_yeti.data.card_name, target.data.card_name])
-			game_state.apply_challenge(chosen_yeti, target)
-			await board.animate_creature_challenge(chosen_yeti.instance_id, owner_player_id, target.instance_id)
-			_relay_animate_challenge(chosen_yeti.instance_id, owner_player_id, target.instance_id)
-			board.refresh()
-			_send_state()
-			if game_state.current_phase == GameState.Phase.GAME_OVER:
-				_handle_game_over()
-				return
-
-# ── Host: on-play handlers ─────────────────────────────────────────────────
-
-func _host_run_on_play(minion: Minion) -> void:
-	if minion.has_ability(Abilities.ON_PLAY_TRANSFORM_CHOICE) and not minion.data.transform_choices.is_empty():
-		var options: Array[CardData] = []
-		for cid in minion.data.transform_choices:
-			var cd = CardDatabase.get_card(cid)
-			if cd != null:
-				options.append(cd)
-		if not options.is_empty():
-			var chosen: CardData = await board.show_transform_picker(options)
-			if chosen != null:
-				game_state.apply_transform_choice(minion, chosen.id)
-				board.refresh()
-				_send_state()
-	if minion.has_ability(Abilities.ON_PLAY_DEVOUR_FRIENDLY) and minion in game_state.player.board:
-		var devour_others := game_state.player.board.filter(func(m): return m != minion)
-		if not devour_others.is_empty():
-			board.log_action("Choose a friendly minion to devour")
-			board.start_buff_friendly_targeting(minion)
-			var devour_target: Minion = await board.buff_friendly_target_selected
-			if devour_target != null:
-				board.log_action("Your %s devoured %s and gained +%d health" % [
-					minion.data.card_name, devour_target.data.card_name, devour_target.current_health])
-				_relay_log("Opponent's %s devoured %s" % [minion.data.card_name, devour_target.data.card_name])
-				game_state.apply_devour_friendly(minion, devour_target, game_state.player)
-				board.refresh()
-				_send_state()
-	for ability in minion.abilities.duplicate():
-		if Abilities.is_on_play_damage(ability):
-			var damage := Abilities.get_on_play_damage_value(ability)
-			board.start_on_play_damage_targeting()
-			var result = await board.on_play_damage_target_selected
-			var dmg_target: Minion = result[0]
-			var dmg_player_id: String = result[1]
-			if dmg_target != null:
-				game_state.apply_on_play_damage(dmg_target, damage)
-			elif dmg_player_id != "":
-				game_state._get_player_by_id(dmg_player_id).hero_health -= damage
-				game_state._check_win_condition()
-			board.refresh()
-			_send_state()
-			if game_state.current_phase == GameState.Phase.GAME_OVER:
-				_handle_game_over()
-				return
-			break
-	if minion.has_ability(Abilities.CHALLENGE) and not game_state.opponent.board.is_empty():
-		board.start_challenge_targeting(minion)
-		var target: Minion = await board.challenge_target_selected
-		if target != null:
-			board.log_action("Your %s challenged opponent's %s" % [minion.data.card_name, target.data.card_name])
-			_relay_log("Opponent's %s challenged your %s" % [minion.data.card_name, target.data.card_name])
-			game_state.apply_challenge(minion, target)
-			await board.animate_creature_challenge(minion.instance_id, HOST_ID, target.instance_id)
-			_relay_animate_challenge(minion.instance_id, HOST_ID, target.instance_id)
-			board.refresh()
-			_send_state()
-			await _host_process_pending()
-			if game_state.current_phase == GameState.Phase.GAME_OVER:
-				_handle_game_over()
-	if minion.has_ability(Abilities.CHALLENGE_ALL) and not game_state.opponent.board.is_empty():
-		var enemies := game_state.opponent.board.duplicate()
-		for enemy in enemies:
-			if minion.is_dead() or minion not in game_state.player.board:
-				break
-			if enemy not in game_state.opponent.board:
+		if t == "action_end_turn":
+			if game_state.has_pending_choice():
 				continue
-			game_state.apply_challenge(minion, enemy)
-			await board.animate_creature_challenge(minion.instance_id, HOST_ID, enemy.instance_id)
-			_relay_animate_challenge(minion.instance_id, HOST_ID, enemy.instance_id)
-			board.refresh()
-			_send_state()
-			await _host_process_pending()
-			if game_state.current_phase == GameState.Phase.GAME_OVER:
-				_handle_game_over()
+			var ended := game_state.execute({"type": GameState.CMD_END_TURN, "actor": GUEST_ID})
+			if not ended["ok"]:
+				continue
+			await _host_after_action(ended["events"])
+			board.log_action("--- Your Turn %d ---" % game_state.turn_number)
+			return
+
+		elif t == "action_play_card":
+			var card = _find_card_in_hand(GUEST_ID, str(action.get("card_id", "")))
+			if card == null:
+				continue
+			# Registered before the announce pause rather than right before
+			# the play - see ai_controller.gd's identical comment on this same
+			# call for why (avoids a stutter right at the slam).
+			board.play_opponent_card_with_slam(card)
+			await _announce_both(card)
+			if not is_instance_valid(board):
 				return
-	if minion.has_ability(Abilities.ON_PLAY_PILOT_MECH):
-		var has_target = game_state.player.board.any(func(m): return m != minion and m.has_ability(Abilities.MECH) and not m.is_piloted)
-		if has_target:
-			board.start_on_play_pilot_targeting(minion)
-			var target: Minion = await board.on_play_pilot_target_selected
-			if target != null:
-				game_state.apply_pilot(minion, target, game_state.player, false)
+			var played := game_state.execute({
+				"type": GameState.CMD_PLAY_CREATURE, "actor": GUEST_ID,
+				"card_uid": card.uid, "at_index": int(action.get("at_index", -1)),
+			})
+			if not played["ok"]:
 				board.refresh()
-				_send_state()
-	if minion.has_ability(Abilities.ON_PLAY_CHALLENGE_WIN_BUFF) and not game_state.opponent.board.is_empty():
-		board.start_challenge_targeting(minion)
-		var target: Minion = await board.challenge_target_selected
-		if target != null:
-			game_state.apply_challenge(minion, target)
-			await board.animate_creature_challenge(minion.instance_id, HOST_ID, target.instance_id)
-			_relay_animate_challenge(minion.instance_id, HOST_ID, target.instance_id)
+				continue
+			board.log_action("Opponent played %s" % card.card_name)
+			_relay_log("You played %s" % card.card_name)
 			board.refresh()
-			_send_state()
-			if minion in game_state.player.board and target not in game_state.opponent.board:
-				minion.current_attack += 1
-				var pre := minion.current_health
-				minion.current_health += 1
-				minion.max_health += 1
-				game_state._try_heal_to_draw(minion, minion.current_health - pre)
-				game_state._try_apothecary_bonus(HOST_ID, minion)
-				board.refresh()
-				_send_state()
-			await _host_process_pending()
-			if game_state.current_phase == GameState.Phase.GAME_OVER:
-				_handle_game_over()
-
-func _host_run_guest_on_play(minion: Minion) -> void:
-	if minion.has_ability(Abilities.ON_PLAY_TRANSFORM_CHOICE) and not minion.data.transform_choices.is_empty():
-		var options: Array[CardData] = []
-		for cid in minion.data.transform_choices:
-			var cd = CardDatabase.get_card(cid)
-			if cd != null:
-				options.append(cd)
-		if not options.is_empty():
-			var option_ids: Array = []
-			for c in options:
-				option_ids.append(c.id)
-			Net.relay({"type": "prompt_transform_choice", "minion_id": minion.instance_id, "options": option_ids})
-			_send_state()
-			var t_resp: Dictionary = await Net.await_relay_of_type("response_transform_choice")
-			var chosen_id := str(t_resp.get("card_id", ""))
-			if chosen_id != "" and minion in game_state.opponent.board:
-				game_state.apply_transform_choice(minion, chosen_id)
-				board.refresh()
-				_send_state()
-	if minion.has_ability(Abilities.ON_PLAY_DEVOUR_FRIENDLY) and minion in game_state.opponent.board:
-		var devour_others := game_state.opponent.board.filter(func(m): return m != minion)
-		if not devour_others.is_empty():
-			Net.relay({"type": "prompt_devour_friendly", "devourer_id": minion.instance_id})
-			_send_state()
-			var d_resp: Dictionary = await Net.await_relay_of_type("response_devour_friendly")
-			var devour_target := _find_minion(GUEST_ID, str(d_resp.get("target_id", "")))
-			if devour_target != null:
-				board.log_action("Opponent's %s devoured %s" % [minion.data.card_name, devour_target.data.card_name])
-				_relay_log("Your %s devoured %s and gained +%d health" % [
-					minion.data.card_name, devour_target.data.card_name, devour_target.current_health])
-				game_state.apply_devour_friendly(minion, devour_target, game_state.opponent)
-				board.refresh()
-				_send_state()
-	for ability in minion.abilities.duplicate():
-		if Abilities.is_on_play_damage(ability):
-			var damage := Abilities.get_on_play_damage_value(ability)
-			Net.relay({"type": "prompt_on_play_damage", "damage": damage})
-			_send_state()
-			var resp: Dictionary = await Net.await_relay_of_type("response_on_play_damage")
-			var tmid := str(resp.get("target_minion_id", ""))
-			var tpid := str(resp.get("target_player_id", ""))
-			if tmid != "":
-				var t := _find_minion_anywhere(tmid)
-				if t:
-					game_state.apply_on_play_damage(t, damage)
-			elif tpid != "":
-				game_state._get_player_by_id(tpid).hero_health -= damage
-				game_state._check_win_condition()
-			board.refresh()
-			_send_state()
-			if game_state.current_phase == GameState.Phase.GAME_OVER:
-				_handle_game_over()
+			await board.await_slam_landed(board.opponent_board_zone)
+			if not is_instance_valid(board):
 				return
-			break
-	if minion.has_ability(Abilities.CHALLENGE) and not game_state.player.board.is_empty():
-		Net.relay({"type": "prompt_challenge", "challenger_id": minion.instance_id})
-		_send_state()
-		var resp: Dictionary = await Net.await_relay_of_type("response_challenge")
-		var target := _find_minion(HOST_ID, str(resp.get("target_id", "")))
-		if target != null:
-			game_state.apply_challenge(minion, target)
-			await board.animate_creature_challenge(minion.instance_id, GUEST_ID, target.instance_id)
-			_relay_animate_challenge(minion.instance_id, GUEST_ID, target.instance_id)
-			board.refresh()
-			_send_state()
-			await _host_process_pending()
-			if game_state.current_phase == GameState.Phase.GAME_OVER:
-				_handle_game_over()
-	if minion.has_ability(Abilities.ON_PLAY_PILOT_MECH):
-		var has_target = game_state.opponent.board.any(func(m): return m != minion and m.has_ability(Abilities.MECH) and not m.is_piloted)
-		if has_target:
-			Net.relay({"type": "prompt_on_play_pilot", "pilot_id": minion.instance_id})
-			_send_state()
-			var resp: Dictionary = await Net.await_relay_of_type("response_on_play_pilot")
-			var target := _find_minion(GUEST_ID, str(resp.get("target_id", "")))
-			if target != null:
-				game_state.apply_pilot(minion, target, game_state.opponent, false)
-				board.refresh()
-				_send_state()
-	if minion.has_ability(Abilities.ON_PLAY_CHALLENGE_WIN_BUFF) and not game_state.player.board.is_empty():
-		Net.relay({"type": "prompt_challenge", "challenger_id": minion.instance_id})
-		_send_state()
-		var resp: Dictionary = await Net.await_relay_of_type("response_challenge")
-		var target := _find_minion(HOST_ID, str(resp.get("target_id", "")))
-		if target != null:
-			game_state.apply_challenge(minion, target)
-			await board.animate_creature_challenge(minion.instance_id, GUEST_ID, target.instance_id)
-			_relay_animate_challenge(minion.instance_id, GUEST_ID, target.instance_id)
-			board.refresh()
-			_send_state()
-			if minion in game_state.opponent.board and target not in game_state.player.board:
-				minion.current_attack += 1
-				var pre := minion.current_health
-				minion.current_health += 1
-				minion.max_health += 1
-				game_state._try_heal_to_draw(minion, minion.current_health - pre)
-				game_state._try_apothecary_bonus(GUEST_ID, minion)
-				board.refresh()
-				_send_state()
-			await _host_process_pending()
-			if game_state.current_phase == GameState.Phase.GAME_OVER:
-				_handle_game_over()
+			await _host_after_action(played["events"])
 
-func _host_stratagem_followup(card_data: CardData, target_minion: Minion) -> void:
-	if card_data.effect == "force_challenge" and target_minion != null:
-		if target_minion.owner_id == HOST_ID and target_minion.has_ability(Abilities.YETI) and not game_state.opponent.board.is_empty():
-			board.start_challenge_targeting(target_minion)
-			var target: Minion = await board.challenge_target_selected
-			if target != null:
-				game_state.apply_challenge(target_minion, target)
-				await board.animate_creature_challenge(target_minion.instance_id, HOST_ID, target.instance_id)
-				_relay_animate_challenge(target_minion.instance_id, HOST_ID, target.instance_id)
-				if card_data.effect_value > 0 and target.is_dead() and target_minion in game_state.player.board:
-					target_minion.current_attack += card_data.effect_value
-					var pre := target_minion.current_health
-					target_minion.current_health += card_data.effect_value
-					target_minion.max_health += card_data.effect_value
-					game_state._try_heal_to_draw(target_minion, target_minion.current_health - pre)
-					game_state._try_apothecary_bonus(HOST_ID, target_minion)
-				board.refresh()
-				_send_state()
-	if card_data.effect == "poke_bear" and target_minion != null:
-		if target_minion in game_state.player.board and target_minion.has_ability(Abilities.YETI) and not game_state.opponent.board.is_empty():
-			board.start_challenge_targeting(target_minion)
-			var target: Minion = await board.challenge_target_selected
-			if target != null:
-				game_state.apply_challenge(target_minion, target)
-				await board.animate_creature_challenge(target_minion.instance_id, HOST_ID, target.instance_id)
-				_relay_animate_challenge(target_minion.instance_id, HOST_ID, target.instance_id)
-				board.refresh()
-				_send_state()
-	if card_data.effect == "blood_transfusion" and target_minion != null and not game_state.player.board.is_empty():
-		board.start_buff_friendly_targeting()
-		var recipient: Minion = await board.buff_friendly_target_selected
-		if recipient != null and recipient in game_state.player.board:
-			game_state.apply_heal_buff(recipient, 2)
-			board.refresh()
-			_send_state()
-	# "...give it to ANOTHER creature you control" - donor excluded.
-	var sanguine_targets := game_state.sanguine_recipients(HOST_ID, target_minion)
-	if card_data.effect == "sanguine" and not sanguine_targets.is_empty():
-		board.start_buff_friendly_targeting(target_minion)
-		var recipient: Minion = await board.buff_friendly_target_selected
-		if recipient != null and recipient in sanguine_targets:
-			game_state.apply_heal_buff(recipient, 2)
-			board.refresh()
-			_send_state()
+		elif t == "action_attack":
+			var attacker := _find_minion(GUEST_ID, str(action.get("attacker_id", "")))
+			if not attacker:
+				continue
+			var target_type: String = str(action.get("target_type", ""))
+			var target_id: String = str(action.get("target_id", ""))
+			var cmd := {"type": GameState.CMD_ATTACK, "actor": GUEST_ID, "attacker_instance_id": attacker.instance_id}
+			if target_type == "minion":
+				var target := _find_minion(HOST_ID, target_id)
+				if not target:
+					continue
+				cmd["target_instance_id"] = target_id
+				var result := game_state.execute(cmd)
+				if not result["ok"]:
+					continue
+				board.log_action("Opponent's %s attacked your %s" % [attacker.data.card_name, target.data.card_name])
+				_relay_log("Your %s attacked opponent's %s" % [attacker.data.card_name, target.data.card_name])
+				await board.animate_creature_attack(attacker.instance_id, GUEST_ID, target_id)
+				_relay_animate_attack(attacker.instance_id, GUEST_ID, target_id)
+				await _host_after_action(result["events"])
+			elif target_type == "hero":
+				cmd["target_player_id"] = target_id
+				var attacker_id := attacker.instance_id
+				var result := game_state.execute(cmd)
+				if not result["ok"]:
+					continue
+				board.log_action("Opponent's %s attacked your hero" % attacker.data.card_name)
+				_relay_log("Your %s attacked opponent's hero" % attacker.data.card_name)
+				await board.animate_creature_attack_face(attacker_id, GUEST_ID)
+				_relay_animate_attack(attacker_id, GUEST_ID, "")
+				await _host_after_action(result["events"])
+			if game_state.current_phase == GameState.Phase.GAME_OVER:
+				return
 
-func _host_stratagem_followup_for_guest(card_data: CardData, target_minion: Minion, _action: Dictionary) -> void:
-	if card_data.effect == "force_challenge" and target_minion != null:
-		if target_minion.owner_id == GUEST_ID and target_minion.has_ability(Abilities.YETI) and not game_state.player.board.is_empty():
-			Net.relay({"type": "prompt_challenge", "challenger_id": target_minion.instance_id})
-			_send_state()
-			var resp: Dictionary = await Net.await_relay_of_type("response_challenge")
-			var t := _find_minion(HOST_ID, str(resp.get("target_id", "")))
-			if t != null:
-				game_state.apply_challenge(target_minion, t)
-				await board.animate_creature_challenge(target_minion.instance_id, GUEST_ID, t.instance_id)
-				_relay_animate_challenge(target_minion.instance_id, GUEST_ID, t.instance_id)
-				if card_data.effect_value > 0 and t.is_dead() and target_minion in game_state.opponent.board:
-					target_minion.current_attack += card_data.effect_value
-					var pre := target_minion.current_health
-					target_minion.current_health += card_data.effect_value
-					target_minion.max_health += card_data.effect_value
-					game_state._try_heal_to_draw(target_minion, target_minion.current_health - pre)
-				board.refresh()
-				_send_state()
-	# Poke Bear's challenge: the host path has always had this, the guest path
-	# never did, so a guest playing it got no challenge at all. Latent today -
-	# no card currently carries effect "poke_bear" - but the handler exists on
-	# one side only, which is exactly the asymmetry that bites when one is
-	# added.
-	if card_data.effect == "poke_bear" and target_minion != null:
-		if target_minion in game_state.opponent.board and target_minion.has_ability(Abilities.YETI) 				and not game_state.player.board.is_empty():
-			Net.relay({"type": "prompt_challenge", "challenger_id": target_minion.instance_id})
-			_send_state()
-			var poke_resp: Dictionary = await Net.await_relay_of_type("response_challenge")
-			var poke_target := _find_minion(HOST_ID, str(poke_resp.get("target_id", "")))
-			if poke_target != null:
-				game_state.apply_challenge(target_minion, poke_target)
-				await board.animate_creature_challenge(target_minion.instance_id, GUEST_ID, poke_target.instance_id)
-				_relay_animate_challenge(target_minion.instance_id, GUEST_ID, poke_target.instance_id)
-				board.refresh()
-				_send_state()
-	if card_data.effect == "blood_transfusion" and target_minion != null and not game_state.opponent.board.is_empty():
-		Net.relay({"type": "prompt_buff_friendly"})
-		_send_state()
-		var resp: Dictionary = await Net.await_relay_of_type("response_buff_friendly")
-		var t := _find_minion(GUEST_ID, str(resp.get("target_id", "")))
-		if t != null and t in game_state.opponent.board:
-			game_state.apply_heal_buff(t, 2)
-			board.refresh()
-			_send_state()
-	# "...give it to ANOTHER creature you control" - donor excluded, same as
-	# the host and simulation paths.
-	var guest_sanguine_targets := game_state.sanguine_recipients(GUEST_ID, target_minion)
-	if card_data.effect == "sanguine" and not guest_sanguine_targets.is_empty():
-		Net.relay({"type": "prompt_buff_friendly"})
-		_send_state()
-		var resp: Dictionary = await Net.await_relay_of_type("response_buff_friendly")
-		var t := _find_minion(GUEST_ID, str(resp.get("target_id", "")))
-		if t != null and t in guest_sanguine_targets:
-			game_state.apply_heal_buff(t, 2)
-			board.refresh()
-			_send_state()
+		elif t == "action_play_stratagem":
+			var card := _find_card_in_hand(GUEST_ID, str(action.get("card_id", "")))
+			if card == null:
+				continue
+			await _announce_both(card)
+			if not is_instance_valid(board):
+				return
+			var strat := game_state.execute({
+				"type": GameState.CMD_PLAY_STRATAGEM, "actor": GUEST_ID, "card_uid": card.uid,
+				"target_instance_id": str(action.get("target_minion_id", "")),
+				"target_player_id": str(action.get("target_player_id", "")),
+			})
+			if not strat["ok"]:
+				continue
+			board.log_action("Opponent played %s" % card.card_name)
+			_relay_log("You played %s" % card.card_name)
+			await _host_after_action(strat["events"])
+			if game_state.current_phase == GameState.Phase.GAME_OVER:
+				return
+
+		elif t == "action_pilot":
+			var result := game_state.execute({
+				"type": GameState.CMD_PILOT, "actor": GUEST_ID,
+				"pilot_instance_id": str(action.get("pilot_id", "")),
+				"target_instance_id": str(action.get("target_id", "")),
+			})
+			if result["ok"]:
+				await _host_after_action(result["events"])
 
 # ── Guest: send actions ────────────────────────────────────────────────────
 
@@ -1071,6 +550,11 @@ func _guest_drain_queue() -> bool:
 			var announced_card := CardDatabase.get_card(str(announce.get("card_id", "")))
 			if announced_card != null:
 				await board.announce_card(announced_card)
+			continue
+
+		var present_msg = Net.pop_of_type("present_events")
+		if present_msg != null:
+			await EventPresenter.present(present_msg.get("events", []), board, GUEST_ID)
 			continue
 
 		var log_msg = Net.pop_of_type("log")
@@ -1130,91 +614,12 @@ func _peek_prompt() -> Variant:
 	return null
 
 func _guest_respond_to_prompt(prompt: Dictionary) -> void:
-	var t: String = prompt.get("type", "")
-	match t:
-		"prompt_tank_shot":
-			board.start_tank_shot_targeting()
-			var result = await board.tank_shot_resolved
-			Net.relay({
-				"type": "response_tank_shot",
-				"target_minion_id": result[0].instance_id if result[0] != null else "",
-				"target_player_id": result[1] if result[0] == null else "",
-			})
-		"prompt_rummage":
-			var opt_ids: Array = prompt.get("options", [])
-			var options: Array[CardData] = []
-			for oid in opt_ids:
-				var c = CardDatabase.get_card(str(oid))
-				if c != null:
-					options.append(c)
-			var chosen: CardData = await board.show_graveyard_picker(options)
-			Net.relay({"type": "response_rummage", "card_id": chosen.id if chosen != null else ""})
-		"prompt_null":
-			board.start_null_targeting()
-			var target: Minion = await board.null_target_selected
-			Net.relay({"type": "response_null", "target_id": target.instance_id if target != null else ""})
-		"prompt_buff_friendly":
-			board.start_buff_friendly_targeting()
-			var target: Minion = await board.buff_friendly_target_selected
-			Net.relay({"type": "response_buff_friendly", "target_id": target.instance_id if target != null else ""})
-		"prompt_tank_specialist":
-			board.start_buff_friendly_targeting(null, "tank")
-			var tank_target: Minion = await board.buff_friendly_target_selected
-			Net.relay({"type": "response_tank_specialist", "target_id": tank_target.instance_id if tank_target != null else ""})
-		"prompt_on_play_damage":
-			board.start_on_play_damage_targeting()
-			var result = await board.on_play_damage_target_selected
-			Net.relay({
-				"type": "response_on_play_damage",
-				"target_minion_id": result[0].instance_id if result[0] != null else "",
-				"target_player_id": result[1] if result[0] == null else "",
-			})
-		"prompt_transform_choice":
-			var opt_ids: Array = prompt.get("options", [])
-			var options: Array[CardData] = []
-			for oid in opt_ids:
-				var c = CardDatabase.get_card(str(oid))
-				if c != null:
-					options.append(c)
-			var chosen: CardData = await board.show_transform_picker(options)
-			Net.relay({"type": "response_transform_choice", "card_id": chosen.id if chosen != null else ""})
-		"prompt_devour_friendly":
-			var devourer := _find_minion(GUEST_ID, str(prompt.get("devourer_id", "")))
-			if devourer != null:
-				board.start_buff_friendly_targeting(devourer)
-				var target: Minion = await board.buff_friendly_target_selected
-				Net.relay({"type": "response_devour_friendly", "target_id": target.instance_id if target != null else ""})
-			else:
-				Net.relay({"type": "response_devour_friendly", "target_id": ""})
-		"prompt_on_play_pilot":
-			var pilot := _find_minion(GUEST_ID, str(prompt.get("pilot_id", "")))
-			if pilot != null:
-				board.start_on_play_pilot_targeting(pilot)
-				var target: Minion = await board.on_play_pilot_target_selected
-				Net.relay({"type": "response_on_play_pilot", "target_id": target.instance_id if target != null else ""})
-			else:
-				Net.relay({"type": "response_on_play_pilot", "target_id": ""})
-		"prompt_challenge":
-			var challenger := _find_minion(GUEST_ID, str(prompt.get("challenger_id", "")))
-			if challenger != null and not game_state.opponent.board.is_empty():
-				board.start_challenge_targeting(challenger)
-				var target: Minion = await board.challenge_target_selected
-				Net.relay({"type": "response_challenge", "target_id": target.instance_id if target != null else ""})
-			else:
-				Net.relay({"type": "response_challenge", "target_id": ""})
-		"prompt_overwatch":
-			board.start_yeti_selection()
-			var yeti: Minion = await board.yeti_selected
-			if yeti != null and not game_state.opponent.board.is_empty():
-				board.start_challenge_targeting(yeti)
-				var target: Minion = await board.challenge_target_selected
-				Net.relay({
-					"type": "response_overwatch",
-					"yeti_id": yeti.instance_id,
-					"target_id": target.instance_id if target != null else "",
-				})
-			else:
-				Net.relay({"type": "response_overwatch", "yeti_id": "", "target_id": ""})
+	# One generic prompt: the host's rules core opened a choice for this player.
+	if str(prompt.get("type", "")) != "prompt_choice":
+		return
+	var choice: Dictionary = prompt.get("choice", {})
+	var selection: String = await board.prompt_choice(choice)
+	Net.relay({"type": "response_choice", "choice_id": str(choice.get("id", "")), "selection": selection})
 
 func _guest_announce_pending_draws() -> void:
 	if game_state.pending_drawn_cards.is_empty() and game_state.pending_fatigue_damage.is_empty():

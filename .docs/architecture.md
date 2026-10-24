@@ -6,6 +6,9 @@ The codebase has a clean split between **game logic** (pure GDScript classes, no
 
 | Script | Role |
 |---|---|
+| `scripts/game/event_presenter.gd` | `EventPresenter` - turns the rules core's advisory events into log lines and challenge/laser animations; shared by every controller that renders a match |
+| `scripts/game/parity_test.gd` | `ParityTest` - replays seeded AI-vs-AI matches from (seed, decks, command log) and requires identical state at every step; run via `--parity-test` |
+| `scripts/game/rules_version.gd` | `RulesVersion.RULES_VERSION` - bumped when rules or card data change; a ranked client with a different version is told to update |
 | `scripts/game/game_state.gd` | Authoritative game state; drives all rule enforcement |
 | `scripts/game/core_tests.gd` | `CoreTests` — rules-core regression suite (copy isolation, command validation, card identity, tree-reuse fingerprint, Crypt Hunger, aura lifetime). Run via `--core-tests`; **exits with the failure count**, unlike the older hooks |
 | `scripts/game/player_state.gd` | Per-player state (hand, board, mana, deck) |

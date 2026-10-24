@@ -1793,6 +1793,29 @@ static func _test_family_stratagem_followups(filler: String) -> void:
 	_check("Drain never offers the donor as recipient", gs2.has_pending_choice() and donor.instance_id not in gs2.pending_choice["options"] and other.instance_id in gs2.pending_choice["options"])
 
 
+## Controllers hold no rules (Constitution Principle I, spec 003): they send
+## commands and answers and render what comes back. A controller that calls a
+## rules mutator is deciding an outcome the server could not then control.
+static func _test_controller_purity() -> void:
+	print("[controller purity]")
+	var controllers := ["res://scripts/game/game_manager.gd", "res://scripts/game/mp_game_manager.gd",
+		"res://scripts/game/ai_controller.gd", "res://scripts/game/board.gd",
+		"res://scripts/game/remote_match_client.gd", "res://scripts/game/event_presenter.gd"]
+	var forbidden := [".apply_", "take_damage(", "hero_health -", "hero_health +", "hero_health =",
+		"_remove_dead_minions", "complete_rummage", ".play_creature(", ".play_stratagem(",
+		".attack(", ".end_turn()", "current_attack +=", "current_health +=", "max_health +=",
+		".pending_tank_shots.", ".pending_rummages.", ".pending_nulls.", ".pending_overwatch_challenges.",
+		".pending_buff_friendly_health.", ".pending_tank_specialist_buffs.", ".pending_on_reinforce_damages."]
+	for path in controllers:
+		if not FileAccess.file_exists(path):
+			continue  # remote_match_client.gd does not exist until the thin client lands
+		var code := _code_only(path)
+		for token in forbidden:
+			# board.gd's own Card.apply_size() is a presentation scale, not a rule.
+			var scan := code.replace("apply_size(", "").replace("apply_color_theme", "")
+			_check("%s never calls %s" % [path.get_file(), token], not scan.contains(token),
+				"a controller must send a command, not mutate rules state")
+
 ## Handoff items 11/12, scenario 12: a payload sent to one player must not
 ## carry the other player's hidden information.
 static func _test_player_views(card_id: String) -> void:
@@ -1896,6 +1919,7 @@ static func run() -> int:
 	_test_family_pilot_swap_devour_transform(card_id)
 	_test_family_queues(card_id)
 	_test_family_stratagem_followups(card_id)
+	_test_controller_purity()
 	_test_player_views(card_id)
 	print("CORE TESTS: %d checks, %d failed" % [_checks, _failures])
 	print("RESULT: %s" % ("PASS" if _failures == 0 else "FAIL"))

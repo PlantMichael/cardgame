@@ -1,5 +1,14 @@
 # Abilities System
 
+## On-play decisions live in the core
+
+`Abilities._fire_on_play_decisions()` (called from `fire_on_play`) requests the
+decision-bearing on-play effects in a fixed order: transform choice, on-play
+damage, challenge, Yeti challenge, Rampage (`challenge_all`, automatic),
+pilot, challenge-with-win-buff, swap health, devour. They used to run in four
+controllers; see `.docs/game-logic.md` for the choice model. Note
+`on_play_damage_high_attack` (Heavy Bounty Hunter) is *not* plain on-play damage.
+
 ## Shared operations
 
 Effects do not mutate creatures directly; they call the shared operation, which

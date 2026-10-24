@@ -78,7 +78,7 @@ func start_local_game(board_node: Board, player_deck: Array[CardData], opponent_
 		if game_state.current_phase == GameState.Phase.GAME_OVER:
 			_handle_game_over()
 			return
-		game_state.end_turn()
+		await _end_turn_for(game_state.active_player_id)
 		board.refresh()
 		await _announce_pending_draws()
 		await _resolve_all_pending()
@@ -264,11 +264,18 @@ func _on_play_stratagem(card_data: CardData, target_minion: Minion, target_playe
 	if game_state.current_phase == GameState.Phase.GAME_OVER:
 		_handle_game_over()
 
+## Ends `player_id`'s turn through the validated command boundary and shows
+## whatever that produced.
+func _end_turn_for(player_id: String) -> void:
+	var result := game_state.execute({"type": GameState.CMD_END_TURN, "actor": player_id})
+	if result["ok"]:
+		await _present(result["events"])
+
 func _on_end_turn() -> void:
 	if _end_turn_in_progress:
 		return
 	_end_turn_in_progress = true
-	game_state.end_turn()
+	await _end_turn_for(LOCAL_PLAYER_ID)
 	board.refresh()
 	board.log_action("--- Opponent Turn %d ---" % game_state.turn_number)
 	if not game_state.is_local_player_turn():
@@ -287,7 +294,7 @@ func _on_end_turn() -> void:
 			_handle_game_over()
 			_end_turn_in_progress = false
 			return
-		game_state.end_turn()
+		await _end_turn_for(game_state.active_player_id)
 		board.refresh()
 		await _announce_pending_draws()
 		await _resolve_all_pending()

@@ -85,16 +85,16 @@ and `--parity-test`.
 ### Make every controller a thin caller
 
 - [X] T026 Reduce `scripts/game/game_manager.gd` to a command sender and renderer: replace `_run_player_on_play`, `_process_pending_*` and the stratagem follow-ups with "send `answer_choice` from the player's click, animate from returned events, call `board.refresh()`"; delete the rules that moved.
-- [ ] T027 Reduce the host/guest paths in `scripts/game/mp_game_manager.gd` the same way (`_host_run_on_play`, `_host_process_*`, `_host_stratagem_followup*`), keeping the existing message shapes for casual/campaign multiplayer working.
+- [X] T027 Reduce the host/guest paths in `scripts/game/mp_game_manager.gd` the same way (`_host_run_on_play`, `_host_process_*`, `_host_stratagem_followup*`), keeping the existing message shapes for casual/campaign multiplayer working.
 - [X] T028 Reduce `scripts/game/ai_controller.gd` (`_handle_on_play_effects`, `_play_stratagem_action`, …) to policy: pick commands and choice answers via `AIHeuristics`, apply them through `GameState.execute`, animate from events.
 - [X] T029 Make `scripts/game/headless_turn.gd` a policy-only layer: delete `_handle_on_play` and the private effect copies, and use `answer_pending_choice` over the core's choices (`MCTSEngine` and `--mcts-benchmark` must still run).
-- [ ] T030 [P] Add the controller-purity check to `scripts/game/core_tests.gd`: fail if `game_manager.gd`, `mp_game_manager.gd`, `ai_controller.gd`, `remote_match_client.gd` or `board.gd` call a rules mutator directly (`apply_*`, `take_damage(`, `hero_health`, `_remove_dead_minions`, `complete_rummage`).
+- [X] T030 [P] Add the controller-purity check to `scripts/game/core_tests.gd`: fail if `game_manager.gd`, `mp_game_manager.gd`, `ai_controller.gd`, `remote_match_client.gd` or `board.gd` call a rules mutator directly (`apply_*`, `take_damage(`, `hero_health`, `_remove_dead_minions`, `complete_rummage`).
 
 ### Prove it
 
-- [ ] T031 Add the `--parity-test` hook in `scripts/game/main.gd` (beside the existing `--newcards-test`/`--locations-test` hooks) that plays 1,000 seeded AI-vs-AI matches, records `(seed, decks, command log)`, replays each into a fresh `GameState`, and requires identical `state_hash` per step and identical winners; exit code = failure count.
-- [ ] T032 Run `godot --headless --path . -- --core-tests`, `--parity-test`, `--newcards-test`, `--locations-test`, `--tank-test`, `--campaign-test` and `--mcts-benchmark`; fix regressions; note results in `.docs/status.md`.
-- [ ] T033 Update `.docs/game-logic.md`, `.docs/abilities.md` and `.docs/conventions.md` to describe the completed choice model, event feed and "controllers hold no rules" rule (Constitution Principle IV).
+- [X] T031 Add the `--parity-test` hook in `scripts/game/main.gd` (beside the existing `--newcards-test`/`--locations-test` hooks) that plays 1,000 seeded AI-vs-AI matches, records `(seed, decks, command log)`, replays each into a fresh `GameState`, and requires identical `state_hash` per step and identical winners; exit code = failure count.
+- [X] T032 Run `godot --headless --path . -- --core-tests`, `--parity-test`, `--newcards-test`, `--locations-test`, `--tank-test`, `--campaign-test` and `--mcts-benchmark`; fix regressions; note results in `.docs/status.md`.
+- [X] T033 Update `.docs/game-logic.md`, `.docs/abilities.md` and `.docs/conventions.md` to describe the completed choice model, event feed and "controllers hold no rules" rule (Constitution Principle IV).
 
 **Checkpoint**: The rules are in one place, deterministic and replayable.
 Phase A can be merged and shipped before anything below.

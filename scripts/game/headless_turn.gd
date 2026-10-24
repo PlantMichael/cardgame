@@ -374,11 +374,14 @@ static func answer_pending_choice(gs: GameState) -> void:
 		return
 	var choice := gs.pending_choice.duplicate(true)
 	var selection := AIHeuristics.pick_choice_answer(gs, choice)
-	var result := gs.answer_choice(str(choice["id"]), selection)
+	var actor := str(choice["player_id"])
+	var result := gs.execute({"type": GameState.CMD_ANSWER_CHOICE, "actor": actor,
+		"choice_id": str(choice["id"]), "selection": selection})
 	if not result["ok"]:
 		# A policy answer the core refuses (a mandatory choice it wanted to
 		# decline, say) falls back to the choice's own deterministic default.
-		gs.answer_choice(str(choice["id"]), str(choice["default"]))
+		gs.execute({"type": GameState.CMD_ANSWER_CHOICE, "actor": actor,
+			"choice_id": str(choice["id"]), "selection": str(choice["default"])})
 
 # --- Pending-queue resolution (ported from SimRunner._resolve_pending) ---
 

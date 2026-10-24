@@ -623,7 +623,7 @@ func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 				if not minion.data.transform_into.is_empty():
 					var new_data = CardDatabase.get_card(minion.data.transform_into)
 					if new_data != null:
-						var new_minion = Minion.new(new_data, minion.owner_id)
+						var new_minion = Minion.new(new_data, minion.owner_id, owner.mint_minion_id(new_data.id))
 						new_minion.is_newly_reinforced = true
 						owner.board.insert(_safe_board_index(owner, board_index), new_minion)
 			DEATHRATTLE_AOE_TRANSFORM:
@@ -639,13 +639,13 @@ func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 				if not minion.data.transform_into.is_empty():
 					var new_data = CardDatabase.get_card(minion.data.transform_into)
 					if new_data != null:
-						var new_minion = Minion.new(new_data, minion.owner_id)
+						var new_minion = Minion.new(new_data, minion.owner_id, owner.mint_minion_id(new_data.id))
 						new_minion.is_newly_reinforced = true
 						owner.board.insert(_safe_board_index(owner, board_index), new_minion)
 			EJECT_PILOT_ON_DEATH:
 				if minion.is_piloted and minion.piloted_by != null:
 					if owner.has_room_for(minion.piloted_by.abilities):
-						var pilot_minion = Minion.new(minion.piloted_by, minion.owner_id)
+						var pilot_minion = Minion.new(minion.piloted_by, minion.owner_id, owner.mint_minion_id(minion.piloted_by.id))
 						pilot_minion.is_newly_reinforced = true
 						owner.board.insert(_safe_board_index(owner, board_index), pilot_minion)
 					elif owner.hand.size() < owner.MAX_HAND_SIZE:
@@ -698,7 +698,7 @@ func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 ## itself, so nothing can chain-revive forever.
 func _reinforce_minion(minion: Minion, owner: PlayerState, board_index: int, gs: GameState,
 					   remaining_uses: int = 0) -> Minion:
-	var copy := Minion.new(minion.data, minion.owner_id)
+	var copy := Minion.new(minion.data, minion.owner_id, owner.mint_minion_id(minion.data.id))
 	# The copy is built from the card DEFINITION, so it starts with whatever
 	# Reinforce is printed on the card. Strip that and put back only what is
 	# actually left, or a returned Maurice would be handed a fresh four.

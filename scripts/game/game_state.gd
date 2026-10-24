@@ -57,8 +57,13 @@ var _first_turn_taken: Dictionary = {}
 ## so a clone continues the same sequence independently of its parent.
 var rng := RandomNumberGenerator.new()
 
+## `seed_value` >= 0 fixes the match's randomness BEFORE the opening shuffle, so
+## (seed, decks, first player, commands) fully describe a match - the property
+## replay, restart-resume and audit rely on. -1 keeps today's random seed.
 func _init(local_player_id: String, opponent_player_id: String,
-		   player_deck: Array[CardData], opponent_deck: Array[CardData]) -> void:
+		   player_deck: Array[CardData], opponent_deck: Array[CardData], seed_value: int = -1) -> void:
+	if seed_value >= 0:
+		rng.seed = seed_value
 	player = PlayerState.new(local_player_id, player_deck)
 	opponent = PlayerState.new(opponent_player_id, opponent_deck)
 	# Shuffled here, not in PlayerState, so the opening decks come off the
@@ -1057,10 +1062,17 @@ func _validate_attack(actor: PlayerState, cmd: Dictionary) -> Dictionary:
 ## rejection. On success returns {"ok": true} plus whatever the command
 ## produced ("minion" for a creature play), so callers that need the result
 ## do not have to re-find it.
+## When on, every accepted command is appended to command_log together with
+## the state hash AFTER it - the raw material of a replay (see ParityTest).
+var record_commands: bool = false
+var command_log: Array[Dictionary] = []
+
 func execute(cmd: Dictionary) -> Dictionary:
 	var result := _execute_validated(cmd)
 	if result.get("ok", false):
 		resolve_to_quiescence()
+		if record_commands:
+			command_log.append({"cmd": cmd.duplicate(true), "hash": state_hash()})
 	result["events"] = drain_events()
 	return result
 
@@ -1103,7 +1115,7 @@ func play_creature(acting_player_id: String, card: CardData, at_index: int = -1)
 	var acting = _get_player_by_id(acting_player_id)
 	if not acting.play_card_from_hand(card):
 		return null
-	var minion = Minion.new(card, acting_player_id)
+	var minion = Minion.new(card, acting_player_id, acting.mint_minion_id(card.id))
 	if not node_modifier_ability.is_empty() and not minion.has_ability(node_modifier_ability):
 		minion.abilities.append(node_modifier_ability)
 		# Granting Rush this way has to also clear is_exhausted itself, same
@@ -1463,7 +1475,7 @@ func apply_eject_pilot(target_mech: Minion, owner: PlayerState) -> Minion:
 	target_mech.pilot_atk_bonus = 0
 	target_mech.pilot_hp_bonus = 0
 	if owner.has_room_for(pilot_data.abilities):
-		var pilot_minion := Minion.new(pilot_data, owner.player_id)
+		var pilot_minion := Minion.new(pilot_data, owner.player_id, owner.mint_minion_id(pilot_data.id))
 		owner.place_minion(pilot_minion)
 		return pilot_minion
 	elif owner.hand.size() < PlayerState.MAX_HAND_SIZE:
@@ -1828,7 +1840,7 @@ func return_minion_to_hand(minion: Minion) -> CardData:
 	if minion.is_piloted and minion.piloted_by != null:
 		var pilot_card: CardData = minion.piloted_by
 		if owner.has_room_for(pilot_card.abilities):
-			var pilot_minion := Minion.new(pilot_card, owner.player_id)
+			var pilot_minion := Minion.new(pilot_card, owner.player_id, owner.mint_minion_id(pilot_card.id))
 			owner.place_minion(pilot_minion, mini(index, owner.board.size()))
 		elif owner.hand.size() < PlayerState.MAX_HAND_SIZE:
 			owner.hand.append(pilot_card)
@@ -1969,7 +1981,7 @@ func complete_rummage(player_id: String, card: CardData, play_it: bool = false, 
 	var placed: Minion = null
 	if (has_stinkpile or play_it) and card.card_type == CardData.CardType.CREATURE and p.has_room_for(card.abilities):
 		card.rummage_count += 1
-		placed = Minion.new(card, player_id)
+		placed = Minion.new(card, player_id, p.mint_minion_id(card.id))
 		p.place_minion(placed)
 		Abilities.fire_on_play(placed, p, self)
 	elif p.hand.size() < PlayerState.MAX_HAND_SIZE:

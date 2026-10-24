@@ -68,6 +68,16 @@ Board positions are absolute in a 1920x1080 design space. In the browser the vie
   entity must not consume gameplay randomness, or copying a state would shift
   the real match's later rolls.
 
+## Controllers hold no rules
+
+Anything that decides an outcome - who is hit, what is drawn, what a choice does -
+is in `GameState`/`Abilities`. A controller (`game_manager`, `mp_game_manager`,
+`ai_controller`, `board`, the thin ranked client) only sends commands and
+answers and renders events. `--core-tests` greps them for rules mutators
+(`.apply_*`, `take_damage(`, `hero_health -=`, `.attack(`, ...) and fails if one
+appears. Minion ids are per-player counters (`PlayerState.mint_minion_id`), never a
+process-wide static, so a match replays identically.
+
 ## Randomness
 
 - A rule's roll uses the match generator: `GameState.rand_index()`,
