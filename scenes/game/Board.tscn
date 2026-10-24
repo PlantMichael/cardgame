@@ -21,10 +21,10 @@ expand_mode = 1
 stretch_mode = 6
 
 [node name="OpponentHandZone" type="HBoxContainer" parent="."]
-offset_left = 835.0
+offset_left = 480.0
 offset_top = 4.0
-offset_right = 1315.0
-offset_bottom = 88.0
+offset_right = 1440.0
+offset_bottom = 138.0
 theme_override_constants/separation = 4
 
 [node name="OpponentHero" type="Panel" parent="."]
@@ -46,17 +46,17 @@ horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="OpponentBoardZone" type="HBoxContainer" parent="."]
-offset_left = 530.0
+offset_left = 415.0
 offset_top = 235.0
-offset_right = 1620.0
+offset_right = 1505.0
 offset_bottom = 447.0
 theme_override_constants/separation = 10
 alignment = 1
 
 [node name="CenterBar" type="HBoxContainer" parent="."]
-offset_left = 530.0
+offset_left = 415.0
 offset_top = 458.0
-offset_right = 1620.0
+offset_right = 1505.0
 offset_bottom = 503.0
 theme_override_constants/separation = 40
 alignment = 1
@@ -79,9 +79,9 @@ bbcode_enabled = true
 fit_content = true
 
 [node name="PlayerBoardZone" type="HBoxContainer" parent="."]
-offset_left = 530.0
+offset_left = 415.0
 offset_top = 515.0
-offset_right = 1620.0
+offset_right = 1505.0
 offset_bottom = 727.0
 theme_override_constants/separation = 10
 alignment = 1
@@ -105,9 +105,9 @@ horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="PlayerHandZone" type="HBoxContainer" parent="."]
-offset_left = 545.0
+offset_left = 430.0
 offset_top = 866.0
-offset_right = 1605.0
+offset_right = 1490.0
 offset_bottom = 1074.0
 theme_override_constants/separation = 12
 alignment = 1
@@ -115,7 +115,7 @@ alignment = 1
 [node name="CombatLogPanel" type="PanelContainer" parent="."]
 offset_left = 20.0
 offset_top = 190.0
-offset_right = 510.0
+offset_right = 390.0
 offset_bottom = 860.0
 
 [node name="CombatLogScroll" type="ScrollContainer" parent="CombatLogPanel"]

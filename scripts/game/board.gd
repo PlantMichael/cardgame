@@ -1432,9 +1432,9 @@ func _refresh_hand() -> void:
 	# count with no cards behind it (see PlayerState.to_net_dict).
 	for i in game_state.opponent.get_hand_size():
 		var back = CardBackScene.instantiate()
-		back.scale = Vector2(0.48, 0.48)
+		back.scale = Vector2(0.80, 0.80)
 		var back_wrapper = Control.new()
-		back_wrapper.custom_minimum_size = Vector2(53, 77)
+		back_wrapper.custom_minimum_size = Vector2(88, 128)
 		opponent_hand_zone.add_child(back_wrapper)
 		back_wrapper.add_child(back)
 
