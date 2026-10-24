@@ -182,6 +182,114 @@ static func pick_health_buff_target(minions: Array[Minion]) -> Minion:
 ## Static board-state evaluator used by MCTSEngine to score a position once a
 ## search has stopped looking ahead (either at a rollout depth limit or a
 ## finished game). Higher is better for `ai_player_id`.
+## Picks the answer for the choice that is open on `gs`, from the options the
+## rules core listed. This is POLICY, not rules: it may only choose among the
+## options (or decline when the choice allows it), never widen or narrow them.
+##
+## One policy serves the live AI, the search's rollouts and the greedy
+## completion, so a decision the AI makes is the same wherever it is made.
+## Returns "" to decline.
+static func pick_choice_answer(gs: GameState, choice: Dictionary) -> String:
+	var options: Array = choice["options"]
+	if options.is_empty():
+		return ""
+	var actor_id := str(choice["player_id"])
+	var amount := int(choice["amount"])
+	var source := gs.find_minion(str(choice["source_instance_id"]))
+	var minions: Array[Minion] = []
+	var enemy_minions: Array[Minion] = []
+	var friendly_minions: Array[Minion] = []
+	for o in options:
+		var m := gs.find_minion(str(o))
+		if m != null:
+			minions.append(m)
+			if m.owner_id == actor_id:
+				friendly_minions.append(m)
+			else:
+				enemy_minions.append(m)
+	var enemy_id := gs._opponent_id(actor_id)
+	var pick: Minion = null
+	match str(choice["effect"]):
+		GameState.CHOICE_RESTORE_HEALTH:
+			# The most wounded creature gains the most from it.
+			for m in minions:
+				if pick == null or (m.max_health - m.current_health) > (pick.max_health - pick.current_health):
+					pick = m
+		GameState.CHOICE_BUFF_OTHER_FRIENDLY, GameState.CHOICE_BUFF_HEALTH_TARGET, GameState.CHOICE_HEAL_BUFF_TARGET:
+			pick = pick_health_buff_target(minions)
+		GameState.CHOICE_DAMAGE_HIGH_ATTACK:
+			# Prefer something the damage actually kills; else the biggest attacker.
+			for m in minions:
+				if m.current_health <= amount and (pick == null or m.current_attack > pick.current_attack):
+					pick = m
+			if pick == null:
+				for m in minions:
+					if pick == null or m.current_attack > pick.current_attack:
+						pick = m
+		GameState.CHOICE_DAMAGE_TARGET:
+			if not enemy_minions.is_empty():
+				pick = pick_best_removal_target(enemy_minions, amount)
+			if pick == null:
+				if GameState.hero_option(enemy_id) in options:
+					return GameState.hero_option(enemy_id)
+				return ""
+		GameState.CHOICE_CHALLENGE:
+			pick = pick_challenge_target(enemy_minions, source) if source != null else null
+		GameState.CHOICE_PICK_CHALLENGER:
+			for m in friendly_minions:
+				if pick == null or m.current_attack > pick.current_attack:
+					pick = m
+		GameState.CHOICE_PILOT_TARGET:
+			pick = pick_best_pilot_target(friendly_minions, source)
+		GameState.CHOICE_SWAP_HEALTH:
+			var cands: Array[Minion] = friendly_minions.duplicate()
+			cands.sort_custom(func(a, b): return a.current_attack > b.current_attack)
+			if cands.size() >= 2:
+				var recipient: Minion = cands[0]
+				var donor: Minion = cands[cands.size() - 1]
+				if int(choice["step"]) <= 1:
+					# Give health to the most valuable creature from the least valuable.
+					if donor.current_health > recipient.current_health:
+						pick = recipient
+				else:
+					pick = donor
+			elif int(choice["step"]) > 1 and cands.size() == 1:
+				pick = cands[0]
+		GameState.CHOICE_DEVOUR:
+			# Sacrifice the least valuable creature.
+			for m in friendly_minions:
+				if pick == null or m.current_attack + m.current_health < pick.current_attack + pick.current_health:
+					pick = m
+		GameState.CHOICE_TRANSFORM:
+			var best_id := str(options[0])
+			var best_score := -1
+			for cid in options:
+				var cd := CardDatabase.get_card(str(cid))
+				if cd != null and cd.attack + cd.health > best_score:
+					best_score = cd.attack + cd.health
+					best_id = str(cid)
+			return best_id
+		GameState.CHOICE_RUMMAGE:
+			var best_card := str(options[0])
+			var best_cost := -1
+			for cid in options:
+				var cd := CardDatabase.get_card(str(cid))
+				if cd != null and cd.cost > best_cost:
+					best_cost = cd.cost
+					best_card = str(cid)
+			return best_card
+		GameState.CHOICE_NULL_TARGET:
+			for m in enemy_minions:
+				if pick == null or m.abilities.size() > pick.abilities.size():
+					pick = m
+		GameState.CHOICE_TANK_BUFF_TARGET:
+			for m in friendly_minions:
+				if pick == null or m.current_attack + m.current_health > pick.current_attack + pick.current_health:
+					pick = m
+		_:
+			pick = minions[0] if not minions.is_empty() else null
+	return pick.instance_id if pick != null else ""
+
 static func evaluate_state(gs: GameState, ai_player_id: String) -> float:
 	if gs.current_phase == GameState.Phase.GAME_OVER and gs.winner_id != "":
 		return 100000.0 if gs.winner_id == ai_player_id else -100000.0

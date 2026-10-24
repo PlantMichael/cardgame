@@ -167,6 +167,7 @@ func end_turn() -> void:
 		current_phase = Phase.PLAYER_TURN
 		turn_number += 1
 	_begin_turn()
+	resolve_to_quiescence()
 
 # --- Effect resolution order (the timing specification) ---
 #
@@ -267,6 +268,21 @@ func has_pending() -> bool:
 const CHOICE_RESTORE_HEALTH := "restore_health"
 const CHOICE_BUFF_OTHER_FRIENDLY := "buff_other_friendly"
 const CHOICE_DAMAGE_HIGH_ATTACK := "damage_high_attack"
+## Migrated from the controllers (spec 003, Phase A). Each is asked by the rules
+## and answered through answer_choice(); no controller decides an outcome.
+const CHOICE_DAMAGE_TARGET := "damage_target"        # on-play damage, tank shot, reinforce shot
+const CHOICE_CHALLENGE := "challenge"                # pick who the source challenges
+const CHOICE_PICK_CHALLENGER := "pick_challenger"    # step 1: which Yeti, then CHALLENGE
+const CHOICE_PILOT_TARGET := "pilot_target"
+const CHOICE_SWAP_HEALTH := "swap_health"            # two steps
+const CHOICE_DEVOUR := "devour"
+const CHOICE_TRANSFORM := "transform"
+const CHOICE_RUMMAGE := "rummage"
+const CHOICE_NULL_TARGET := "null_target"
+const CHOICE_BUFF_HEALTH_TARGET := "buff_health_target"
+const CHOICE_TANK_BUFF_TARGET := "tank_buff_target"
+const CHOICE_HEAL_BUFF_TARGET := "heal_buff_target"
+const CMD_PILOT := "pilot"
 
 ## What the options of a choice ARE.
 ##   target       minion instance_ids and heroes ("hero:<player_id>")
@@ -325,6 +341,15 @@ func is_targetable_by(target: Minion, actor_id: String) -> bool:
 ## declined, and how many steps it has. Effects not listed here are a single
 ## declinable target pick.
 func _choice_traits(effect: String) -> Dictionary:
+	match effect:
+		CHOICE_TRANSFORM:
+			# Must be answered: the card is not played until it is decided.
+			return {"kind": CHOICE_KIND_PICK_CARD_ID, "allow_none": false, "steps": 1}
+		CHOICE_RUMMAGE:
+			# Catalog ids, not uids: graveyard cards can share (or lack) a uid.
+			return {"kind": CHOICE_KIND_PICK_CARD_ID, "allow_none": true, "steps": 1}
+		CHOICE_PICK_CHALLENGER, CHOICE_SWAP_HEALTH:
+			return {"kind": CHOICE_KIND_TARGET, "allow_none": true, "steps": 2}
 	return {"kind": CHOICE_KIND_TARGET, "allow_none": true, "steps": 1}
 
 ## The legal selections for `effect`. Returning an empty list means the effect
@@ -353,6 +378,78 @@ func choice_options_for(effect: String, actor_id: String, source: Minion, data: 
 		CHOICE_DAMAGE_HIGH_ATTACK:
 			for m in enemy.board:
 				if m.current_attack >= BOUNTY_HUNTER_MIN_ATTACK and is_targetable_by(m, actor_id):
+					out.append(m.instance_id)
+		CHOICE_DAMAGE_TARGET:
+			# Any creature either side may be targeted, then both heroes.
+			for p in [actor, enemy]:
+				for m in p.board:
+					if is_targetable_by(m, actor_id):
+						out.append(m.instance_id)
+			out.append(hero_option(actor_id))
+			out.append(hero_option(enemy.player_id))
+		CHOICE_CHALLENGE:
+			# An Ambush creature cannot be challenged. The challenger itself must
+			# still be on its owner's board to fight.
+			if source != null and source in actor.board:
+				for m in enemy.board:
+					if not m.has_ability(Abilities.AMBUSH):
+						out.append(m.instance_id)
+		CHOICE_PICK_CHALLENGER:
+			var any_target := false
+			for m in enemy.board:
+				if not m.has_ability(Abilities.AMBUSH):
+					any_target = true
+					break
+			if any_target:
+				for m in actor.board:
+					if m.has_ability(Abilities.YETI) and m.instance_id != str(data.get("exclude", "")):
+						out.append(m.instance_id)
+		CHOICE_PILOT_TARGET:
+			if source != null:
+				for m in actor.board:
+					if m != source and m.has_ability(Abilities.MECH) and not m.is_piloted:
+						out.append(m.instance_id)
+		CHOICE_SWAP_HEALTH:
+			var others: Array[Minion] = []
+			for m in actor.board:
+				if m != source:
+					others.append(m)
+			if int(data.get("step", 1)) <= 1:
+				if others.size() >= 2:
+					for m in others:
+						out.append(m.instance_id)
+			else:
+				for m in others:
+					if m.instance_id != str(data.get("first", "")):
+						out.append(m.instance_id)
+		CHOICE_DEVOUR:
+			if source != null and source in actor.board:
+				for m in actor.board:
+					if m != source:
+						out.append(m.instance_id)
+		CHOICE_TRANSFORM:
+			if source != null:
+				for cid in source.data.transform_choices:
+					if CardDatabase.get_card(cid) != null:
+						out.append(cid)
+		CHOICE_RUMMAGE:
+			var allow_equal: bool = actor.board.any(func(m): return m.has_ability(Abilities.RUMMAGE_EQUAL_COST))
+			for c in get_rummage_options(actor_id, int(data.get("max_cost", -1)), str(data.get("type_filter", "")), allow_equal):
+				out.append(c.id)
+		CHOICE_NULL_TARGET:
+			for p in [actor, enemy]:
+				for m in p.board:
+					out.append(m.instance_id)
+		CHOICE_BUFF_HEALTH_TARGET:
+			for m in actor.board:
+				out.append(m.instance_id)
+		CHOICE_TANK_BUFF_TARGET:
+			for m in actor.board:
+				if m.data.tribe == "tank":
+					out.append(m.instance_id)
+		CHOICE_HEAL_BUFF_TARGET:
+			for m in actor.board:
+				if m.instance_id != str(data.get("exclude", "")):
 					out.append(m.instance_id)
 	return out
 
@@ -476,6 +573,126 @@ func _resolve_choice(choice: Dictionary, selection: String) -> void:
 			gain_max_health(target, amount)
 		CHOICE_DAMAGE_HIGH_ATTACK:
 			apply_on_play_damage(target, amount, actor_id)
+		CHOICE_DAMAGE_TARGET:
+			_resolve_damage_target(choice, selection)
+		CHOICE_CHALLENGE:
+			_resolve_challenge(choice, target)
+		CHOICE_PICK_CHALLENGER:
+			# Step 2: that Yeti now picks who to challenge.
+			var step_two := _make_choice_spec(actor_id, CHOICE_CHALLENGE, amount, target, choice["data"], 2)
+			_choice_queue.push_front(step_two)
+		CHOICE_PILOT_TARGET:
+			var pilot := find_minion(str(choice["source_instance_id"]))
+			if pilot != null and pilot in _get_player_by_id(actor_id).board:
+				_emit("effect", _effect_event(actor_id, pilot, "piloted", target))
+				apply_pilot(pilot, target, _get_player_by_id(actor_id), bool(choice["data"].get("consume", false)))
+		CHOICE_SWAP_HEALTH:
+			if int(choice["step"]) <= 1:
+				var data: Dictionary = (choice["data"] as Dictionary).duplicate(true)
+				data["first"] = selection
+				data["step"] = 2
+				_choice_queue.push_front(_make_choice_spec(actor_id, CHOICE_SWAP_HEALTH, amount, find_minion(str(choice["source_instance_id"])), data, 2))
+			else:
+				var first := find_minion(str(choice["data"].get("first", "")))
+				if first != null and first != target:
+					_emit("effect", _effect_event(actor_id, find_minion(str(choice["source_instance_id"])), "swapped health of %s and" % first.data.card_name, target))
+					apply_swap_friendly_health(first, target)
+		CHOICE_DEVOUR:
+			var devourer := find_minion(str(choice["source_instance_id"]))
+			if devourer != null and devourer in _get_player_by_id(actor_id).board:
+				_emit("effect", _effect_event(actor_id, devourer, "devoured", target))
+				apply_devour_friendly(devourer, target, _get_player_by_id(actor_id))
+		CHOICE_TRANSFORM:
+			var morphing := find_minion(str(choice["source_instance_id"]))
+			if morphing != null:
+				_emit("effect", {"owner": actor_id, "source": morphing.instance_id, "source_name": morphing.data.card_name, "verb": "transformed into %s" % str(CardDatabase.get_card(selection).card_name), "target_name": ""})
+				apply_transform_choice(morphing, selection)
+		CHOICE_RUMMAGE:
+			_resolve_rummage(choice, selection)
+		CHOICE_NULL_TARGET:
+			_emit("effect", {"owner": actor_id, "source_name": str(choice["data"].get("label", "")), "verb": "silenced", "target": target.instance_id, "target_name": target.data.card_name, "target_owner": target.owner_id})
+			apply_null(target)
+		CHOICE_BUFF_HEALTH_TARGET:
+			_emit("effect", {"owner": actor_id, "source_name": "Moonchild", "verb": "gave +1 max health to", "target": target.instance_id, "target_name": target.data.card_name, "target_owner": target.owner_id})
+			apply_buff_friendly_health(target)
+		CHOICE_TANK_BUFF_TARGET:
+			_emit("effect", {"owner": actor_id, "source_name": "Tank Specialist", "verb": "buffed (+1/+2)", "target": target.instance_id, "target_name": target.data.card_name, "target_owner": target.owner_id})
+			apply_tank_specialist_buff(target)
+		CHOICE_HEAL_BUFF_TARGET:
+			apply_heal_buff(target, amount)
+
+## Builds the advisory "effect" event shared by the simple effects: the
+## presenter turns it into one log line ("Your X <verb> [your|opponent's] Y").
+func _effect_event(owner_id: String, source: Minion, verb: String, target: Minion) -> Dictionary:
+	return {
+		"owner": owner_id,
+		"source": source.instance_id if source != null else "",
+		"source_name": source.data.card_name if source != null else "",
+		"verb": verb,
+		"target": target.instance_id if target != null else "",
+		"target_name": target.data.card_name if target != null else "",
+		"target_owner": target.owner_id if target != null else "",
+	}
+
+func _resolve_damage_target(choice: Dictionary, selection: String) -> void:
+	var actor_id := str(choice["player_id"])
+	var amount := int(choice["amount"])
+	var source := find_minion(str(choice["source_instance_id"]))
+	var label := str(choice["data"].get("label", ""))
+	if label.is_empty() and source != null:
+		label = source.data.card_name
+	var event := {
+		"owner": actor_id, "source": str(choice["source_instance_id"]), "source_name": label,
+		"verb": "dealt %d damage to" % amount, "amount": amount, "style": "damage",
+	}
+	if is_hero_option(selection):
+		var pid := hero_option_player(selection)
+		event["target"] = ""
+		event["target_player"] = pid
+		event["target_name"] = "hero"
+		event["target_owner"] = pid
+		_get_player_by_id(pid).hero_health -= amount
+		event["killed"] = false
+		_emit("effect", event)
+		_check_win_condition()
+		return
+	var target := find_minion(selection)
+	event["target"] = target.instance_id
+	event["target_name"] = target.data.card_name
+	event["target_owner"] = target.owner_id
+	apply_on_play_damage(target, amount, actor_id)
+	event["killed"] = find_minion(target.instance_id) == null
+	_emit("effect", event)
+
+func _resolve_challenge(choice: Dictionary, target: Minion) -> void:
+	var actor_id := str(choice["player_id"])
+	var amount := int(choice["amount"])
+	var challenger := find_minion(str(choice["source_instance_id"]))
+	if challenger == null or challenger.owner_id != actor_id or target == null:
+		return
+	apply_challenge(challenger, target)
+	# "If it wins" bonus (Icewhip, Rampage's win-buff creature): the challenger
+	# survived and the challenged creature did not.
+	if amount > 0 and find_minion(challenger.instance_id) != null and find_minion(target.instance_id) == null:
+		challenger.current_attack += amount
+		gain_max_health(challenger, amount)
+		_emit("effect", {
+			"owner": actor_id, "source": challenger.instance_id, "source_name": challenger.data.card_name,
+			"verb": "won and gained +%d/+%d" % [amount, amount], "target": "", "target_name": "", "target_owner": "",
+		})
+
+func _resolve_rummage(choice: Dictionary, selection: String) -> void:
+	var actor_id := str(choice["player_id"])
+	var actor := _get_player_by_id(actor_id)
+	var data: Dictionary = choice["data"]
+	var card: CardData = null
+	for c in actor.graveyard:
+		if c.id == selection:
+			card = c
+			break
+	if card == null:
+		return
+	complete_rummage(actor_id, card, bool(data.get("play_it", false)), bool(data.get("discount", true)), bool(data.get("buff_creature", false)))
 
 ## Abandons the open choice without resolving it - used when a match is torn
 ## down, so nothing is left waiting on an answer that will never come.
@@ -486,7 +703,15 @@ func cancel_pending_choice() -> void:
 ## Which queued work still has to be worked off before the next command. Migrated
 ## queue families turn their entries into choices here (one at a time, in
 ## PENDING_QUEUES order); the rest are still drained by the controllers.
-const MIGRATED_QUEUES: Array[String] = []
+const MIGRATED_QUEUES: Array[String] = [
+	"pending_tank_shots",
+	"pending_rummages",
+	"pending_nulls",
+	"pending_buff_friendly_health",
+	"pending_tank_specialist_buffs",
+	"pending_on_reinforce_damages",
+	"pending_overwatch_challenges",
+]
 
 ## Works off every effect that needs no decision, and opens the first one that
 ## does, so that after any accepted command the match is either quiet or
@@ -517,8 +742,28 @@ func _convert_next_queue_entry() -> bool:
 	return false
 
 ## Per-family conversion of a queue entry; filled in as each family migrates.
-func _queue_entry_to_choice(_queue_name: String, _entry) -> void:
-	pass
+func _queue_entry_to_choice(queue_name: String, entry) -> void:
+	match queue_name:
+		"pending_tank_shots":
+			var owner_id := str(entry)
+			var tank: Minion = null
+			for m in _get_player_by_id(owner_id).board:
+				if m.has_ability(Abilities.TANK):
+					tank = m
+					break
+			request_choice(owner_id, CHOICE_DAMAGE_TARGET, 1, tank, {"label": "Tank"})
+		"pending_rummages":
+			request_choice(str(entry["player_id"]), CHOICE_RUMMAGE, 0, null, entry)
+		"pending_nulls":
+			request_choice(str(entry["player_id"]), CHOICE_NULL_TARGET, 0, null, {"label": str(entry.get("source", ""))})
+		"pending_buff_friendly_health":
+			request_choice(str(entry), CHOICE_BUFF_HEALTH_TARGET, 1, null)
+		"pending_tank_specialist_buffs":
+			request_choice(str(entry), CHOICE_TANK_BUFF_TARGET, 1, null)
+		"pending_on_reinforce_damages":
+			request_choice(str(entry["player_id"]), CHOICE_DAMAGE_TARGET, int(entry["damage"]), null, {"label": str(entry.get("source", ""))})
+		"pending_overwatch_challenges":
+			request_choice(str(entry), CHOICE_PICK_CHALLENGER, 0, null, {"exclude": ""})
 
 # --- Event feed ---
 #
@@ -711,6 +956,8 @@ func validate(cmd: Dictionary) -> Dictionary:
 			return _validate_play(actor, cmd, false)
 		CMD_ATTACK:
 			return _validate_attack(actor, cmd)
+		CMD_PILOT:
+			return _validate_pilot(actor, cmd)
 	return _reject("unknown command type")
 
 func _validate_play(actor: PlayerState, cmd: Dictionary, as_creature: bool) -> Dictionary:
@@ -749,6 +996,28 @@ func _validate_play(actor: PlayerState, cmd: Dictionary, as_creature: bool) -> D
 		if target.has_ability(Abilities.CLOAKED) or target.has_ability(Abilities.AMBUSH):
 			return _reject("target cannot be targeted")
 	return {"ok": true, "actor": actor, "card": card, "target": target, "target_player_id": target_player_id}
+
+## The manual pilot action: a friendly creature with a Pilot ability merges into
+## a friendly un-piloted Mech.
+func _validate_pilot(actor: PlayerState, cmd: Dictionary) -> Dictionary:
+	var pilot := find_minion(str(cmd.get("pilot_instance_id", "")))
+	var mech := find_minion(str(cmd.get("target_instance_id", "")))
+	if pilot == null or mech == null:
+		return _reject("pilot or mech is no longer on the board")
+	if pilot.owner_id != actor.player_id or mech.owner_id != actor.player_id:
+		return _reject("both must be your creatures")
+	if pilot == mech:
+		return _reject("a creature cannot pilot itself")
+	var has_pilot := false
+	for ability in pilot.abilities:
+		if Abilities.is_pilot(ability):
+			has_pilot = true
+			break
+	if not has_pilot:
+		return _reject("that creature cannot pilot")
+	if not mech.has_ability(Abilities.MECH) or mech.is_piloted:
+		return _reject("target must be an un-piloted Mech")
+	return {"ok": true, "actor": actor, "pilot": pilot, "mech": mech}
 
 func _validate_attack(actor: PlayerState, cmd: Dictionary) -> Dictionary:
 	var attacker := find_minion(str(cmd.get("attacker_instance_id", "")))
@@ -817,6 +1086,10 @@ func _execute_validated(cmd: Dictionary) -> Dictionary:
 		CMD_ATTACK:
 			attack(check["attacker"], check["target"], check["target_player_id"])
 			return {"ok": true}
+		CMD_PILOT:
+			_emit("effect", _effect_event(actor.player_id, check["pilot"], "piloted", check["mech"]))
+			apply_pilot(check["pilot"], check["mech"], actor)
+			return {"ok": true}
 		CMD_ANSWER_CHOICE:
 			return answer_choice(str(cmd.get("choice_id", "")), str(cmd.get("selection", "")))
 		CMD_CONCEDE:
@@ -849,6 +1122,7 @@ func play_creature(acting_player_id: String, card: CardData, at_index: int = -1)
 				break
 		if has_growvin:
 			_apply_growvin_aura_to_mech(minion, acting_player_id)
+	resolve_to_quiescence()
 	return minion
 
 # --- Shared health operations ---
@@ -954,6 +1228,11 @@ func _stratagem_target_error(card: CardData, target: Minion, target_player_id: S
 		# card still in it, but the rule is stated rather than assumed.
 		if actor.hand.size() > PlayerState.MAX_HAND_SIZE:
 			return "no room in hand"
+	elif card.effect == "force_challenge":
+		if target == null or target.owner_id != actor.player_id or target not in actor.board:
+			return "target must be a Yeti you control"
+		if not target.has_ability(Abilities.YETI):
+			return "target must be a Yeti you control"
 	return ""
 
 func play_stratagem(acting_player_id: String, card: CardData,
@@ -972,6 +1251,7 @@ func play_stratagem(acting_player_id: String, card: CardData,
 	acting.graveyard.append(card)
 	_emit("play", {"owner": acting_player_id, "uid": card.uid, "card_id": card.id, "kind": "stratagem", "target": target_minion.instance_id if target_minion != null else "", "target_player": target_player_id})
 	_apply_stratagem(card, target_minion, target_player_id, acting_player_id)
+	resolve_to_quiescence()
 	return true
 
 func attack(attacker: Minion, target_minion: Minion = null,
@@ -986,6 +1266,9 @@ func attack(attacker: Minion, target_minion: Minion = null,
 	if target_minion != null and target_minion.has_ability(Abilities.AMBUSH):
 		return
 
+	_emit("attack", {"owner": attacker.owner_id, "attacker": attacker.instance_id, "attacker_name": attacker.data.card_name,
+		"target": target_minion.instance_id if target_minion != null else "", "target_name": target_minion.data.card_name if target_minion != null else "",
+		"target_player": target_player_id, "dual_strike": attacker.has_ability(Abilities.DUAL_STRIKE)})
 	attacker.has_attacked = true
 	attacker.transform_counter += 1
 	if attacker.has_ability(Abilities.AMBUSH):
@@ -1025,8 +1308,13 @@ func attack(attacker: Minion, target_minion: Minion = null,
 		_try_transform(attacker, _get_player_by_id(attacker.owner_id))
 
 	_check_win_condition()
+	resolve_to_quiescence()
 
 func apply_challenge(challenger: Minion, target: Minion) -> void:
+	_emit("challenge", {
+		"owner": challenger.owner_id, "challenger": challenger.instance_id, "challenger_name": challenger.data.card_name,
+		"target": target.instance_id, "target_name": target.data.card_name, "target_owner": target.owner_id,
+	})
 	var was_yeti = challenger.has_ability(Abilities.YETI)
 	var owner_id = challenger.owner_id
 	var challenger_shield := _get_shield_value(challenger)
@@ -1345,11 +1633,20 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 				target_minion.take_damage(card.effect_value)
 				_remove_dead_minions()
 				_check_win_condition()
+				# Second half: a friendly creature receives +2 health.
+				request_choice(acting_player_id, CHOICE_HEAL_BUFF_TARGET, 2, null, {"exclude": ""})
 		"sanguine":
 			if target_minion:
+				var donor_id := target_minion.instance_id
 				target_minion.take_damage(card.effect_value)
 				_remove_dead_minions()
 				_check_win_condition()
+				# Drain: ANOTHER friendly creature receives the health (never the donor).
+				request_choice(acting_player_id, CHOICE_HEAL_BUFF_TARGET, 2, null, {"exclude": donor_id})
+		"force_challenge":
+			# Icewhip: the chosen Yeti challenges; a win grants it +N/+N.
+			if target_minion != null and target_minion.has_ability(Abilities.YETI):
+				request_choice(acting_player_id, CHOICE_CHALLENGE, card.effect_value, target_minion)
 		"exsanguinate":
 			if target_minion:
 				target_minion.take_damage(target_minion.current_health * card.effect_value)

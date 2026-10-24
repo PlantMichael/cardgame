@@ -353,7 +353,7 @@ func get_color(ability: String) -> Color:
 	return DEFINITIONS[ability]["color"]
 
 func is_on_play_damage(ability: String) -> bool:
-	return ability.begins_with(ON_PLAY_DAMAGE + "_") and not ability.begins_with(ON_PLAY_AOE_ENEMY + "_") and not ability.begins_with(ON_REINFORCE_DAMAGE + "_")
+	return ability.begins_with(ON_PLAY_DAMAGE + "_") and not ability.begins_with(ON_PLAY_AOE_ENEMY + "_") and not ability.begins_with(ON_REINFORCE_DAMAGE + "_") and ability != ON_PLAY_DAMAGE_HIGH_ATTACK
 
 func get_on_play_damage_value(ability: String) -> int:
 	if is_on_play_damage(ability):
@@ -504,6 +504,7 @@ func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 					minion.current_attack += total_atk
 					gs.gain_max_health(minion, total_hp)
 				gs._check_win_condition()
+	_fire_on_play_decisions(minion, owner, gs)
 	for ability in minion.abilities:
 		if is_on_play_aoe_enemy(ability):
 			var damage = get_on_play_aoe_enemy_value(ability)
@@ -523,6 +524,39 @@ func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 			gs._remove_dead_minions()
 			gs._check_win_condition()
 			break
+
+## The on-play effects that need a player decision (or a loop over targets).
+## They used to run in four controllers; they live here so one implementation
+## serves local play, the AI, the search and the match host. Requests queue in
+## this order and are answered one at a time (see GameState.request_choice).
+func _fire_on_play_decisions(minion: Minion, owner: PlayerState, gs: GameState) -> void:
+	var pid := owner.player_id
+	if minion.has_ability(ON_PLAY_TRANSFORM_CHOICE) and not minion.data.transform_choices.is_empty():
+		gs.request_choice(pid, GameState.CHOICE_TRANSFORM, 0, minion)
+	for ability in minion.abilities:
+		if is_on_play_damage(ability):
+			gs.request_choice(pid, GameState.CHOICE_DAMAGE_TARGET, get_on_play_damage_value(ability), minion)
+			break
+	if minion.has_ability(CHALLENGE):
+		gs.request_choice(pid, GameState.CHOICE_CHALLENGE, 0, minion)
+	if minion.has_ability(ON_PLAY_YETI_CHALLENGE):
+		gs.request_choice(pid, GameState.CHOICE_PICK_CHALLENGER, 0, minion, {"exclude": minion.instance_id})
+	if minion.has_ability(CHALLENGE_ALL):
+		var enemy := gs.find_player(gs._opponent_id(pid))
+		for target in enemy.board.duplicate():
+			if minion.is_dead() or minion not in owner.board or gs.current_phase == GameState.Phase.GAME_OVER:
+				break
+			if target not in enemy.board or target.has_ability(AMBUSH):
+				continue
+			gs.apply_challenge(minion, target)
+	if minion.has_ability(ON_PLAY_PILOT_MECH):
+		gs.request_choice(pid, GameState.CHOICE_PILOT_TARGET, 0, minion)
+	if minion.has_ability(ON_PLAY_CHALLENGE_WIN_BUFF):
+		gs.request_choice(pid, GameState.CHOICE_CHALLENGE, 1, minion)
+	if minion.has_ability(ON_PLAY_SWAP_FRIENDLY_HEALTH):
+		gs.request_choice(pid, GameState.CHOICE_SWAP_HEALTH, 0, minion)
+	if minion.has_ability(ON_PLAY_DEVOUR_FRIENDLY):
+		gs.request_choice(pid, GameState.CHOICE_DEVOUR, 0, minion)
 
 func fire_on_attack(attacker: Minion, owner: PlayerState, gs: GameState) -> void:
 	for ability in attacker.abilities:

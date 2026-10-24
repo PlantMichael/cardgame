@@ -91,19 +91,9 @@ static func apply_action(gs: GameState, action: Dictionary) -> bool:
 	var result := gs.execute(action)
 	if not result["ok"]:
 		return false
-	match action["type"]:
-		"play_creature":
-			var m: Minion = result.get("minion")
-			if m != null:
-				_handle_on_play(m, gs)
-			_resolve_pending(gs)
-		"play_stratagem":
-			_apply_stratagem_secondary(result["card"], result.get("target"), gs, str(action["actor"]))
-			_resolve_pending(gs)
-		"attack":
-			_resolve_pending(gs)
-		"end_turn":
-			_resolve_pending(gs)
+	# Every decision an action opens is answered by policy, so the search sees
+	# exactly what the real game would produce (no private copy of the rules).
+	_resolve_pending(gs)
 	return true
 
 # --- Greedy policy (rollout completion / predicted opponent turn) ---
@@ -373,168 +363,6 @@ static func _pick_stratagem_target(card: CardData, gs: GameState, acting_id: Str
 				result["ready"] = true
 	return result
 
-static func _apply_stratagem_secondary(card: CardData, target: Minion, gs: GameState, acting_id: String) -> void:
-	var acting: PlayerState = gs._get_player_by_id(acting_id)
-	var enemy: PlayerState = gs._get_player_by_id(gs._opponent_id(acting_id))
-
-	if card.effect == "blood_transfusion" and not acting.board.is_empty():
-		gs.apply_heal_buff(AIHeuristics.pick_health_buff_target(acting.board.duplicate()), 2)
-
-	if card.effect == "sanguine" and target != null:
-		var others := gs.sanguine_recipients(acting_id, target)
-		if not others.is_empty():
-			gs.apply_heal_buff(AIHeuristics.pick_health_buff_target(others), 2)
-
-	if card.effect in ["force_challenge", "poke_bear"] and target != null:
-		var yeti: Minion = target
-		if yeti in acting.board and yeti.has_ability(Abilities.YETI) and not enemy.board.is_empty():
-			var non_ambush: Array[Minion] = []
-			for m in enemy.board:
-				if not m.has_ability(Abilities.AMBUSH):
-					non_ambush.append(m)
-			if not non_ambush.is_empty():
-				var tgt := AIHeuristics.pick_challenge_target(non_ambush, yeti)
-				if tgt != null:
-					gs.apply_challenge(yeti, tgt)
-					if card.effect == "force_challenge" and card.effect_value > 0 \
-							and tgt not in enemy.board and yeti in acting.board:
-						yeti.current_attack += card.effect_value
-						var pre := yeti.current_health
-						yeti.current_health += card.effect_value
-						yeti.max_health += card.effect_value
-						gs._try_heal_to_draw(yeti, yeti.current_health - pre)
-
-# --- On-play effect resolution (ported from SimRunner._sim_handle_on_play) ---
-
-static func _handle_on_play(m: Minion, gs: GameState) -> void:
-	if gs.current_phase == GameState.Phase.GAME_OVER:
-		return
-	var friendly: PlayerState = gs._get_player_by_id(m.owner_id)
-	var enemy: PlayerState = gs._get_player_by_id(gs._opponent_id(m.owner_id))
-
-	for ability in m.abilities:
-		if Abilities.is_on_play_damage(ability):
-			var dmg := Abilities.get_on_play_damage_value(ability)
-			if not enemy.board.is_empty():
-				var tgt := AIHeuristics.pick_best_removal_target(enemy.board.duplicate(), dmg)
-				if tgt != null:
-					gs.apply_on_play_damage(tgt, dmg, m.owner_id)
-				else:
-					enemy.hero_health -= dmg
-					gs._check_win_condition()
-			else:
-				enemy.hero_health -= dmg
-				gs._check_win_condition()
-			if gs.current_phase == GameState.Phase.GAME_OVER:
-				return
-			break
-
-	if m not in friendly.board:
-		return
-	if m.has_ability(Abilities.CHALLENGE) and not enemy.board.is_empty():
-		var tgt := AIHeuristics.pick_challenge_target(enemy.board.duplicate(), m)
-		if tgt != null:
-			gs.apply_challenge(m, tgt)
-		if gs.current_phase == GameState.Phase.GAME_OVER:
-			return
-
-	if m not in friendly.board:
-		return
-	if m.has_ability(Abilities.CHALLENGE_ALL):
-		var enemies_snap := enemy.board.duplicate()
-		for e in enemies_snap:
-			if m not in friendly.board or gs.current_phase == GameState.Phase.GAME_OVER:
-				break
-			if e not in enemy.board or e.has_ability(Abilities.AMBUSH):
-				continue
-			gs.apply_challenge(m, e)
-		if gs.current_phase == GameState.Phase.GAME_OVER:
-			return
-
-	if m not in friendly.board:
-		return
-	if m.has_ability(Abilities.ON_PLAY_CHALLENGE_WIN_BUFF) and not enemy.board.is_empty():
-		var tgt := AIHeuristics.pick_challenge_target(enemy.board.duplicate(), m)
-		if tgt != null:
-			gs.apply_challenge(m, tgt)
-			if m in friendly.board and tgt not in enemy.board:
-				m.current_attack += 1
-				var pre := m.current_health
-				m.current_health += 1
-				m.max_health += 1
-				gs._try_heal_to_draw(m, m.current_health - pre)
-		if gs.current_phase == GameState.Phase.GAME_OVER:
-			return
-
-	if m not in friendly.board:
-		return
-	if m.has_ability(Abilities.ON_PLAY_YETI_CHALLENGE) and not enemy.board.is_empty():
-		var yeti: Minion = null
-		for bm in friendly.board:
-			if bm != m and bm.has_ability(Abilities.YETI):
-				yeti = bm
-				break
-		if yeti != null:
-			var tgt := AIHeuristics.pick_challenge_target(enemy.board.duplicate(), yeti)
-			if tgt != null:
-				gs.apply_challenge(yeti, tgt)
-		if gs.current_phase == GameState.Phase.GAME_OVER:
-			return
-
-	if m not in friendly.board:
-		return
-	if m.has_ability(Abilities.ON_PLAY_TRANSFORM_CHOICE) and not m.data.transform_choices.is_empty():
-		var best_id := m.data.transform_choices[0]
-		var best_val := -1
-		for cid in m.data.transform_choices:
-			var cd := CardDatabase.get_card(cid)
-			if cd != null and cd.attack + cd.health > best_val:
-				best_val = cd.attack + cd.health
-				best_id = cid
-		gs.apply_transform_choice(m, best_id)
-
-	if m not in friendly.board:
-		return
-	if m.has_ability(Abilities.ON_PLAY_DEVOUR_FRIENDLY):
-		var cands: Array[Minion] = []
-		for bm in friendly.board:
-			if bm != m:
-				cands.append(bm)
-		if not cands.is_empty():
-			var weakest: Minion = cands[0]
-			for bm in cands:
-				if bm.current_attack + bm.current_health < weakest.current_attack + weakest.current_health:
-					weakest = bm
-			gs.apply_devour_friendly(m, weakest, friendly)
-
-	if m not in friendly.board:
-		return
-	if m.has_ability(Abilities.ON_PLAY_SWAP_FRIENDLY_HEALTH):
-		var cands: Array[Minion] = []
-		for bm in friendly.board:
-			if bm != m:
-				cands.append(bm)
-		if cands.size() >= 2:
-			var a: Minion = gs.rand_pick(cands)
-			var rest: Array[Minion] = []
-			for bm in cands:
-				if bm != a:
-					rest.append(bm)
-			if not rest.is_empty():
-				gs.apply_swap_friendly_health(a, gs.rand_pick(rest))
-
-	if m not in friendly.board:
-		return
-	for ability in m.abilities:
-		if Abilities.is_pilot(ability):
-			var mechs: Array[Minion] = []
-			for bm in friendly.board:
-				if bm != m and bm.has_ability(Abilities.MECH) and not bm.is_piloted:
-					mechs.append(bm)
-			if not mechs.is_empty():
-				gs.apply_pilot(m, AIHeuristics.pick_best_pilot_target(mechs, m), friendly, false)
-			break
-
 ## Picks an answer for whatever choice is open, using AI scoring over the
 ## legal options the rules core produced. This is POLICY, not rules: it may
 ## only choose among options, never widen or narrow them.
@@ -544,36 +372,13 @@ static func _handle_on_play(m: Minion, gs: GameState) -> void:
 static func answer_pending_choice(gs: GameState) -> void:
 	if not gs.has_pending_choice():
 		return
-	var choice := gs.pending_choice
-	var targets := gs.pending_choice_targets()
-	if targets.is_empty():
-		gs.answer_choice(str(choice["id"]), "")
-		return
-	var pick: Minion = targets[0]
-	match str(choice["effect"]):
-		GameState.CHOICE_RESTORE_HEALTH:
-			# The most wounded creature gains the most from it.
-			for m in targets:
-				if (m.max_health - m.current_health) > (pick.max_health - pick.current_health):
-					pick = m
-		GameState.CHOICE_BUFF_OTHER_FRIENDLY:
-			pick = AIHeuristics.pick_health_buff_target(targets)
-		GameState.CHOICE_DAMAGE_HIGH_ATTACK:
-			# Prefer something the 4 damage actually kills; else the biggest
-			# attacker.
-			var best_kill: Minion = null
-			for m in targets:
-				if m.current_health <= 4 and (best_kill == null or m.current_attack > best_kill.current_attack):
-					best_kill = m
-			if best_kill != null:
-				pick = best_kill
-			else:
-				for m in targets:
-					if m.current_attack > pick.current_attack:
-						pick = m
-	if pick == null:
-		pick = targets[0]
-	gs.answer_choice(str(choice["id"]), pick.instance_id)
+	var choice := gs.pending_choice.duplicate(true)
+	var selection := AIHeuristics.pick_choice_answer(gs, choice)
+	var result := gs.answer_choice(str(choice["id"]), selection)
+	if not result["ok"]:
+		# A policy answer the core refuses (a mandatory choice it wanted to
+		# decline, say) falls back to the choice's own deterministic default.
+		gs.answer_choice(str(choice["id"]), str(choice["default"]))
 
 # --- Pending-queue resolution (ported from SimRunner._resolve_pending) ---
 
@@ -587,111 +392,14 @@ static func answer_pending_choice(gs: GameState) -> void:
 static func _resolve_pending(gs: GameState) -> void:
 	gs.pending_drawn_cards.clear()
 	gs.pending_fatigue_damage.clear()
-	var changed := true
-	while changed:
-		changed = false
+	for _i in 256:  # safety cap: a pathological trigger loop must not hang a search
 		if gs.current_phase == GameState.Phase.GAME_OVER:
 			return
-		# An open choice blocks every ordinary command, so the search has to
-		# answer it before anything else can proceed.
-		while gs.has_pending_choice():
-			changed = true
-			answer_pending_choice(gs)
-			if gs.current_phase == GameState.Phase.GAME_OVER:
-				return
-
-		while not gs.pending_tank_shots.is_empty():
-			changed = true
-			var pid: String = gs.pending_tank_shots.pop_front()
-			var enemy: PlayerState = gs._get_player_by_id(gs._opponent_id(pid))
-			if not enemy.board.is_empty():
-				gs.apply_on_play_damage(gs.rand_pick(enemy.board), 1, pid)
-			else:
-				enemy.hero_health -= 1
-				gs._check_win_condition()
-			gs.pending_drawn_cards.clear()
-			if gs.current_phase == GameState.Phase.GAME_OVER:
-				return
-
-		while not gs.pending_rummages.is_empty():
-			changed = true
-			var entry: Dictionary = gs.pending_rummages.pop_front()
-			var pid: String = entry["player_id"]
-			var p_state: PlayerState = gs._get_player_by_id(pid)
-			var allow_equal: bool = p_state.board.any(
-				func(m: Minion) -> bool: return m.has_ability(Abilities.RUMMAGE_EQUAL_COST))
-			var options := gs.get_rummage_options(pid, entry.get("max_cost", -1), entry.get("type_filter", ""), allow_equal)
-			if not options.is_empty():
-				var chosen: CardData = gs.rand_pick(options)
-				var placed := gs.complete_rummage(pid, chosen, entry.get("play_it", false), entry.get("discount", true), entry.get("buff_creature", false))
-				if placed != null:
-					_handle_on_play(placed, gs)
-			gs.pending_drawn_cards.clear()
-			if gs.current_phase == GameState.Phase.GAME_OVER:
-				return
-
-		while not gs.pending_nulls.is_empty():
-			changed = true
-			var entry: Dictionary = gs.pending_nulls.pop_front()
-			var pid: String = entry["player_id"]
-			var enemy: PlayerState = gs._get_player_by_id(gs._opponent_id(pid))
-			if not enemy.board.is_empty():
-				gs.apply_null(gs.rand_pick(enemy.board))
-
-		while not gs.pending_buff_friendly_health.is_empty():
-			changed = true
-			var pid: String = gs.pending_buff_friendly_health.pop_front()
-			var p_state: PlayerState = gs._get_player_by_id(pid)
-			if not p_state.board.is_empty():
-				gs.apply_buff_friendly_health(AIHeuristics.pick_health_buff_target(p_state.board))
-
-		while not gs.pending_tank_specialist_buffs.is_empty():
-			changed = true
-			var pid: String = gs.pending_tank_specialist_buffs.pop_front()
-			var p_state: PlayerState = gs._get_player_by_id(pid)
-			var tanks: Array[Minion] = []
-			for m in p_state.board:
-				if m.data.tribe == "tank":
-					tanks.append(m)
-			if not tanks.is_empty():
-				gs.apply_tank_specialist_buff(gs.rand_pick(tanks))
-
-		while not gs.pending_on_reinforce_damages.is_empty():
-			changed = true
-			var entry: Dictionary = gs.pending_on_reinforce_damages.pop_front()
-			var pid: String = entry["player_id"]
-			var dmg: int = entry["damage"]
-			var enemy: PlayerState = gs._get_player_by_id(gs._opponent_id(pid))
-			if not enemy.board.is_empty():
-				gs.apply_on_play_damage(gs.rand_pick(enemy.board), dmg, pid)
-			else:
-				enemy.hero_health -= dmg
-				gs._check_win_condition()
-			gs.pending_drawn_cards.clear()
-			if gs.current_phase == GameState.Phase.GAME_OVER:
-				return
-
-		while not gs.pending_overwatch_challenges.is_empty():
-			changed = true
-			var pid: String = gs.pending_overwatch_challenges.pop_front()
-			var p_state: PlayerState = gs._get_player_by_id(pid)
-			var enemy: PlayerState = gs._get_player_by_id(gs._opponent_id(pid))
-			var yeti: Minion = null
-			for m in p_state.board:
-				if m.has_ability(Abilities.YETI):
-					yeti = m
-					break
-			if yeti != null and not enemy.board.is_empty():
-				var tgts: Array[Minion] = []
-				for m in enemy.board:
-					if not m.has_ability(Abilities.AMBUSH):
-						tgts.append(m)
-				if not tgts.is_empty():
-					var target := AIHeuristics.pick_challenge_target(tgts, yeti)
-					gs.apply_challenge(yeti, target)
-			gs.pending_drawn_cards.clear()
-			if gs.current_phase == GameState.Phase.GAME_OVER:
-				return
+		gs.resolve_to_quiescence()
+		if not gs.has_pending_choice():
+			return
+		answer_pending_choice(gs)
+		gs.pending_drawn_cards.clear()
 
 # --- Card-play priority helpers (ported from AIController) ---
 

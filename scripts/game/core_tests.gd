@@ -1480,6 +1480,319 @@ static func _test_state_hash(card_id: String) -> void:
 	_check("deck contents are covered", h_before != gs.state_hash())
 
 
+## Every effect family moved into the rules core (spec 003, Phase A): each is
+## played through GameState.execute / answer_choice ONLY - no controller.
+
+static func _card_with(pred: Callable) -> String:
+	for d: CardData in CardDatabase.get_all_cards():
+		if pred.call(d):
+			return d.id
+	return ""
+
+static func _has_ab(d: CardData, ability: String) -> bool:
+	return ability in d.abilities
+
+## A started match where `a` is active with full mana and an empty board; both
+## sides have `filler` creatures available.
+static func _arena(filler: String) -> GameState:
+	var gs := _fresh_match(filler)
+	gs.set_events_enabled(true)
+	gs.player.max_mana = 10
+	gs.player.current_mana = 0
+	return gs
+
+## Plays `card_id` from `a`'s hand through the command boundary.
+static func _play(gs: GameState, card_id: String) -> Dictionary:
+	var c := _hand_add(gs, gs.player.player_id, card_id)
+	return gs.execute({"type": "play_creature", "actor": gs.player.player_id, "card_uid": c.uid, "at_index": -1})
+
+static func _answer(gs: GameState, selection: String) -> Dictionary:
+	var ch := gs.pending_choice
+	return gs.execute({"type": "answer_choice", "actor": ch["player_id"], "choice_id": ch["id"], "selection": selection})
+
+static func _event_types(r: Dictionary) -> Array:
+	return r["events"].map(func(e): return e["type"])
+
+static func _test_family_on_play_damage(filler: String) -> void:
+	print("[family: on-play damage]")
+	var dmg_id := _card_with(func(d): return d.card_type == CardData.CardType.CREATURE and d.abilities.any(func(a): return Abilities.is_on_play_damage(a)))
+	_check("a card with on-play damage exists", dmg_id != "")
+	_check("Heavy Bounty Hunter's ability is NOT plain on-play damage",
+		not Abilities.is_on_play_damage(Abilities.ON_PLAY_DAMAGE_HIGH_ATTACK))
+	var gs := _arena(filler)
+	var foe := _put_on_board(gs, gs.opponent.player_id, filler)
+	foe.current_health = 20
+	foe.max_health = 20
+	var r := _play(gs, dmg_id)
+	_check("playing it opened a damage choice", r["ok"] and gs.has_pending_choice() and gs.pending_choice["effect"] == GameState.CHOICE_DAMAGE_TARGET)
+	var opts: Array = gs.pending_choice["options"]
+	_check("an enemy creature is a legal target", foe.instance_id in opts)
+	_check("the enemy hero is a legal target", GameState.hero_option(gs.opponent.player_id) in opts)
+	var amount := int(gs.pending_choice["amount"])
+	var r2 := _answer(gs, foe.instance_id)
+	_check("answering applied the damage", r2["ok"] and foe.current_health < 20)
+	_check("an effect event describes it", "effect" in _event_types(r2))
+	# Hero target.
+	var gs2 := _arena(filler)
+	_play(gs2, dmg_id)
+	var hp := gs2.opponent.hero_health
+	_answer(gs2, GameState.hero_option(gs2.opponent.player_id))
+	_eq("hero damage applied", gs2.opponent.hero_health, hp - amount)
+	# Decline, and a creature killed by it gets a killed flag.
+	var gs3 := _arena(filler)
+	var weak := _put_on_board(gs3, gs3.opponent.player_id, filler)
+	weak.current_health = 1
+	_play(gs3, dmg_id)
+	var r3 := _answer(gs3, weak.instance_id)
+	var killed: Array = r3["events"].filter(func(e): return e["type"] == "effect" and e.get("killed", false))
+	_check("a killing blow is flagged for the animation", killed.size() == 1)
+	_check("and the creature is gone", gs3.find_minion(weak.instance_id) == null)
+	var gs4 := _arena(filler)
+	_play(gs4, dmg_id)
+	_check("declining is accepted", _answer(gs4, "")["ok"] and not gs4.has_pending_choice())
+
+static func _test_family_challenge(filler: String) -> void:
+	print("[family: challenge, yeti challenge, rampage, win-buff, icewhip, overwatch]")
+	var ch_id := _card_with(func(d): return d.card_type == CardData.CardType.CREATURE and _has_ab(d, Abilities.CHALLENGE))
+	if ch_id != "":
+		var gs := _arena(filler)
+		var foe := _put_on_board(gs, gs.opponent.player_id, filler)
+		var hidden := _put_on_board(gs, gs.opponent.player_id, filler)
+		hidden.abilities.append(Abilities.AMBUSH)
+		_play(gs, ch_id)
+		_check("a challenge choice opened", gs.has_pending_choice() and gs.pending_choice["effect"] == GameState.CHOICE_CHALLENGE)
+		_check("an Ambush creature cannot be challenged", hidden.instance_id not in gs.pending_choice["options"])
+		var r := _answer(gs, foe.instance_id)
+		_check("the challenge was resolved", "challenge" in _event_types(r))
+		var gs2 := _arena(filler)
+		_play(gs2, ch_id)
+		_check("no enemies means no prompt", not gs2.has_pending_choice())
+
+	# Win-buff variant.
+	var wb_id := _card_with(func(d): return d.card_type == CardData.CardType.CREATURE and _has_ab(d, Abilities.ON_PLAY_CHALLENGE_WIN_BUFF))
+	if wb_id != "":
+		var gs3 := _arena(filler)
+		var weak := _put_on_board(gs3, gs3.opponent.player_id, filler)
+		weak.current_health = 1
+		weak.current_attack = 0
+		_play(gs3, wb_id)
+		var win_card := CardDatabase.get_card(wb_id)
+		_answer(gs3, weak.instance_id)
+		var buffed: Minion = gs3.player.board.back()
+		_check("a win gives the +1/+1", gs3.find_minion(weak.instance_id) == null and buffed.current_attack == win_card.attack + 1 and buffed.max_health == win_card.health + 1)
+
+	# Yeti challenge on play: two steps.
+	var yc_id := _card_with(func(d): return d.card_type == CardData.CardType.CREATURE and _has_ab(d, Abilities.ON_PLAY_YETI_CHALLENGE))
+	if yc_id != "":
+		var gs4 := _arena(filler)
+		var yeti := _put_on_board(gs4, gs4.player.player_id, "t_025")
+		var foe4 := _put_on_board(gs4, gs4.opponent.player_id, filler)
+		_play(gs4, yc_id)
+		_check("step 1 asks for a Yeti", gs4.has_pending_choice() and gs4.pending_choice["effect"] == GameState.CHOICE_PICK_CHALLENGER and int(gs4.pending_choice["steps"]) == 2)
+		_check("only the OTHER Yeti is offered", gs4.pending_choice["options"] == [yeti.instance_id])
+		_answer(gs4, yeti.instance_id)
+		_check("step 2 asks who to challenge", gs4.has_pending_choice() and gs4.pending_choice["effect"] == GameState.CHOICE_CHALLENGE and int(gs4.pending_choice["step"]) == 2)
+		var r4 := _answer(gs4, foe4.instance_id)
+		_check("the Yeti challenged", "challenge" in _event_types(r4))
+
+	# Rampage: automatic, no choice.
+	var ra_id := _card_with(func(d): return d.card_type == CardData.CardType.CREATURE and _has_ab(d, Abilities.CHALLENGE_ALL))
+	if ra_id != "":
+		var gs5 := _arena(filler)
+		_put_on_board(gs5, gs5.opponent.player_id, filler)
+		_put_on_board(gs5, gs5.opponent.player_id, filler)
+		var r5 := _play(gs5, ra_id)
+		var n: int = r5["events"].filter(func(e): return e["type"] == "challenge").size()
+		_check("Rampage challenged every enemy with no prompt", not gs5.has_pending_choice() and n >= 1)
+
+	# Icewhip: friendly Yeti target, then the enemy; a win buffs by effect_value.
+	var gs6 := _arena(filler)
+	var yeti6 := _put_on_board(gs6, gs6.player.player_id, "t_025")
+	var weak6 := _put_on_board(gs6, gs6.opponent.player_id, filler)
+	weak6.current_health = 1
+	weak6.current_attack = 0
+	var ice := _hand_add(gs6, gs6.player.player_id, "t_str_003")
+	var r6 := gs6.execute({"type": "play_stratagem", "actor": gs6.player.player_id, "card_uid": ice.uid, "target_instance_id": yeti6.instance_id})
+	_check("Icewhip on a Yeti opens a challenge", r6["ok"] and gs6.has_pending_choice() and gs6.pending_choice["effect"] == GameState.CHOICE_CHALLENGE)
+	var hp_before := yeti6.max_health
+	_answer(gs6, weak6.instance_id)
+	_check("a win grants +%d/+%d" % [ice.effect_value, ice.effect_value], yeti6.max_health == hp_before + ice.effect_value)
+	var gs7 := _arena(filler)
+	var plain := _put_on_board(gs7, gs7.player.player_id, filler)
+	var ice2 := _hand_add(gs7, gs7.player.player_id, "t_str_003")
+	_check("Icewhip on a non-Yeti is refused", not gs7.execute({"type": "play_stratagem", "actor": gs7.player.player_id, "card_uid": ice2.uid, "target_instance_id": plain.instance_id})["ok"])
+
+	# Overwatch queue entry becomes a two-step challenge for its owner.
+	var gs8 := _arena(filler)
+	var y8 := _put_on_board(gs8, gs8.player.player_id, "t_025")
+	var foe8 := _put_on_board(gs8, gs8.opponent.player_id, filler)
+	gs8.pending_overwatch_challenges.append(gs8.player.player_id)
+	gs8.resolve_to_quiescence()
+	_check("overwatch asks its owner to pick a Yeti", gs8.has_pending_choice() and gs8.pending_choice["effect"] == GameState.CHOICE_PICK_CHALLENGER)
+	_answer(gs8, y8.instance_id)
+	var r8 := _answer(gs8, foe8.instance_id)
+	_check("and the overwatch challenge resolves", "challenge" in _event_types(r8) and gs8.pending_overwatch_challenges.is_empty())
+
+static func _test_family_pilot_swap_devour_transform(filler: String) -> void:
+	print("[family: pilot, swap health, devour, transform]")
+	var pilot_id := _card_with(func(d): return d.card_type == CardData.CardType.CREATURE and _has_ab(d, Abilities.ON_PLAY_PILOT_MECH))
+	if pilot_id != "":
+		var gs := _arena(filler)
+		var mech := _put_on_board(gs, gs.player.player_id, filler)
+		mech.abilities.append(Abilities.MECH)
+		var atk := mech.current_attack
+		_play(gs, pilot_id)
+		_check("a pilot choice opened for the Mech", gs.has_pending_choice() and gs.pending_choice["effect"] == GameState.CHOICE_PILOT_TARGET and mech.instance_id in gs.pending_choice["options"])
+		_answer(gs, mech.instance_id)
+		_check("the Mech was piloted and the pilot stays on the board", mech.is_piloted and mech.current_attack > atk and gs.player.board.size() == 2)
+	# Manual pilot command.
+	var any_pilot := _card_with(func(d): return d.card_type == CardData.CardType.CREATURE and d.abilities.any(func(a): return Abilities.is_pilot(a)))
+	if any_pilot != "":
+		var gs2 := _arena(filler)
+		var mech2 := _put_on_board(gs2, gs2.player.player_id, filler)
+		mech2.abilities.append(Abilities.MECH)
+		var pil := _put_on_board(gs2, gs2.player.player_id, any_pilot)
+		var bad := gs2.execute({"type": "pilot", "actor": gs2.opponent.player_id, "pilot_instance_id": pil.instance_id, "target_instance_id": mech2.instance_id})
+		_check("only the owner can pilot", not bad["ok"])
+		var ok := gs2.execute({"type": "pilot", "actor": gs2.player.player_id, "pilot_instance_id": pil.instance_id, "target_instance_id": mech2.instance_id})
+		_check("the pilot command merged the pilot into the Mech", ok["ok"] and mech2.is_piloted and pil not in gs2.player.board)
+
+	var swap_id := _card_with(func(d): return d.card_type == CardData.CardType.CREATURE and _has_ab(d, Abilities.ON_PLAY_SWAP_FRIENDLY_HEALTH))
+	if swap_id != "":
+		var gs3 := _arena(filler)
+		var x := _put_on_board(gs3, gs3.player.player_id, filler)
+		var y := _put_on_board(gs3, gs3.player.player_id, filler)
+		x.max_health = 9
+		x.current_health = 9
+		y.max_health = 9
+		y.current_health = 2
+		_play(gs3, swap_id)
+		_check("swap step 1 offers only the other creatures", gs3.has_pending_choice() and gs3.pending_choice["options"].size() == 2)
+		_answer(gs3, x.instance_id)
+		_check("step 2 excludes the first pick", gs3.has_pending_choice() and x.instance_id not in gs3.pending_choice["options"] and y.instance_id in gs3.pending_choice["options"])
+		_answer(gs3, y.instance_id)
+		_check("the two health values were swapped", x.current_health == 2 and y.current_health == 9)
+		var gs3b := _arena(filler)
+		_put_on_board(gs3b, gs3b.player.player_id, filler)
+		_play(gs3b, swap_id)
+		_check("with fewer than two others there is no prompt", not gs3b.has_pending_choice())
+
+	var dv_id := _card_with(func(d): return d.card_type == CardData.CardType.CREATURE and _has_ab(d, Abilities.ON_PLAY_DEVOUR_FRIENDLY))
+	if dv_id != "":
+		var gs4 := _arena(filler)
+		var meal := _put_on_board(gs4, gs4.player.player_id, filler)
+		_play(gs4, dv_id)
+		_check("devour offers the other friendly creature", gs4.has_pending_choice() and gs4.pending_choice["options"] == [meal.instance_id])
+		_answer(gs4, meal.instance_id)
+		_check("it was devoured", meal not in gs4.player.board)
+
+	var tf_id := _card_with(func(d): return d.card_type == CardData.CardType.CREATURE and _has_ab(d, Abilities.ON_PLAY_TRANSFORM_CHOICE) and not d.transform_choices.is_empty())
+	if tf_id != "":
+		var gs5 := _arena(filler)
+		_play(gs5, tf_id)
+		_check("transform asks for a card id", gs5.has_pending_choice() and gs5.pending_choice["kind"] == GameState.CHOICE_KIND_PICK_CARD_ID)
+		_check("and cannot be declined", not _answer(gs5, "")["ok"])
+		var pick := str(gs5.pending_choice["options"][0])
+		_answer(gs5, pick)
+		_check("the creature transformed", gs5.player.board.back().data.id == pick)
+
+static func _test_family_queues(filler: String) -> void:
+	print("[family: queued effects -> choices]")
+	var gs := _arena(filler)
+	var a := gs.player.player_id
+	var b := gs.opponent.player_id
+	var mine := _put_on_board(gs, a, filler)
+	var foe := _put_on_board(gs, b, filler)
+	foe.current_health = 5
+	foe.max_health = 5
+
+	gs.pending_tank_shots.append(a)
+	gs.resolve_to_quiescence()
+	_check("a tank shot became a 1-damage choice", gs.has_pending_choice() and gs.pending_choice["effect"] == GameState.CHOICE_DAMAGE_TARGET and int(gs.pending_choice["amount"]) == 1)
+	_answer(gs, foe.instance_id)
+	_eq("it dealt 1", foe.current_health, 4)
+
+	gs.pending_on_reinforce_damages.append({"player_id": a, "damage": 2, "source": "Test"})
+	gs.resolve_to_quiescence()
+	_answer(gs, GameState.hero_option(b))
+	_check("a reinforce shot resolves as its damage amount", gs.opponent.hero_health == 28)
+
+	gs.pending_nulls.append({"player_id": a, "source": "Nuller"})
+	foe.abilities.append(Abilities.GUARDIAN)
+	gs.resolve_to_quiescence()
+	_check("null offers both boards", gs.has_pending_choice() and foe.instance_id in gs.pending_choice["options"] and mine.instance_id in gs.pending_choice["options"])
+	_answer(gs, foe.instance_id)
+	_check("the target was silenced", foe.is_nulled and not foe.has_ability(Abilities.GUARDIAN))
+
+	gs.pending_buff_friendly_health.append(a)
+	gs.resolve_to_quiescence()
+	var mh := mine.max_health
+	_answer(gs, mine.instance_id)
+	_eq("buff-friendly-health gave +1 max health", mine.max_health, mh + 1)
+
+	mine.data = CardDatabase.get_card("t_025")
+	var tank_card := _card_with(func(d): return d.card_type == CardData.CardType.CREATURE and d.tribe == "tank")
+	if tank_card != "":
+		var tank := _put_on_board(gs, a, tank_card)
+		gs.pending_tank_specialist_buffs.append(a)
+		gs.resolve_to_quiescence()
+		_check("tank specialist offers only Tanks", gs.has_pending_choice() and gs.pending_choice["options"] == [tank.instance_id])
+		var atk := tank.current_attack
+		_answer(gs, tank.instance_id)
+		_eq("the Tank got +1 attack", tank.current_attack, atk + 1)
+
+	# Rummage: a graveyard card is offered by id and moves to hand.
+	var gs2 := _arena(filler)
+	var gy := CardDatabase.get_card(filler).new_instance(gs2.player.mint_card_uid())
+	gs2.player.graveyard.append(gy)
+	gs2.pending_rummages.append({"player_id": gs2.player.player_id, "max_cost": 10, "type_filter": ""})
+	gs2.resolve_to_quiescence()
+	_check("rummage is a pick_card_id choice over graveyard ids", gs2.has_pending_choice() and gs2.pending_choice["kind"] == GameState.CHOICE_KIND_PICK_CARD_ID and filler in gs2.pending_choice["options"])
+	var hand_before := gs2.player.hand.size()
+	_answer(gs2, filler)
+	_check("the rummaged card came back to hand", gs2.player.hand.size() == hand_before + 1 and gs2.player.graveyard.is_empty())
+	var gs2b := _arena(filler)
+	gs2b.pending_rummages.append({"player_id": gs2b.player.player_id, "max_cost": 10, "type_filter": ""})
+	gs2b.resolve_to_quiescence()
+	_check("an empty graveyard asks nothing", not gs2b.has_pending_choice() and gs2b.pending_rummages.is_empty())
+
+	# Two entries for different players queue in order.
+	var gs3 := _arena(filler)
+	_put_on_board(gs3, gs3.player.player_id, filler)
+	_put_on_board(gs3, gs3.opponent.player_id, filler)
+	gs3.pending_buff_friendly_health.append(gs3.player.player_id)
+	gs3.pending_buff_friendly_health.append(gs3.opponent.player_id)
+	gs3.resolve_to_quiescence()
+	var first_owner := str(gs3.pending_choice["player_id"])
+	_answer(gs3, "")
+	_check("each queued entry is asked in order, to its own player", first_owner == gs3.player.player_id and gs3.has_pending_choice() and str(gs3.pending_choice["player_id"]) == gs3.opponent.player_id)
+
+static func _test_family_stratagem_followups(filler: String) -> void:
+	print("[family: blood transfusion / sanguine second prompts]")
+	var gs := _arena(filler)
+	var a := gs.player.player_id
+	var mine := _put_on_board(gs, a, filler)
+	var foe := _put_on_board(gs, gs.opponent.player_id, filler)
+	foe.current_health = 10
+	foe.max_health = 10
+	var bt := _hand_add(gs, a, "cr_str_001")
+	var r := gs.execute({"type": "play_stratagem", "actor": a, "card_uid": bt.uid, "target_instance_id": foe.instance_id})
+	_check("Blood Transfusion damages then asks for a recipient", r["ok"] and gs.has_pending_choice() and gs.pending_choice["effect"] == GameState.CHOICE_HEAL_BUFF_TARGET)
+	var mh := mine.max_health
+	_answer(gs, mine.instance_id)
+	_eq("the recipient gained +2 max health", mine.max_health, mh + 2)
+
+	var gs2 := _arena(filler)
+	var a2 := gs2.player.player_id
+	var donor := _put_on_board(gs2, a2, filler)
+	var other := _put_on_board(gs2, a2, filler)
+	donor.max_health = 8
+	donor.current_health = 8
+	var sg := _hand_add(gs2, a2, "cr_str_003")
+	gs2.execute({"type": "play_stratagem", "actor": a2, "card_uid": sg.uid, "target_instance_id": donor.instance_id})
+	_check("Drain never offers the donor as recipient", gs2.has_pending_choice() and donor.instance_id not in gs2.pending_choice["options"] and other.instance_id in gs2.pending_choice["options"])
+
+
 ## Handoff items 11/12, scenario 12: a payload sent to one player must not
 ## carry the other player's hidden information.
 static func _test_player_views(card_id: String) -> void:
@@ -1578,6 +1891,11 @@ static func run() -> int:
 	_test_choice_mechanics(card_id)
 	_test_event_feed(card_id)
 	_test_state_hash(card_id)
+	_test_family_on_play_damage(card_id)
+	_test_family_challenge(card_id)
+	_test_family_pilot_swap_devour_transform(card_id)
+	_test_family_queues(card_id)
+	_test_family_stratagem_followups(card_id)
 	_test_player_views(card_id)
 	print("CORE TESTS: %d checks, %d failed" % [_checks, _failures])
 	print("RESULT: %s" % ("PASS" if _failures == 0 else "FAIL"))

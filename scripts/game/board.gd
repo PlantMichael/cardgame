@@ -183,6 +183,8 @@ signal buff_friendly_target_selected(target: Minion)
 ## the older per-effect modes above, each of which re-implements its own
 ## filter and can drift from the rules.
 signal choice_target_selected(target: Minion)
+## The answer to a rules-core choice: a minion instance id, "hero:<player_id>", or "" to decline.
+signal choice_selected(option_id: String)
 signal on_play_pilot_target_selected(target: Minion)
 
 func _ready() -> void:
@@ -451,15 +453,73 @@ func start_choice_targeting(option_ids: Array, decline_text: String = "Skip") ->
 			var card = _get_card_child(wrapper)
 			if card and card.minion and card.minion.instance_id in _choice_option_ids:
 				card.set_targeted(true)
+	if GameState.hero_option(player_hero.player_id) in _choice_option_ids:
+		_highlight_hero(player_hero, true)
+	if GameState.hero_option(opponent_hero.player_id) in _choice_option_ids:
+		_highlight_hero(opponent_hero, true)
 	show_decline_button(decline_text)
 
-func _end_choice_mode(target: Minion) -> void:
+func _end_choice_mode(option_id: String) -> void:
 	_choice_mode = false
 	_choice_option_ids = []
 	_highlight_board_minions(player_board_zone, false)
 	_highlight_board_minions(opponent_board_zone, false)
+	_highlight_hero(player_hero, false)
+	_highlight_hero(opponent_hero, false)
 	hide_decline_button()
-	choice_target_selected.emit(target)
+	choice_selected.emit(option_id)
+
+## What the Decline button says for each kind of choice.
+const CHOICE_DECLINE_TEXT := {
+	"challenge": "Decline", "damage_target": "Decline", "pick_challenger": "Cancel",
+	"pilot_target": "Cancel", "swap_health": "Cancel", "devour": "Skip",
+	"rummage": "Skip", "null_target": "Cancel", "buff_health_target": "Skip",
+	"tank_buff_target": "Skip", "heal_buff_target": "Skip",
+}
+
+## One line telling the player what they are being asked, shown in the log.
+const CHOICE_PROMPT_TEXT := {
+	"damage_target": "Choose a target to damage",
+	"challenge": "Choose a creature to challenge",
+	"pick_challenger": "Choose a Yeti to challenge with",
+	"pilot_target": "Choose a Mech to pilot",
+	"devour": "Choose a friendly creature to devour",
+	"null_target": "Choose a creature to silence",
+	"buff_health_target": "Choose a creature to give +1 max health",
+	"tank_buff_target": "Choose a Tank to buff",
+	"heal_buff_target": "Choose a creature to give +2 health",
+}
+
+## Asks the local player to answer the rules core's open `choice` and returns
+## their selection ("" declines). Legality is the core's: only the listed
+## options can be clicked; the UI never decides what is allowed.
+func prompt_choice(choice: Dictionary) -> String:
+	var effect := str(choice["effect"])
+	var options: Array = choice["options"]
+	if str(choice["kind"]) == GameState.CHOICE_KIND_PICK_CARD_ID:
+		var cards: Array[CardData] = []
+		for cid in options:
+			var cd := CardDatabase.get_card(str(cid))
+			if cd != null:
+				cards.append(cd)
+		if cards.is_empty():
+			return str(choice["default"])
+		var picked: CardData
+		if effect == GameState.CHOICE_TRANSFORM:
+			picked = await show_transform_picker(cards)
+		else:
+			picked = await show_graveyard_picker(cards)
+		if picked == null:
+			return str(choice["default"])
+		return picked.id
+	var prompt := str(CHOICE_PROMPT_TEXT.get(effect, ""))
+	if effect == GameState.CHOICE_SWAP_HEALTH:
+		prompt = "Choose the first creature to swap health" if int(choice["step"]) <= 1 else "Choose the second creature to swap health"
+	if not prompt.is_empty():
+		log_action(prompt)
+	start_choice_targeting(options, str(CHOICE_DECLINE_TEXT.get(effect, "Skip")))
+	var selection: String = await choice_selected
+	return selection
 
 func start_buff_friendly_targeting(exclude: Minion = null, tribe_filter: String = "") -> void:
 	_buff_friendly_mode = true
@@ -542,7 +602,7 @@ func _on_decline_pressed() -> void:
 	elif _buff_friendly_mode:
 		_end_buff_friendly_mode(null)
 	elif _choice_mode:
-		_end_choice_mode(null)
+		_end_choice_mode("")
 	elif selected_attacker != null:
 		# A plain attacker selection (declaring who to attack with, not one
 		# of the special targeting modes above) shows this same Cancel
@@ -728,7 +788,7 @@ func _input(event: InputEvent) -> void:
 							return
 						if _choice_mode:
 							if card.minion.instance_id in _choice_option_ids:
-								_end_choice_mode(card.minion)
+								_end_choice_mode(card.minion.instance_id)
 							return
 						if _buff_friendly_mode:
 							var tribe_ok: bool = _buff_friendly_tribe_filter.is_empty() or card.minion.data.tribe == _buff_friendly_tribe_filter
@@ -758,7 +818,7 @@ func _input(event: InputEvent) -> void:
 							return
 						if _choice_mode:
 							if card.minion.instance_id in _choice_option_ids:
-								_end_choice_mode(card.minion)
+								_end_choice_mode(card.minion.instance_id)
 							return
 						if _null_mode:
 							_end_null_mode(card.minion)
@@ -768,6 +828,10 @@ func _input(event: InputEvent) -> void:
 
 			# Check player hero
 			if player_hero.get_global_rect().grow(4).has_point(event.position):
+				if _choice_mode:
+					if GameState.hero_option(player_hero.player_id) in _choice_option_ids:
+						_end_choice_mode(GameState.hero_option(player_hero.player_id))
+					return
 				if _tank_shot_mode:
 					_end_tank_shot_mode(null, game_state.player.player_id)
 					return
@@ -777,6 +841,10 @@ func _input(event: InputEvent) -> void:
 
 			# Check opponent hero
 			if opponent_hero.get_global_rect().grow(4).has_point(event.position):
+				if _choice_mode:
+					if GameState.hero_option(opponent_hero.player_id) in _choice_option_ids:
+						_end_choice_mode(GameState.hero_option(opponent_hero.player_id))
+					return
 				if _tank_shot_mode:
 					_end_tank_shot_mode(null, game_state.opponent.player_id)
 					return

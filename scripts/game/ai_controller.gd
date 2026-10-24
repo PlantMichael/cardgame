@@ -7,6 +7,10 @@ const THINK_DELAY = 0.6
 ## MCTSEngine.AI_LEVEL_CONFIG for what each level actually changes.
 var ai_level: int = 5
 
+## Set by GameManager: answers every open rules-core choice (the human's by
+## asking them, the AI's by policy). The AI never answers a choice itself.
+var drive_choices: Callable
+
 ## Repeatedly asks MCTSEngine for the single best next atomic action against
 ## the real game_state, applies it (with the same logging/animation glue the
 ## old one-ply AI used), and stops when the search recommends ending the turn.
@@ -35,10 +39,12 @@ func take_turn(game_state: GameState, board: Board) -> void:
 		if not is_instance_valid(board):
 			return
 		# A targeted on-play effect opens a choice that blocks every further
-		# command until it is answered. Same policy the search uses.
-		while game_state.has_pending_choice():
-			HeadlessTurn.answer_pending_choice(game_state)
-			board.refresh()
+		# command until it is answered - by whoever owns it.
+		if drive_choices.is_valid():
+			await drive_choices.call()
+			if not is_instance_valid(board):
+				return
+		board.refresh()
 		if game_state.current_phase == GameState.Phase.GAME_OVER:
 			return
 		engine.advance_after_real_action(game_state)
@@ -91,7 +97,6 @@ func _play_creature_action(action: Dictionary, card: CardData, game_state: GameS
 	var played := game_state.execute(action)
 	if not played["ok"]:
 		return
-	var new_minion: Minion = played.get("minion")
 	board.log_action("Opponent played %s" % card.card_name)
 	board.refresh()
 	# See game_manager.gd's identical wait on this same call chain (there,
@@ -101,8 +106,9 @@ func _play_creature_action(action: Dictionary, card: CardData, game_state: GameS
 	await board.await_slam_landed(board.opponent_board_zone)
 	if not is_instance_valid(board):
 		return
-	if new_minion:
-		await _handle_on_play_effects(new_minion, game_state, board)
+	await EventPresenter.present(played["events"], board, game_state.player.player_id)
+	# Any decision its on-play effects opened is answered by the shared driver
+	# (take_turn calls it after every action).
 
 func _play_stratagem_action(action: Dictionary, card: CardData, minion: Minion, target_player_id: String, game_state: GameState, board: Board) -> void:
 	await get_tree().create_timer(THINK_DELAY).timeout
@@ -111,7 +117,8 @@ func _play_stratagem_action(action: Dictionary, card: CardData, minion: Minion, 
 	await board.announce_card(card)
 	if not is_instance_valid(board):
 		return
-	if not game_state.execute(action)["ok"]:
+	var result := game_state.execute(action)
+	if not result["ok"]:
 		return
 	board.log_action("Opponent played %s" % card.card_name)
 	if minion != null:
@@ -125,197 +132,7 @@ func _play_stratagem_action(action: Dictionary, card: CardData, minion: Minion, 
 					return
 	board.refresh()
 
-	if card.effect in ["force_challenge", "poke_bear"] and minion != null:
-		var yeti: Minion = minion
-		if yeti in game_state.opponent.board and yeti.has_ability(Abilities.YETI) and not game_state.player.board.is_empty():
-			var challenge_target = AIHeuristics.pick_challenge_target(game_state.player.board.duplicate(), yeti)
-			if challenge_target != null:
-				await get_tree().create_timer(THINK_DELAY).timeout
-				if not is_instance_valid(board):
-					return
-				board.log_action("Opponent's %s challenged your %s" % [yeti.data.card_name, challenge_target.data.card_name])
-				game_state.apply_challenge(yeti, challenge_target)
-				await board.animate_creature_challenge(yeti.instance_id, game_state.opponent.player_id, challenge_target.instance_id)
-				if not is_instance_valid(board):
-					return
-				board.refresh()
-				if card.effect == "force_challenge" and card.effect_value > 0 and challenge_target.is_dead() and yeti in game_state.opponent.board:
-					var win_buff: int = card.effect_value
-					yeti.current_attack += win_buff
-					var pre := yeti.current_health
-					yeti.current_health += win_buff
-					yeti.max_health += win_buff
-					game_state._try_heal_to_draw(yeti, yeti.current_health - pre)
-					board.log_action("Opponent's %s won and gained +%d/+%d!" % [yeti.data.card_name, win_buff, win_buff])
-					board.refresh()
-
-	if card.effect == "blood_transfusion" and not game_state.opponent.board.is_empty():
-		var recipient = AIHeuristics.pick_health_buff_target(game_state.opponent.board.duplicate())
-		board.log_action("Opponent's Blood Transfusion gave %s +2 health" % recipient.data.card_name)
-		game_state.apply_heal_buff(recipient, 2)
-		board.refresh()
-
-	if card.effect == "sanguine" and not game_state.opponent.board.is_empty():
-		var candidates: Array[Minion] = []
-		for m in game_state.opponent.board:
-			if m != minion:
-				candidates.append(m)
-		if not candidates.is_empty():
-			var recipient = AIHeuristics.pick_health_buff_target(candidates)
-			board.log_action("Opponent's Sanguine gave %s +2 health" % recipient.data.card_name)
-			game_state.apply_heal_buff(recipient, 2)
-			board.refresh()
-
-func _handle_on_play_effects(new_minion: Minion, game_state: GameState, board: Board) -> void:
-	for ability in new_minion.abilities:
-		if Abilities.is_on_play_damage(ability):
-			var damage = Abilities.get_on_play_damage_value(ability)
-			var target = AIHeuristics.pick_best_removal_target(game_state.player.board, damage)
-			if target != null:
-				board.log_action("Opponent's %s dealt %d damage to your %s" % [new_minion.data.card_name, damage, target.data.card_name])
-				game_state.apply_on_play_damage(target, damage, new_minion.owner_id)
-				var _ai_died: bool = target not in game_state.player.board and target not in game_state.opponent.board
-				if _ai_died:
-					var _ai_src: Card = board.find_card_node(new_minion.instance_id)
-					var _ai_tgt: Card = board.find_card_node(target.instance_id)
-					if _ai_src != null and _ai_tgt != null:
-						await board.animate_laser_kill(_ai_src.get_parent().get_global_rect().get_center(), _ai_tgt)
-						if not is_instance_valid(board):
-							return
-			else:
-				board.log_action("Opponent's %s dealt %d damage to your hero" % [new_minion.data.card_name, damage])
-				game_state.player.hero_health -= damage
-				game_state._check_win_condition()
-			board.refresh()
-			break
-
-	if new_minion.has_ability(Abilities.CHALLENGE) and not game_state.player.board.is_empty():
-		var target = AIHeuristics.pick_challenge_target(game_state.player.board, new_minion)
-		if target != null:
-			board.log_action("Opponent's %s challenged your %s" % [new_minion.data.card_name, target.data.card_name])
-			game_state.apply_challenge(new_minion, target)
-			await board.animate_creature_challenge(new_minion.instance_id, game_state.opponent.player_id, target.instance_id)
-			if not is_instance_valid(board):
-				return
-			board.refresh()
-	if new_minion.has_ability(Abilities.CHALLENGE_ALL) and not game_state.player.board.is_empty():
-		var enemies := game_state.player.board.duplicate()
-		for enemy in enemies:
-			if new_minion.is_dead() or new_minion not in game_state.opponent.board:
-				break
-			if enemy not in game_state.player.board or enemy.has_ability(Abilities.AMBUSH):
-				continue
-			board.log_action("Opponent's %s challenged your %s" % [new_minion.data.card_name, enemy.data.card_name])
-			game_state.apply_challenge(new_minion, enemy)
-			await board.animate_creature_challenge(new_minion.instance_id, game_state.opponent.player_id, enemy.instance_id)
-			if not is_instance_valid(board):
-				return
-			board.refresh()
-			if game_state.current_phase == GameState.Phase.GAME_OVER:
-				return
-
-	if new_minion.has_ability(Abilities.ON_PLAY_CHALLENGE_WIN_BUFF) and not game_state.player.board.is_empty():
-		var target = AIHeuristics.pick_challenge_target(game_state.player.board, new_minion)
-		if target != null:
-			board.log_action("Opponent's %s challenged your %s" % [new_minion.data.card_name, target.data.card_name])
-			game_state.apply_challenge(new_minion, target)
-			await board.animate_creature_challenge(new_minion.instance_id, game_state.opponent.player_id, target.instance_id)
-			if not is_instance_valid(board):
-				return
-			board.refresh()
-		if target != null and new_minion in game_state.opponent.board and target not in game_state.player.board:
-			new_minion.current_attack += 1
-			var pre := new_minion.current_health
-			new_minion.current_health += 1
-			new_minion.max_health += 1
-			game_state._try_heal_to_draw(new_minion, new_minion.current_health - pre)
-			board.log_action("Opponent's %s won and gained +1/+1!" % new_minion.data.card_name)
-			board.refresh()
-
-	if new_minion.has_ability(Abilities.ON_PLAY_YETI_CHALLENGE) and not game_state.player.board.is_empty():
-		var friendly_yeti: Minion = null
-		for m in game_state.opponent.board:
-			if m != new_minion and m.has_ability(Abilities.YETI):
-				friendly_yeti = m
-				break
-		if friendly_yeti != null:
-			var target = AIHeuristics.pick_challenge_target(game_state.player.board, friendly_yeti)
-			if target != null:
-				board.log_action("Opponent's %s challenged your %s" % [friendly_yeti.data.card_name, target.data.card_name])
-				game_state.apply_challenge(friendly_yeti, target)
-				await board.animate_creature_challenge(friendly_yeti.instance_id, game_state.opponent.player_id, target.instance_id)
-				if not is_instance_valid(board):
-					return
-				board.refresh()
-
-	if new_minion.has_ability(Abilities.ON_PLAY_TRANSFORM_CHOICE) and not new_minion.data.transform_choices.is_empty():
-		var best_id: String = new_minion.data.transform_choices[0]
-		var best_score := -1
-		for cid in new_minion.data.transform_choices:
-			var cd: CardData = CardDatabase.get_card(cid)
-			if cd != null:
-				var score = cd.attack + cd.health
-				if score > best_score:
-					best_score = score
-					best_id = cid
-		await get_tree().create_timer(THINK_DELAY).timeout
-		if not is_instance_valid(board):
-			return
-		board.log_action("Opponent's %s transformed" % new_minion.data.card_name)
-		game_state.apply_transform_choice(new_minion, best_id)
-		board.refresh()
-
-	for ability in new_minion.abilities:
-		if Abilities.is_pilot(ability):
-			var mechs: Array[Minion] = []
-			for m in game_state.opponent.board:
-				if m != new_minion and m.has_ability(Abilities.MECH) and not m.is_piloted:
-					mechs.append(m)
-			if not mechs.is_empty():
-				var mech_target = AIHeuristics.pick_best_pilot_target(mechs, new_minion)
-				await get_tree().create_timer(THINK_DELAY).timeout
-				if not is_instance_valid(board):
-					return
-				board.log_action("Opponent's %s piloted %s" % [new_minion.data.card_name, mech_target.data.card_name])
-				game_state.apply_pilot(new_minion, mech_target, game_state.opponent, false)
-				board.refresh()
-			break
-
-	if new_minion.has_ability(Abilities.ON_PLAY_DEVOUR_FRIENDLY):
-		var candidates: Array[Minion] = []
-		for m in game_state.opponent.board:
-			if m != new_minion:
-				candidates.append(m)
-		if not candidates.is_empty():
-			# sacrifice least-valuable minion (lowest attack+health)
-			var target: Minion = candidates[0]
-			for m in candidates:
-				if m.current_attack + m.current_health < target.current_attack + target.current_health:
-					target = m
-			await get_tree().create_timer(THINK_DELAY).timeout
-			if not is_instance_valid(board):
-				return
-			board.log_action("Opponent's %s devoured %s" % [new_minion.data.card_name, target.data.card_name])
-			game_state.apply_devour_friendly(new_minion, target, game_state.opponent)
-			board.refresh()
-
-	if new_minion.has_ability(Abilities.ON_PLAY_SWAP_FRIENDLY_HEALTH):
-		var candidates: Array[Minion] = []
-		for m in game_state.opponent.board:
-			if m != new_minion:
-				candidates.append(m)
-		if candidates.size() >= 2:
-			# give health to most valuable (highest attack) damaged minion from least valuable
-			candidates.sort_custom(func(a, b): return a.current_attack > b.current_attack)
-			var recipient: Minion = candidates[0]
-			var donor: Minion = candidates[candidates.size() - 1]
-			if donor.current_health > recipient.current_health:
-				await get_tree().create_timer(THINK_DELAY).timeout
-				if not is_instance_valid(board):
-					return
-				board.log_action("Opponent swapped health of %s and %s" % [recipient.data.card_name, donor.data.card_name])
-				game_state.apply_swap_friendly_health(recipient, donor)
-				board.refresh()
+	await EventPresenter.present(result["events"], board, game_state.player.player_id)
 
 # --- Attack execution ---
 
@@ -326,7 +143,8 @@ func _attack_action(action: Dictionary, attacker: Minion, target: Minion, target
 	var attacker_name: String = attacker.data.card_name
 	var target_iid: String = target.instance_id if target != null else ""
 	var target_name: String = target.data.card_name if target != null else ""
-	if not game_state.execute(action)["ok"]:
+	var attack_result := game_state.execute(action)
+	if not attack_result["ok"]:
 		return
 	if target != null:
 		board.log_action("Opponent's %s attacked your %s" % [attacker_name, target_name])
@@ -339,6 +157,7 @@ func _attack_action(action: Dictionary, attacker: Minion, target: Minion, target
 		if not is_instance_valid(board):
 			return
 	board.refresh()
+	await EventPresenter.present(attack_result["events"], board, game_state.player.player_id)
 
 # --- Backward-compatible delegates (called directly by game_manager.gd for
 # non-AI-turn opponent decisions, e.g. reactive pending-queue resolution) ---

@@ -21,6 +21,9 @@ const OPPONENT_PLAYER_ID = "player_2"
 func _ready() -> void:
 	ai_controller = AIController.new()
 	add_child(ai_controller)
+	# The AI answers (and the human is asked) through the same driver, so a
+	# decision opened by one player's action is always answered by its owner.
+	ai_controller.drive_choices = _drive_choices
 
 ## node_modifier_ability/grant_catchup_mana are Campaign-mode-only (see
 ## campaign_state.gd / main.gd's _start_campaign_match): a battlefield-wide
@@ -44,6 +47,7 @@ func start_local_game(board_node: Board, player_deck: Array[CardData], opponent_
 	_ranked_match_id = "ai_%d_%d" % [Time.get_unix_time_from_system(), randi()]
 	game_state = GameState.new(LOCAL_PLAYER_ID, OPPONENT_PLAYER_ID, player_deck, opponent_deck)
 	game_state.node_modifier_ability = node_modifier_ability
+	game_state.set_events_enabled(true)
 	board.action_play_card.connect(_on_play_card)
 	board.action_play_stratagem.connect(_on_play_stratagem)
 	board.action_attack.connect(_on_attack)
@@ -100,483 +104,69 @@ func _on_play_card(card_data: CardData, at_index: int) -> void:
 		await get_tree().process_frame
 		board.refresh()
 		# Waits out the just-played card's own slam-landing animation (see
-		# board.gd's await_slam_landed()) before any on-play prompt below (a
-		# rummage picker, tank shot target, ...) can open - otherwise the
-		# two race, and a card with a heavier/longer landing (e.g. a
-		# legendary - see legendary_animations.gd) could have its own
-		# prompt pop up mid-animation.
+		# board.gd's await_slam_landed()) before any on-play prompt below can
+		# open - otherwise the two race, and a card with a heavier/longer
+		# landing (e.g. a legendary - see legendary_animations.gd) could have
+		# its own prompt pop up mid-animation.
 		await board.await_slam_landed(board.player_board_zone)
+		await _present(played["events"])
 		await _resolve_all_pending()
-		await _run_player_on_play(minion)
-		await _announce_pending_draws()
 		board.refresh()
-
-func _run_player_on_play(minion: Minion) -> void:
-	if minion.has_ability(Abilities.ON_PLAY_TRANSFORM_CHOICE) and not minion.data.transform_choices.is_empty():
-		var options: Array[CardData] = []
-		for cid in minion.data.transform_choices:
-			var cd = CardDatabase.get_card(cid)
-			if cd != null:
-				options.append(cd)
-		if not options.is_empty():
-			var chosen: CardData = await board.show_transform_picker(options)
-			if chosen != null:
-				board.log_action("Your %s transformed into %s" % [minion.data.card_name, chosen.card_name])
-				game_state.apply_transform_choice(minion, chosen.id)
-				board.refresh()
-	for ability in minion.abilities:
-		if Abilities.is_on_play_damage(ability):
-			var damage = Abilities.get_on_play_damage_value(ability)
-			board.start_on_play_damage_targeting()
-			var result = await board.on_play_damage_target_selected
-			var dmg_target: Minion = result[0]
-			var dmg_player_id: String = result[1]
-			if dmg_target != null:
-				board.log_action("Your %s dealt %d damage to %s" % [minion.data.card_name, damage, dmg_target.data.card_name])
-				game_state.apply_on_play_damage(dmg_target, damage, minion.owner_id)
-				var _opd_died: bool = dmg_target not in game_state.player.board and dmg_target not in game_state.opponent.board
-				if _opd_died:
-					var _opd_src: Card = board.find_card_node(minion.instance_id)
-					var _opd_tgt: Card = board.find_card_node(dmg_target.instance_id)
-					if _opd_src != null and _opd_tgt != null:
-						await board.animate_laser_kill(_opd_src.get_parent().get_global_rect().get_center(), _opd_tgt)
-				board.refresh()
-			elif dmg_player_id != "":
-				var target_name := "your hero" if dmg_player_id == LOCAL_PLAYER_ID else "opponent's hero"
-				board.log_action("Your %s dealt %d damage to the %s" % [minion.data.card_name, damage, target_name])
-				game_state._get_player_by_id(dmg_player_id).hero_health -= damage
-				game_state._check_win_condition()
-				board.refresh()
-			if game_state.current_phase == GameState.Phase.GAME_OVER:
-				_handle_game_over()
-				return
-			break
-	if minion.has_ability(Abilities.CHALLENGE) and not game_state.opponent.board.is_empty():
-		board.start_challenge_targeting(minion)
-		var target: Minion = await board.challenge_target_selected
-		if target != null:
-			board.log_action("Your %s challenged opponent's %s" % [minion.data.card_name, target.data.card_name])
-			game_state.apply_challenge(minion, target)
-			await board.animate_creature_challenge(minion.instance_id, LOCAL_PLAYER_ID, target.instance_id)
-			board.refresh()
-			await _announce_pending_draws()
-			await _resolve_all_pending()
-			if game_state.current_phase == GameState.Phase.GAME_OVER:
-				_handle_game_over()
-	if minion.has_ability(Abilities.ON_PLAY_YETI_CHALLENGE) and not game_state.opponent.board.is_empty():
-		var friendly_yeti: Minion = null
-		for m in game_state.player.board:
-			if m != minion and m.has_ability(Abilities.YETI):
-				friendly_yeti = m
-				break
-		if friendly_yeti != null:
-			board.start_yeti_selection()
-			var chosen: Minion = await board.yeti_selected
-			if chosen != null:
-				board.start_challenge_targeting(chosen)
-				var target: Minion = await board.challenge_target_selected
-				if target != null:
-					board.log_action("Your %s challenged opponent's %s" % [chosen.data.card_name, target.data.card_name])
-					game_state.apply_challenge(chosen, target)
-					await board.animate_creature_challenge(chosen.instance_id, LOCAL_PLAYER_ID, target.instance_id)
-					board.refresh()
-					await _resolve_all_pending()
-					if game_state.current_phase == GameState.Phase.GAME_OVER:
-						_handle_game_over()
-	if minion.has_ability(Abilities.CHALLENGE_ALL) and not game_state.opponent.board.is_empty():
-		var enemies := game_state.opponent.board.duplicate()
-		for enemy in enemies:
-			if minion.is_dead() or minion not in game_state.player.board:
-				break
-			if enemy not in game_state.opponent.board:
-				continue
-			board.log_action("Your %s challenged opponent's %s" % [minion.data.card_name, enemy.data.card_name])
-			game_state.apply_challenge(minion, enemy)
-			await board.animate_creature_challenge(minion.instance_id, LOCAL_PLAYER_ID, enemy.instance_id)
-			board.refresh()
-			await _announce_pending_draws()
-			await _resolve_all_pending()
-			if game_state.current_phase == GameState.Phase.GAME_OVER:
-				_handle_game_over()
-				return
-	if minion.has_ability(Abilities.ON_PLAY_PILOT_MECH):
-		var has_target = game_state.player.board.any(func(m): return m != minion and m.has_ability(Abilities.MECH) and not m.is_piloted)
-		if has_target:
-			board.start_on_play_pilot_targeting(minion)
-			var target: Minion = await board.on_play_pilot_target_selected
-			if target != null:
-				board.log_action("Your %s piloted %s" % [minion.data.card_name, target.data.card_name])
-				game_state.apply_pilot(minion, target, game_state.player, false)
-				board.refresh()
-	if minion.has_ability(Abilities.ON_PLAY_CHALLENGE_WIN_BUFF) and not game_state.opponent.board.is_empty():
-		board.start_challenge_targeting(minion)
-		var target: Minion = await board.challenge_target_selected
-		if target != null:
-			board.log_action("Your %s challenged opponent's %s" % [minion.data.card_name, target.data.card_name])
-			game_state.apply_challenge(minion, target)
-			await board.animate_creature_challenge(minion.instance_id, LOCAL_PLAYER_ID, target.instance_id)
-			board.refresh()
-			if minion in game_state.player.board and target not in game_state.opponent.board:
-				minion.current_attack += 1
-				var pre := minion.current_health
-				minion.current_health += 1
-				minion.max_health += 1
-				game_state._try_heal_to_draw(minion, minion.current_health - pre)
-				game_state._try_apothecary_bonus(LOCAL_PLAYER_ID, minion)
-				board.log_action("Your %s won and gained +1/+1!" % minion.data.card_name)
-				board.refresh()
-			await _announce_pending_draws()
-			await _resolve_all_pending()
-			if game_state.current_phase == GameState.Phase.GAME_OVER:
-				_handle_game_over()
-	if minion.has_ability(Abilities.ON_PLAY_SWAP_FRIENDLY_HEALTH):
-		var others := game_state.player.board.filter(func(m): return m != minion)
-		if others.size() >= 2:
-			board.log_action("Choose first minion to swap health")
-			board.start_buff_friendly_targeting(minion)
-			var first: Minion = await board.buff_friendly_target_selected
-			if first != null:
-				board.log_action("Choose second minion to swap health")
-				board.start_buff_friendly_targeting(first)
-				var second: Minion = await board.buff_friendly_target_selected
-				if second != null:
-					board.log_action("Swapped health of %s and %s" % [first.data.card_name, second.data.card_name])
-					game_state.apply_swap_friendly_health(first, second)
-					board.refresh()
-	if minion.has_ability(Abilities.ON_PLAY_DEVOUR_FRIENDLY) and minion in game_state.player.board:
-		var others := game_state.player.board.filter(func(m): return m != minion)
-		if not others.is_empty():
-			board.log_action("Choose a friendly minion to devour")
-			board.start_buff_friendly_targeting(minion)
-			var target: Minion = await board.buff_friendly_target_selected
-			if target != null:
-				board.log_action("Your %s devoured %s and gained +%d health" % [
-					minion.data.card_name, target.data.card_name,
-					target.current_health])
-				game_state.apply_devour_friendly(minion, target, game_state.player)
-				board.refresh()
-
-## Works off every queued effect in the order the rules core defines
-## (GameState.PENDING_QUEUES), repeating until nothing is pending.
-##
-## Replaces the fixed seven-call sequence that used to be pasted at each of
-## the twelve points an action can finish. Pasting it meant the order lived in
-## twelve places here plus its own copies in the multiplayer host and the
-## headless search, and those copies had already drifted apart. It also only
-## ever made ONE pass, so an effect queued by a later entry into an
-## already-drained queue sat there until some unrelated later action happened
-## to drain it.
-## Presents whatever choice the rules core has opened and feeds the answer
-## back through GameState.answer_choice(). The UI highlights exactly the
-## options the core listed - it never decides legality itself.
-##
-## The AI answers the same choices through HeadlessTurn.answer_pending_choice,
-## and multiplayer relays them; all three go through answer_choice(), so the
-## effect resolves in one place.
-func _resolve_pending_choices() -> void:
-	while game_state.has_pending_choice():
-		var choice: Dictionary = game_state.pending_choice.duplicate(true)
-		if str(choice["player_id"]) != LOCAL_PLAYER_ID:
-			# Not ours to answer; the AI's own path handles it.
-			return
-		board.start_choice_targeting(choice["options"])
-		var target: Minion = await board.choice_target_selected
-		if not is_instance_valid(board):
-			return
-		var answer: String = target.instance_id if target != null else ""
-		var result := game_state.answer_choice(str(choice["id"]), answer)
-		if not result["ok"]:
-			# A rejected answer leaves the choice open; stop rather than spin.
-			board.log_action("Choice not accepted: %s" % result.get("error", ""))
-			return
-		board.refresh()
-
-func _resolve_all_pending() -> void:
-	await _resolve_pending_choices()
-	if not is_instance_valid(board):
-		return
-	await _announce_pending_draws()
-	for _pass in 16:  # safety cap against a pathological trigger loop
-		if not game_state.has_pending():
-			return
-		for queue_name in GameState.PENDING_QUEUES:
-			if game_state.current_phase == GameState.Phase.GAME_OVER:
-				return
-			var queue: Array = game_state.get(queue_name)
-			if queue.is_empty():
-				continue
-			match queue_name:
-				"pending_tank_shots": await _process_pending_tank_shots()
-				"pending_rummages": await _process_pending_rummages()
-				"pending_nulls": await _process_pending_nulls()
-				"pending_buff_friendly_health": await _process_pending_buff_friendly_health()
-				"pending_tank_specialist_buffs": await _process_pending_tank_specialist_buffs()
-				"pending_on_reinforce_damages": await _process_pending_on_reinforce_damages()
-				"pending_overwatch_challenges": await _process_pending_overwatch_challenges()
-			if not is_instance_valid(board):
-				return
-
-func _process_pending_tank_shots() -> void:
-	while not game_state.pending_tank_shots.is_empty():
-		var owner_id: String = game_state.pending_tank_shots.pop_front()
-		var source := "Your Tank" if owner_id == LOCAL_PLAYER_ID else "Opponent's Tank"
-		if owner_id == LOCAL_PLAYER_ID:
-			board.start_tank_shot_targeting()
-			var result = await board.tank_shot_resolved
-			var target_minion: Minion = result[0]
-			var target_player_id: String = result[1]
-			if target_minion != null:
-				board.log_action("%s dealt 1 damage to %s" % [source, target_minion.data.card_name])
-				game_state.apply_on_play_damage(target_minion, 1)
-				var _ts_died: bool = target_minion not in game_state.player.board and target_minion not in game_state.opponent.board
-				if _ts_died:
-					var _ts_tgt: Card = board.find_card_node(target_minion.instance_id)
-					var _ts_src: Card = null
-					for _m in game_state.player.board:
-						if _m.has_ability(Abilities.TANK):
-							_ts_src = board.find_card_node(_m.instance_id)
-							break
-					if _ts_tgt != null:
-						var _ts_from: Vector2 = _ts_src.get_parent().get_global_rect().get_center() if _ts_src != null else _ts_tgt.get_parent().get_global_rect().get_center() + Vector2(0, -600)
-						await board.animate_laser_kill(_ts_from, _ts_tgt)
-			elif target_player_id != "":
-				var target_name := "your hero" if target_player_id == LOCAL_PLAYER_ID else "opponent's hero"
-				board.log_action("%s dealt 1 damage to the %s" % [source, target_name])
-				game_state._get_player_by_id(target_player_id).hero_health -= 1
-				game_state._check_win_condition()
-		else:
-			var target = ai_controller._pick_best_removal_target(game_state.player.board.duplicate(), 1)
-			if target != null:
-				board.log_action("%s dealt 1 damage to your %s" % [source, target.data.card_name])
-				game_state.apply_on_play_damage(target, 1)
-				var _ots_died: bool = target not in game_state.player.board and target not in game_state.opponent.board
-				if _ots_died:
-					var _ots_tgt: Card = board.find_card_node(target.instance_id)
-					var _ots_src: Card = null
-					for _m in game_state.opponent.board:
-						if _m.has_ability(Abilities.TANK):
-							_ots_src = board.find_card_node(_m.instance_id)
-							break
-					if _ots_tgt != null:
-						var _ots_from: Vector2 = _ots_src.get_parent().get_global_rect().get_center() if _ots_src != null else _ots_tgt.get_parent().get_global_rect().get_center() + Vector2(0, -600)
-						await board.animate_laser_kill(_ots_from, _ots_tgt)
-			else:
-				board.log_action("%s dealt 1 damage to your hero" % source)
-				game_state.player.hero_health -= 1
-				game_state._check_win_condition()
-		board.refresh()
-
-func _process_pending_overwatch_challenges() -> void:
-	while not game_state.pending_overwatch_challenges.is_empty():
-		var owner_id: String = game_state.pending_overwatch_challenges.pop_front()
-		var owner_state = game_state.player if owner_id == LOCAL_PLAYER_ID else game_state.opponent
-		var enemy_state = game_state.opponent if owner_id == LOCAL_PLAYER_ID else game_state.player
-		var available_yetis: Array[Minion] = []
-		for m in owner_state.board:
-			if m.has_ability(Abilities.YETI):
-				available_yetis.append(m)
-		if available_yetis.is_empty() or enemy_state.board.is_empty():
-			continue
-		if owner_id == LOCAL_PLAYER_ID:
-			board.start_yeti_selection()
-			var chosen: Minion = await board.yeti_selected
-			if chosen != null and not enemy_state.board.is_empty():
-				board.start_challenge_targeting(chosen)
-				var target: Minion = await board.challenge_target_selected
-				if target != null:
-					board.log_action("Overwatch: Your %s challenged opponent's %s" % [chosen.data.card_name, target.data.card_name])
-					game_state.apply_challenge(chosen, target)
-					await board.animate_creature_challenge(chosen.instance_id, LOCAL_PLAYER_ID, target.instance_id)
-					board.refresh()
-					if game_state.current_phase == GameState.Phase.GAME_OVER:
-						_handle_game_over()
-						return
-		else:
-			var best_yeti: Minion = available_yetis[0]
-			for y in available_yetis:
-				if y.current_attack > best_yeti.current_attack:
-					best_yeti = y
-			var target = ai_controller._pick_challenge_target(enemy_state.board.duplicate(), best_yeti)
-			if target != null:
-				board.log_action("Opponent Overwatch: %s challenged your %s" % [best_yeti.data.card_name, target.data.card_name])
-				game_state.apply_challenge(best_yeti, target)
-				await board.animate_creature_challenge(best_yeti.instance_id, OPPONENT_PLAYER_ID, target.instance_id)
-				board.refresh()
-				if game_state.current_phase == GameState.Phase.GAME_OVER:
-					_handle_game_over()
-					return
-
-func _process_pending_on_reinforce_damages() -> void:
-	while not game_state.pending_on_reinforce_damages.is_empty():
-		var entry: Dictionary = game_state.pending_on_reinforce_damages.pop_front()
-		var owner_id: String = entry["player_id"]
-		var damage: int = entry["damage"]
-		var source: String = entry["source"]
-		if owner_id == LOCAL_PLAYER_ID:
-			board.start_on_play_damage_targeting()
-			var result = await board.on_play_damage_target_selected
-			var dmg_target: Minion = result[0]
-			var dmg_player_id: String = result[1]
-			if dmg_target != null:
-				board.log_action("Your reinforced %s dealt %d damage to %s" % [source, damage, dmg_target.data.card_name])
-				game_state.apply_on_play_damage(dmg_target, damage, LOCAL_PLAYER_ID)
-				var _rd_died: bool = dmg_target not in game_state.player.board and dmg_target not in game_state.opponent.board
-				if _rd_died:
-					var _rd_tgt: Card = board.find_card_node(dmg_target.instance_id)
-					var _rd_src: Card = null
-					for _m in game_state.player.board:
-						if _m.data.card_name == source:
-							_rd_src = board.find_card_node(_m.instance_id)
-							break
-					if _rd_tgt != null:
-						var _rd_from: Vector2 = _rd_src.get_parent().get_global_rect().get_center() if _rd_src != null else _rd_tgt.get_parent().get_global_rect().get_center() + Vector2(0, -600)
-						await board.animate_laser_kill(_rd_from, _rd_tgt)
-				board.refresh()
-			elif dmg_player_id != "":
-				var target_name := "your hero" if dmg_player_id == LOCAL_PLAYER_ID else "opponent's hero"
-				board.log_action("Your reinforced %s dealt %d damage to the %s" % [source, damage, target_name])
-				game_state._get_player_by_id(dmg_player_id).hero_health -= damage
-				game_state._check_win_condition()
-				board.refresh()
-		else:
-			var target = ai_controller._pick_best_removal_target(game_state.player.board.duplicate(), damage)
-			if target != null:
-				board.log_action("Opponent's reinforced %s dealt %d damage to your %s" % [source, damage, target.data.card_name])
-				game_state.apply_on_play_damage(target, damage, OPPONENT_PLAYER_ID)
-				var _ard_died: bool = target not in game_state.player.board and target not in game_state.opponent.board
-				if _ard_died:
-					var _ard_tgt: Card = board.find_card_node(target.instance_id)
-					var _ard_src: Card = null
-					for _m in game_state.opponent.board:
-						if _m.data.card_name == source:
-							_ard_src = board.find_card_node(_m.instance_id)
-							break
-					if _ard_tgt != null:
-						var _ard_from: Vector2 = _ard_src.get_parent().get_global_rect().get_center() if _ard_src != null else _ard_tgt.get_parent().get_global_rect().get_center() + Vector2(0, -600)
-						await board.animate_laser_kill(_ard_from, _ard_tgt)
-			else:
-				board.log_action("Opponent's reinforced %s dealt %d damage to your hero" % [source, damage])
-				game_state.player.hero_health -= damage
-				game_state._check_win_condition()
-			board.refresh()
 		if game_state.current_phase == GameState.Phase.GAME_OVER:
 			_handle_game_over()
+
+## Log lines and animations for the events an action produced.
+func _present(events: Array) -> void:
+	await EventPresenter.present(events, board, LOCAL_PLAYER_ID)
+
+## Answers every decision the rules core has open, one at a time: the local
+## player's by asking them, the opponent's by the AI policy. The rules decide
+## what is legal and what happens; this only supplies the answers.
+##
+## Replaces the per-effect prompt code that used to live in this file
+## (_run_player_on_play and the _process_pending_* family) - those decided
+## outcomes here instead of in GameState.
+func _drive_choices() -> void:
+	for _i in 64:
+		if not is_instance_valid(board) or game_state.current_phase == GameState.Phase.GAME_OVER:
 			return
-
-func _process_pending_buff_friendly_health() -> void:
-	while not game_state.pending_buff_friendly_health.is_empty():
-		var player_id: String = game_state.pending_buff_friendly_health.pop_front()
-		var p = game_state.player if player_id == LOCAL_PLAYER_ID else game_state.opponent
-		if p.board.is_empty():
-			continue
-		if player_id == LOCAL_PLAYER_ID:
-			board.start_buff_friendly_targeting()
-			var target: Minion = await board.buff_friendly_target_selected
-			if target != null and target in game_state.player.board:
-				board.log_action("Your Moonchild gave %s +1 max health" % target.data.card_name)
-				game_state.apply_buff_friendly_health(target)
-				board.refresh()
+		game_state.resolve_to_quiescence()
+		if not game_state.has_pending_choice():
+			return
+		var choice: Dictionary = game_state.pending_choice.duplicate(true)
+		var owner_id := str(choice["player_id"])
+		var selection: String
+		if owner_id == LOCAL_PLAYER_ID:
+			selection = await board.prompt_choice(choice)
 		else:
-			var best: Minion = ai_controller._pick_health_buff_target(p.board.duplicate())
-			board.log_action("Opponent's Moonchild gave %s +1 max health" % best.data.card_name)
-			game_state.apply_buff_friendly_health(best)
-			board.refresh()
+			await get_tree().create_timer(ai_controller.THINK_DELAY * 0.5).timeout
+			selection = AIHeuristics.pick_choice_answer(game_state, choice)
+		if not is_instance_valid(board):
+			return
+		var result := game_state.execute({
+			"type": GameState.CMD_ANSWER_CHOICE, "actor": owner_id,
+			"choice_id": str(choice["id"]), "selection": selection,
+		})
+		if not result["ok"]:
+			# Never leave the match waiting: fall back to the choice's default.
+			result = game_state.execute({
+				"type": GameState.CMD_ANSWER_CHOICE, "actor": owner_id,
+				"choice_id": str(choice["id"]), "selection": str(choice["default"]),
+			})
+			if not result["ok"]:
+				game_state.cancel_pending_choice()
+				return
+		await _present(result["events"])
+		board.refresh()
+		await _announce_pending_draws()
 
-func _process_pending_tank_specialist_buffs() -> void:
-	while not game_state.pending_tank_specialist_buffs.is_empty():
-		var player_id: String = game_state.pending_tank_specialist_buffs.pop_front()
-		var p = game_state.player if player_id == LOCAL_PLAYER_ID else game_state.opponent
-		var tanks: Array[Minion] = []
-		for m in p.board:
-			if m.data.tribe == "tank":
-				tanks.append(m)
-		if tanks.is_empty():
-			continue
-		if player_id == LOCAL_PLAYER_ID:
-			board.start_buff_friendly_targeting(null, "tank")
-			var target: Minion = await board.buff_friendly_target_selected
-			if target != null and target in game_state.player.board and target.data.tribe == "tank":
-				board.log_action("Tank Specialist buffed %s (+1/+2)" % target.data.card_name)
-				game_state.apply_tank_specialist_buff(target)
-				board.refresh()
-		else:
-			var best := tanks[0]
-			for m in tanks:
-				if m.current_attack + m.current_health > best.current_attack + best.current_health:
-					best = m
-			board.log_action("Opponent's Tank Specialist buffed %s (+1/+2)" % best.data.card_name)
-			game_state.apply_tank_specialist_buff(best)
-			board.refresh()
-
-func _process_pending_nulls() -> void:
-	while not game_state.pending_nulls.is_empty():
-		var entry: Dictionary = game_state.pending_nulls.pop_front()
-		var player_id: String = entry["player_id"]
-		var source_name: String = entry["source"]
-		var all_minions: Array[Minion] = game_state.player.board.duplicate()
-		all_minions.append_array(game_state.opponent.board.duplicate())
-		if all_minions.is_empty():
-			continue
-		if player_id == LOCAL_PLAYER_ID:
-			board.start_null_targeting()
-			var target: Minion = await board.null_target_selected
-			var on_board = target != null and (target in game_state.player.board or target in game_state.opponent.board)
-			if on_board:
-				board.log_action("Your %s silenced %s" % [source_name, target.data.card_name])
-				game_state.apply_null(target)
-				board.refresh()
-		else:
-			var best: Minion = null
-			for m in game_state.player.board:
-				if best == null or m.abilities.size() > best.abilities.size():
-					best = m
-			if best != null:
-				board.log_action("Opponent's %s silenced your %s" % [source_name, best.data.card_name])
-				game_state.apply_null(best)
-				board.refresh()
-
-func _process_pending_rummages() -> void:
-	while not game_state.pending_rummages.is_empty():
-		var entry = game_state.pending_rummages.pop_front()
-		var player_id: String = entry["player_id"]
-		var max_cost: int = entry["max_cost"]
-		var type_filter: String = entry.get("type_filter", "")
-		var play_it: bool = entry.get("play_it", false)
-		var discount: bool = entry.get("discount", true)
-		var buff_creature: bool = entry.get("buff_creature", false)
-		var p_state = game_state.player if player_id == LOCAL_PLAYER_ID else game_state.opponent
-		var allow_equal: bool = p_state.board.any(func(m): return m.has_ability(Abilities.RUMMAGE_EQUAL_COST))
-		var options = game_state.get_rummage_options(player_id, max_cost, type_filter, allow_equal)
-		if options.is_empty():
-			continue
-		var chosen: CardData
-		if player_id == LOCAL_PLAYER_ID:
-			chosen = await board.show_graveyard_picker(options)
-		else:
-			options.sort_custom(func(a, b): return a.cost > b.cost)
-			chosen = options[0]
-		if chosen:
-			var placed: Minion = game_state.complete_rummage(player_id, chosen, play_it, discount, buff_creature)
-			board.refresh()
-			if placed != null:
-				if player_id == LOCAL_PLAYER_ID:
-					await _run_player_on_play(placed)
-					# Deliberately not _resolve_all_pending(): this runs INSIDE
-					# the rummage queue handler, so re-entering it would drain
-					# pending_rummages recursively. Anything left over is
-					# picked up by the outer loop's next pass.
-					await _announce_pending_draws()
-					await _process_pending_tank_shots()
-					await _process_pending_nulls()
-					await _process_pending_buff_friendly_health()
-					await _process_pending_tank_specialist_buffs()
-					await _process_pending_on_reinforce_damages()
-					await _process_pending_overwatch_challenges()
-					if game_state.current_phase == GameState.Phase.GAME_OVER:
-						_handle_game_over()
-						return
-				else:
-					await ai_controller._handle_on_play_effects(placed, game_state, board)
+## Works off whatever the last action left open. The rules core queues effects
+## and turns the ones needing a decision into choices; there is nothing else
+## for a controller to loop over.
+func _resolve_all_pending() -> void:
+	await _announce_pending_draws()
+	await _drive_choices()
+	await _announce_pending_draws()
 
 ## Also announces fatigue damage (from GameState._begin_turn()'s draw step
 ## finding an empty deck) so every existing call site gets it for free.
@@ -599,20 +189,14 @@ func _announce_pending_draws() -> void:
 	# double-reporting a ranked result).
 
 func _on_pilot(pilot_instance_id: String, target_instance_id: String) -> void:
-	var pilot = _find_minion(LOCAL_PLAYER_ID, pilot_instance_id)
-	var target = _find_minion(LOCAL_PLAYER_ID, target_instance_id)
-	if not pilot or not target:
-		return
-	var atk_bonus = 0
-	var hp_bonus = 0
-	for ability in pilot.abilities:
-		if Abilities.is_pilot(ability):
-			atk_bonus = Abilities.get_pilot_attack(ability)
-			hp_bonus = Abilities.get_pilot_health(ability)
-			break
-	board.log_action("Your %s piloted %s (+%d/+%d)" % [pilot.data.card_name, target.data.card_name, atk_bonus, hp_bonus])
-	game_state.apply_pilot(pilot, target, game_state.player)
+	var result := game_state.execute({
+		"type": GameState.CMD_PILOT, "actor": LOCAL_PLAYER_ID,
+		"pilot_instance_id": pilot_instance_id, "target_instance_id": target_instance_id,
+	})
+	if result["ok"]:
+		await _present(result["events"])
 	board.refresh()
+	await _resolve_all_pending()
 
 func _on_attack(attacker_id: String, target_type: String, target_id: String) -> void:
 	var attacker = _find_minion(LOCAL_PLAYER_ID, attacker_id)
@@ -623,21 +207,23 @@ func _on_attack(attacker_id: String, target_type: String, target_id: String) -> 
 		var target = _find_minion(OPPONENT_PLAYER_ID, target_id)
 		if target:
 			var target_name: String = target.data.card_name
-			var ok: bool = game_state.execute({
+			var attack_result := game_state.execute({
 				"type": GameState.CMD_ATTACK, "actor": LOCAL_PLAYER_ID,
 				"attacker_instance_id": attacker_id, "target_instance_id": target_id,
-			})["ok"]
+			})
+			var ok: bool = attack_result["ok"]
 			if ok:
 				board.log_action("Your %s attacked opponent's %s" % [attacker.data.card_name, target_name])
 				await board.animate_creature_attack(attacker_id, LOCAL_PLAYER_ID, target_id)
 				if had_dual_strike and attacker in game_state.player.board:
 					await board.animate_creature_attack(attacker_id, LOCAL_PLAYER_ID, target_id)
 	elif target_type == "hero":
-		var ok: bool = game_state.execute({
+		var attack_result := game_state.execute({
 			"type": GameState.CMD_ATTACK, "actor": LOCAL_PLAYER_ID,
 			"attacker_instance_id": attacker_id, "target_instance_id": "",
 			"target_player_id": target_id,
-		})["ok"]
+		})
+		var ok: bool = attack_result["ok"]
 		if ok:
 			board.log_action("Your %s attacked the opponent's hero" % attacker.data.card_name)
 			await board.animate_creature_attack_face(attacker_id, LOCAL_PLAYER_ID)
@@ -673,54 +259,7 @@ func _on_play_stratagem(card_data: CardData, target_minion: Minion, target_playe
 	await get_tree().process_frame
 	await get_tree().process_frame
 	board.refresh()
-	if card_data.effect == "force_challenge" and target_minion != null:
-		if target_minion.owner_id == LOCAL_PLAYER_ID and target_minion.has_ability(Abilities.YETI):
-			if not game_state.opponent.board.is_empty():
-				board.start_challenge_targeting(target_minion)
-				var target: Minion = await board.challenge_target_selected
-				if target != null:
-					board.log_action("Your %s challenged opponent's %s" % [target_minion.data.card_name, target.data.card_name])
-					game_state.apply_challenge(target_minion, target)
-					await board.animate_creature_challenge(target_minion.instance_id, LOCAL_PLAYER_ID, target.instance_id)
-					board.refresh()
-					if card_data.effect_value > 0 and target.is_dead() and target_minion in game_state.player.board:
-						var win_buff: int = card_data.effect_value
-						target_minion.current_attack += win_buff
-						var pre := target_minion.current_health
-						target_minion.current_health += win_buff
-						target_minion.max_health += win_buff
-						game_state._try_heal_to_draw(target_minion, target_minion.current_health - pre)
-						game_state._try_apothecary_bonus(LOCAL_PLAYER_ID, target_minion)
-						board.log_action("Your %s won and gained +%d/+%d!" % [target_minion.data.card_name, win_buff, win_buff])
-						board.refresh()
-	if card_data.effect == "poke_bear" and target_minion != null:
-		if target_minion in game_state.player.board and target_minion.has_ability(Abilities.YETI):
-			if not game_state.opponent.board.is_empty():
-				board.start_challenge_targeting(target_minion)
-				var target: Minion = await board.challenge_target_selected
-				if target != null:
-					board.log_action("Your %s challenged opponent's %s" % [target_minion.data.card_name, target.data.card_name])
-					game_state.apply_challenge(target_minion, target)
-					await board.animate_creature_challenge(target_minion.instance_id, LOCAL_PLAYER_ID, target.instance_id)
-					board.refresh()
-	if card_data.effect == "blood_transfusion" and target_minion != null:
-		if not game_state.player.board.is_empty():
-			board.start_buff_friendly_targeting()
-			var recipient: Minion = await board.buff_friendly_target_selected
-			if recipient != null and recipient in game_state.player.board:
-				board.log_action("Blood Transfusion gave %s +2 health" % recipient.data.card_name)
-				game_state.apply_heal_buff(recipient, 2)
-				board.refresh()
-	# "...give it to ANOTHER creature you control" - the donor is not a legal
-	# recipient, so it is excluded from targeting and re-checked on the answer.
-	var sanguine_targets := game_state.sanguine_recipients(LOCAL_PLAYER_ID, target_minion)
-	if card_data.effect == "sanguine" and not sanguine_targets.is_empty():
-		board.start_buff_friendly_targeting(target_minion)
-		var recipient: Minion = await board.buff_friendly_target_selected
-		if recipient != null and recipient in sanguine_targets:
-			board.log_action("Sanguine gave %s +2 health" % recipient.data.card_name)
-			game_state.apply_heal_buff(recipient, 2)
-			board.refresh()
+	await _present(strat["events"])
 	await _resolve_all_pending()
 	if game_state.current_phase == GameState.Phase.GAME_OVER:
 		_handle_game_over()
