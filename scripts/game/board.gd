@@ -202,6 +202,9 @@ func _ready() -> void:
 	_style_combat_log_panel()
 	_create_decline_button()
 	set_process_input(true)
+	# Board.tscn still carries an older hand-set scale (1.5); the placement math
+	# below assumes the LARGE preset, so apply it rather than trust the scene.
+	preview_card.apply_size(Card.Size.LARGE)
 	preview_card.modulate = Color(1, 1, 1, 0)
 	preview_card.visible = false
 	card_preview_zone.set_anchors_preset(Control.PRESET_TOP_LEFT)
