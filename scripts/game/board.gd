@@ -563,20 +563,20 @@ func _add_board_zone_backgrounds() -> void:
 func _create_player_deck_icon() -> void:
 	_player_deck_icon = CardBackScene.instantiate()
 	_player_deck_icon.scale = Vector2(0.75, 0.75)
-	_player_deck_icon.position = Vector2(1690, 760)
+	_player_deck_icon.position = Vector2(1690, 725)
 	add_child(_player_deck_icon)
 
 	_deck_count_label = Label.new()
 	_deck_count_label.add_theme_font_size_override("font_size", 14)
 	_deck_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_deck_count_label.custom_minimum_size = Vector2(80, 0)
-	_deck_count_label.position = Vector2(1690, 880)
+	_deck_count_label.position = Vector2(1690, 845)
 	add_child(_deck_count_label)
 
 	var graveyard_btn := Button.new()
 	graveyard_btn.text = "Graveyard"
 	graveyard_btn.custom_minimum_size = Vector2(100, 32)
-	graveyard_btn.position = Vector2(1690, 915)
+	graveyard_btn.position = Vector2(1690, 880)
 	graveyard_btn.add_theme_font_size_override("font_size", 13)
 	graveyard_btn.pressed.connect(_open_graveyard_viewer)
 	add_child(graveyard_btn)
@@ -884,6 +884,9 @@ func _get_card_child(wrapper: Node) -> Card:
 const _PREVIEW_W := Card.PIXELS_LARGE.x
 const _PREVIEW_H := Card.PIXELS_LARGE.y + 40.0
 const _PREVIEW_PAD := 14.0
+## Keep this much clear below the preview: browser windows and taskbars routinely
+## crop the bottom of the canvas, and a card cut off there is unreadable.
+const _PREVIEW_BOTTOM_MARGIN := 80.0
 
 func _show_card_preview(data: CardData, minion: Minion = null, source_rect: Rect2 = Rect2()) -> void:
 	_hide_scheduled = false
@@ -903,7 +906,7 @@ func _show_card_preview(data: CardData, minion: Minion = null, source_rect: Rect
 		if px + _PREVIEW_W > vp.x:
 			px = source_rect.position.x - _PREVIEW_W - _PREVIEW_PAD
 		var py: float = source_rect.get_center().y - _PREVIEW_H * 0.5
-		py = clamp(py, 0.0, vp.y - _PREVIEW_H)
+		py = clamp(py, 0.0, vp.y - _PREVIEW_H - _PREVIEW_BOTTOM_MARGIN)
 		card_preview_zone.position = Vector2(px, py)
 	preview_card.visible = true
 	preview_card.modulate = Color(1, 1, 1, 1)
@@ -1999,7 +2002,7 @@ func _animate_reinforce_drop(card: Card) -> void:
 ## before its effect (or its arrival on the battlefield) lands.
 func announce_card(card_data: CardData, hold_time: float = 0.8) -> void:
 	var vp: Vector2 = get_viewport_rect().size
-	card_preview_zone.position = Vector2(vp.x - _PREVIEW_W - _PREVIEW_PAD, (vp.y - _PREVIEW_H) * 0.5)
+	card_preview_zone.position = Vector2(vp.x - _PREVIEW_W - _PREVIEW_PAD, (vp.y - _PREVIEW_H - _PREVIEW_BOTTOM_MARGIN) * 0.5)
 	_show_card_preview(card_data)
 	await get_tree().create_timer(hold_time).timeout
 	preview_card.modulate = Color(1, 1, 1, 0)
