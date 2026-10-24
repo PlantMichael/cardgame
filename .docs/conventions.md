@@ -30,13 +30,14 @@
 
 ## Card Sizes
 
-Every card on screen is the same `Card.tscn`, shown at one of exactly three presets — never an ad-hoc scale:
+Every card on screen is the same `Card.tscn`, shown at one of exactly four presets — never an ad-hoc scale:
 
 | Preset | Scale / pixels | Used for |
 |---|---|---|
-| `Card.Size.SMALL` | `0.60` / 132×192 | the battlefield (both board rows) |
-| `Card.Size.MEDIUM` | `0.80` / 176×256 | the hand, and the graveyard / mulligan / rummage / transform pickers |
-| `Card.Size.LARGE` | `1.50` / 330×480 | hover previews (board, deck builder, card list) and pack reveals |
+| `Card.Size.SMALL` | `0.46` / 101×147 | the deck builder's collection grid |
+| `Card.Size.BOARD` | `0.64` / 141×205 | the battlefield (both board rows) |
+| `Card.Size.MEDIUM` | `0.62` / 136×198 | the hand, and the graveyard / mulligan / rummage / transform pickers |
+| `Card.Size.LARGE` | `1.20` / 264×384 | hover previews (board, deck builder, card list) and pack reveals |
 
 - `Card.CARD_SIZE` (220×320) is the design space every node rect in `Card.tscn` is laid out in. Nothing draws at that size; a preset is applied as a uniform `scale` on the whole node.
 - Those rects are the frame art's own slots, measured off the 1042×1510 PNGs (averaging all six frames so per-color texture noise cancels and only the metal bevels remain), then scaled by 220/1042 and 320/1510. Re-measure rather than eyeball if the frame art is ever redrawn.

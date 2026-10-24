@@ -29,7 +29,8 @@ const CARD_SIZE := Vector2(220, 320)
 ##   SMALL  - on the battlefield
 ##   MEDIUM - in hand, and in the graveyard/mulligan/rummage pickers
 ##   LARGE  - the hover preview panels
-enum Size { SMALL, MEDIUM, LARGE }
+##   BOARD  - the battlefield rows (SMALL stays for the deck builder's collection grid)
+enum Size { SMALL, MEDIUM, LARGE, BOARD }
 
 ## Spelled out as plain constants rather than derived from CARD_SIZE through a
 ## helper, so callers can use them in their own `const` declarations (a
@@ -38,21 +39,25 @@ enum Size { SMALL, MEDIUM, LARGE }
 const SCALE_SMALL := Vector2(0.46, 0.46)
 const SCALE_MEDIUM := Vector2(0.62, 0.62)
 const SCALE_LARGE := Vector2(1.20, 1.20)
+const SCALE_BOARD := Vector2(0.64, 0.64)
 ## On-screen pixel size at each preset - CARD_SIZE times the scale above.
 ## What a container wrapper around a card at that preset should reserve.
 const PIXELS_SMALL := Vector2(101, 147)
 const PIXELS_MEDIUM := Vector2(136, 198)
 const PIXELS_LARGE := Vector2(264, 384)
+const PIXELS_BOARD := Vector2(141, 205)
 
 const SIZE_SCALES := {
 	Size.SMALL: SCALE_SMALL,
 	Size.MEDIUM: SCALE_MEDIUM,
 	Size.LARGE: SCALE_LARGE,
+	Size.BOARD: SCALE_BOARD,
 }
 const SIZE_PIXELS := {
 	Size.SMALL: PIXELS_SMALL,
 	Size.MEDIUM: PIXELS_MEDIUM,
 	Size.LARGE: PIXELS_LARGE,
+	Size.BOARD: PIXELS_BOARD,
 }
 
 ## Kept as the hand's drag/return scale so the many call sites that reference

@@ -53,7 +53,7 @@ const BOARD_CARD_REST_POSITION := Vector2(2, 2)
 
 ## Both board rows show cards at the one SMALL preset (they used to run at
 ## slightly different scales), so they share a wrapper size too.
-const _BOARD_WRAPPER_SIZE := Card.PIXELS_SMALL + Vector2(4, 4)
+const _BOARD_WRAPPER_SIZE := Card.PIXELS_BOARD + Vector2(4, 4)
 
 const CURSOR_DEFAULT = preload("res://assets/01.png")
 const CURSOR_TARGET = preload("res://assets/15.png")
@@ -1618,7 +1618,7 @@ func _settle_shifted_cards(zone: Container, old_positions: Dictionary) -> void:
 func _refresh_boards() -> void:
 	var is_my_turn = game_state.is_local_player_turn()
 
-	_reconcile_board_zone(player_board_zone, game_state.player.board, _BOARD_WRAPPER_SIZE, Card.SCALE_SMALL,
+	_reconcile_board_zone(player_board_zone, game_state.player.board, _BOARD_WRAPPER_SIZE, Card.SCALE_BOARD,
 		func(card: Card, minion: Minion) -> void:
 			card.setup_as_minion(minion)
 			card.set_can_attack(is_my_turn and minion.can_attack())
@@ -1633,7 +1633,7 @@ func _refresh_boards() -> void:
 				card.animate_transform()
 	)
 
-	_reconcile_board_zone(opponent_board_zone, game_state.opponent.board, _BOARD_WRAPPER_SIZE, Card.SCALE_SMALL,
+	_reconcile_board_zone(opponent_board_zone, game_state.opponent.board, _BOARD_WRAPPER_SIZE, Card.SCALE_BOARD,
 		func(card: Card, minion: Minion) -> void:
 			card.setup_as_minion(minion)
 			card.set_can_attack(false)
