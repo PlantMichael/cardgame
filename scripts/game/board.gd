@@ -1580,9 +1580,14 @@ func _play_death_animation(card: Card) -> void:
 ## one-frame wait.
 func _settle_shifted_cards(zone: Container, old_positions: Dictionary) -> void:
 	await zone.sort_children
-	for card: Card in old_positions:
-		if not is_instance_valid(card):
+	# Untyped on purpose: a card whose minion died during the await above has
+	# been freed, and assigning a freed instance to a typed `Card` loop
+	# variable is itself an error ("Trying to assign invalid previously freed
+	# instance") - it fires before any is_instance_valid() check can run.
+	for key in old_positions:
+		if not is_instance_valid(key):
 			continue
+		var card: Card = key
 		var wrapper := card.get_parent()
 		# A card whose minion died gets detached from its Control wrapper and
 		# reparented straight to `self` (Node2D) for its own death animation
