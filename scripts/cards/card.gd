@@ -107,6 +107,29 @@ const CARD_FRAMES = {
 	CardData.CardColor.GENERIC:  preload("res://assets/card_assets/card-generic-grey.png"),
 }
 
+## Stratagem frames - same 1042x1510 canvas and the same slots as CARD_FRAMES
+## from the top down to the description panel, but with no attack/health
+## boxes: the panel runs on down through where they would be. So everything
+## in Card.tscn lines up unchanged except the description box, which swaps to
+## DESCRIPTION_BOX_STRATAGEM.
+const STRATAGEM_FRAMES = {
+	CardData.CardColor.GREEN:    preload("res://assets/cardgame/Strategems/stratagem-green.png"),
+	CardData.CardColor.CRIMSON:  preload("res://assets/cardgame/Strategems/stratagem-crimson.png"),
+	CardData.CardColor.BLACK:    preload("res://assets/cardgame/Strategems/stratagem-black.png"),
+	CardData.CardColor.ORANGE:   preload("res://assets/cardgame/Strategems/stratagem-orange.png"),
+	CardData.CardColor.TEAL:     preload("res://assets/cardgame/Strategems/stratagem-teal.png"),
+	CardData.CardColor.GENERIC:  preload("res://assets/cardgame/Strategems/stratagem-generic-grey.png"),
+}
+
+## Description box rects in CARD_SIZE design space, each inset 4px from its
+## frame's measured text panel (see _description_box for why).
+## DEFAULT must match DescriptionLabel's rect in Card.tscn. The stratagem
+## panel shares its top and sides; only its bottom bevel sits lower - 1421px
+## vs 1199px in the 1510px-tall art (averaged over all the stratagem / card
+## frames), which is +47 in design space.
+const DESCRIPTION_BOX_DEFAULT := Rect2(36, 191, 148, 60)
+const DESCRIPTION_BOX_STRATAGEM := Rect2(36, 191, 148, 107)
+
 ## Mana orbs - one per color, every one its own art now (GREEN and GENERIC
 ## used to be the white orb under a tint, for want of their own).
 const _WHITE_ORB := preload("res://assets/card_assets/whitemana.png")
@@ -259,7 +282,7 @@ var _description_box := Rect2()
 ## centering a RichTextLabel has no property for.
 func _fit_description_to_height(plain_text: String, max_font: int) -> void:
 	if _description_box.size == Vector2.ZERO:
-		_description_box = Rect2(description_label.position, description_label.size)
+		_description_box = DESCRIPTION_BOX_DEFAULT
 	description_label.position = _description_box.position
 	description_label.size = _description_box.size
 	var font := description_label.get_theme_font("normal_font")
@@ -315,6 +338,7 @@ func setup(card_data: CardData) -> void:
 	update_piloted_token(false)
 	update_reinforce_token(false)
 	art_texture.texture = card_data.art if card_data.art != null else _get_blank_art_texture()
+	_description_box = DESCRIPTION_BOX_STRATAGEM if is_stratagem() else DESCRIPTION_BOX_DEFAULT
 	_apply_color_theme(card_data.color)
 	call_deferred("_fit_text")
 
@@ -576,7 +600,11 @@ func _update_type_row(card_data: CardData) -> void:
 func _apply_color_theme(color: CardData.CardColor) -> void:
 	var border = CARD_BORDER_COLORS[color]
 	card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0, 0, 0, 0), border, 2))
-	background.texture = CARD_FRAMES.get(color, CARD_FRAMES[CardData.CardColor.GENERIC])
+	var frames: Dictionary = STRATAGEM_FRAMES if is_stratagem() else CARD_FRAMES
+	background.texture = frames.get(color, frames[CardData.CardColor.GENERIC])
+
+func is_stratagem() -> bool:
+	return data != null and data.card_type == CardData.CardType.STRATAGEM
 
 func _get_corner_radius() -> int:
 	return 6
