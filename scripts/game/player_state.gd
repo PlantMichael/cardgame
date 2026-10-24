@@ -49,19 +49,28 @@ func find_card_in_hand(uid: String) -> CardData:
 			return c
 	return null
 
+## Set by GameState when its event feed is on: every draw/burn is noted here and
+## turned into an event. Off (and empty) for simulation copies.
+var log_draws: bool = false
+var draw_log: Array[Dictionary] = []
+
 func draw_card() -> CardData:
 	if deck.is_empty():
 		fatigue_damage += 1
 		hero_health -= fatigue_damage
 		return null
 	if hand.size() >= MAX_HAND_SIZE:
-		deck.pop_back()
+		var burned: CardData = deck.pop_back()
+		if log_draws:
+			draw_log.append({"owner": player_id, "uid": "", "card_id": burned.id, "burned": true})
 		return null
 	# A drawn card is a NEW physical card: it gets its own identity, and the
 	# deck entry it came from is a shared catalog definition that must not be
 	# mutated by whatever happens to the card in hand.
 	var card: CardData = deck.pop_back().new_instance(mint_card_uid())
 	hand.append(card)
+	if log_draws:
+		draw_log.append({"owner": player_id, "uid": card.uid, "card_id": card.id})
 	return card
 
 func gain_mana_crystal() -> void:

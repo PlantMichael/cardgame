@@ -148,9 +148,11 @@ func _begin_turn() -> void:
 		elif _opening_hand_dealt and drawn != null and active.player_id == player.player_id:
 			pending_drawn_cards.append(drawn)
 	active.reset_for_new_turn()
+	_emit("turn_start", {"owner": active.player_id, "turn": turn_number})
 	_check_win_condition()
 
 func end_turn() -> void:
+	_emit("turn_end", {"owner": active_player_id})
 	_expire_temp_shields_for(active_player_id)
 	_apply_rejuvenate(active_player_id)
 	_apply_feast_attendant(active_player_id)
@@ -266,6 +268,23 @@ const CHOICE_RESTORE_HEALTH := "restore_health"
 const CHOICE_BUFF_OTHER_FRIENDLY := "buff_other_friendly"
 const CHOICE_DAMAGE_HIGH_ATTACK := "damage_high_attack"
 
+## What the options of a choice ARE.
+##   target       minion instance_ids and heroes ("hero:<player_id>")
+##   pick_card    uids of cards in a pile (e.g. graveyard)
+##   pick_card_id catalog card ids (e.g. transform options)
+const CHOICE_KIND_TARGET := "target"
+const CHOICE_KIND_PICK_CARD := "pick_card"
+const CHOICE_KIND_PICK_CARD_ID := "pick_card_id"
+
+## Heroes appear among a choice's options as "hero:<player_id>".
+const HERO_PREFIX := "hero:"
+static func hero_option(player_id: String) -> String:
+	return HERO_PREFIX + player_id
+static func is_hero_option(option: String) -> bool:
+	return option.begins_with(HERO_PREFIX)
+static func hero_option_player(option: String) -> String:
+	return option.substr(HERO_PREFIX.length())
+
 ## Attack threshold Heavy Bounty Hunter's target must meet. Measured against
 ## CURRENT attack, so a buffed or debuffed creature counts as it stands now.
 const BOUNTY_HUNTER_MIN_ATTACK := 5
@@ -273,11 +292,21 @@ const BOUNTY_HUNTER_MIN_ATTACK := 5
 ## The open choice, or {} when none. Shape:
 ##   id                 unique within the match; answers must quote it
 ##   player_id          who must answer
-##   effect             one of the CHOICE_* constants above
+##   effect             one of the CHOICE_* constants
+##   kind               CHOICE_KIND_*: what `options` are
 ##   amount             how much (heal 1, buff 1, damage 4)
 ##   source_instance_id the creature whose ability asked
-##   options            legal target instance_ids, computed by the rules
+##   options            legal selections, computed by the rules, in a fixed
+##                      order (own board left->right, enemy board, heroes)
+##   allow_none         whether declining ("") is legal
+##   step / steps       multi-step effects open step 2 only after step 1
+##   data               effect-specific memory (e.g. step 1's selection)
+##   default            the answer used on a timeout: "" when declining is
+##                      legal, else the first option
 var pending_choice: Dictionary = {}
+## Requests made while a choice was already open. Each is turned into a real
+## choice (options computed against the state AT THAT TIME) when its turn comes.
+var _choice_queue: Array[Dictionary] = []
 var _next_choice_id: int = 0
 
 func has_pending_choice() -> bool:
@@ -292,11 +321,16 @@ func is_targetable_by(target: Minion, actor_id: String) -> bool:
 		return true
 	return not target.has_ability(Abilities.CLOAKED) and not target.has_ability(Abilities.AMBUSH)
 
-## The legal targets for `effect`, as instance_ids. Returning an empty list
-## means the effect simply does not happen - no choice is opened, and the
-## creature still enters play (handoff: "do not leave an impossible mandatory
-## prompt waiting").
-func choice_options_for(effect: String, actor_id: String, source: Minion) -> Array[String]:
+## How an effect's choice behaves: what its options are, whether it may be
+## declined, and how many steps it has. Effects not listed here are a single
+## declinable target pick.
+func _choice_traits(effect: String) -> Dictionary:
+	return {"kind": CHOICE_KIND_TARGET, "allow_none": true, "steps": 1}
+
+## The legal selections for `effect`. Returning an empty list means the effect
+## simply does not happen - no choice is opened, and the creature still enters
+## play (handoff: "do not leave an impossible mandatory prompt waiting").
+func choice_options_for(effect: String, actor_id: String, source: Minion, data: Dictionary = {}) -> Array[String]:
 	var out: Array[String] = []
 	var actor := find_player(actor_id)
 	if actor == null:
@@ -322,25 +356,64 @@ func choice_options_for(effect: String, actor_id: String, source: Minion) -> Arr
 					out.append(m.instance_id)
 	return out
 
-## Opens a choice if it has any legal target. Returns false (and opens
-## nothing) when it does not, so the caller can simply continue.
-func request_choice(player_id: String, effect: String, amount: int, source: Minion) -> bool:
-	var options := choice_options_for(effect, player_id, source)
-	if options.is_empty():
-		return false
-	_next_choice_id += 1
-	pending_choice = {
-		"id": "choice-%d" % _next_choice_id,
+func _make_choice_spec(player_id: String, effect: String, amount: int, source: Minion, data: Dictionary, step: int) -> Dictionary:
+	return {
 		"player_id": player_id,
 		"effect": effect,
 		"amount": amount,
 		"source_instance_id": source.instance_id if source != null else "",
-		"options": options,
+		"data": data.duplicate(true),
+		"step": step,
 	}
+
+func _open_choice(spec: Dictionary, options: Array[String]) -> void:
+	var traits := _choice_traits(str(spec["effect"]))
+	_next_choice_id += 1
+	var allow_none: bool = bool(traits["allow_none"])
+	pending_choice = {
+		"id": "choice-%d" % _next_choice_id,
+		"player_id": spec["player_id"],
+		"effect": spec["effect"],
+		"kind": traits["kind"],
+		"amount": spec["amount"],
+		"source_instance_id": spec["source_instance_id"],
+		"options": options,
+		"allow_none": allow_none,
+		"step": int(spec.get("step", 1)),
+		"steps": int(traits["steps"]),
+		"data": (spec.get("data", {}) as Dictionary).duplicate(true),
+		"default": "" if allow_none else options[0],
+	}
+
+## Opens the next queued request that still has a legal option. Requests whose
+## options have vanished by the time their turn comes simply do not happen.
+func _open_next_choice() -> bool:
+	while not has_pending_choice() and not _choice_queue.is_empty():
+		var spec: Dictionary = _choice_queue.pop_front()
+		var source := find_minion(str(spec["source_instance_id"]))
+		var options := choice_options_for(str(spec["effect"]), str(spec["player_id"]), source, spec["data"])
+		if options.is_empty():
+			continue
+		_open_choice(spec, options)
+	return has_pending_choice()
+
+## Asks `player_id` to choose for `effect`. Returns false (and asks nothing)
+## when there is no legal option right now. If another choice is already open
+## the request waits its turn - only one choice is ever open at a time.
+func request_choice(player_id: String, effect: String, amount: int, source: Minion, data: Dictionary = {}) -> bool:
+	var options := choice_options_for(effect, player_id, source, data)
+	if options.is_empty():
+		return false
+	var spec := _make_choice_spec(player_id, effect, amount, source, data, 1)
+	if has_pending_choice():
+		_choice_queue.append(spec)
+	else:
+		_open_choice(spec, options)
 	return true
 
 ## The open choice's legal targets as live minions, for a caller that needs
-## objects (the UI highlighting them, the AI scoring them).
+## objects (the UI highlighting them, the AI scoring them). Hero and card
+## options are not minions and are skipped here.
 func pending_choice_targets() -> Array[Minion]:
 	var out: Array[Minion] = []
 	if not has_pending_choice():
@@ -351,12 +424,12 @@ func pending_choice_targets() -> Array[Minion]:
 			out.append(m)
 	return out
 
-## Answers the open choice. `selection_instance_id` must be one of its
-## options, or "" to decline.
+## Answers the open choice. `selection` must be one of its options, or "" to
+## decline (only when the choice allows it).
 ##
 ## Returns {"ok": true} or {"ok": false, "error": ...}. A rejection resolves
 ## nothing and leaves the choice open, so a wrong answer cannot consume it.
-func answer_choice(choice_id: String, selection_instance_id: String) -> Dictionary:
+func answer_choice(choice_id: String, selection: String) -> Dictionary:
 	if not has_pending_choice():
 		return _reject("no choice is pending")
 	if choice_id != str(pending_choice["id"]):
@@ -364,22 +437,37 @@ func answer_choice(choice_id: String, selection_instance_id: String) -> Dictiona
 		# a message that arrived late. Dropping it is the whole point of
 		# carrying the id.
 		return _reject("stale choice id")
-	var effect := str(pending_choice["effect"])
-	var amount := int(pending_choice["amount"])
-	var actor_id := str(pending_choice["player_id"])
+	var choice := pending_choice.duplicate(true)
 
-	if selection_instance_id.is_empty():
+	if selection.is_empty():
+		if not bool(choice["allow_none"]):
+			return _reject("this choice cannot be declined")
 		pending_choice = {}
+		_open_next_choice()
+		resolve_to_quiescence()
 		return {"ok": true, "declined": true}
-	if selection_instance_id not in pending_choice["options"]:
-		return _reject("selection is not a legal target")
-	var target := find_minion(selection_instance_id)
-	if target == null:
-		return _reject("target is no longer on the board")
+	if selection not in choice["options"]:
+		return _reject("selection is not a legal option")
+	if str(choice["kind"]) == CHOICE_KIND_TARGET and not is_hero_option(selection):
+		if find_minion(selection) == null:
+			return _reject("target is no longer on the board")
 
 	# Clear BEFORE resolving: the effect can itself queue work or open the
 	# next choice, and it must not find this one still occupying the slot.
 	pending_choice = {}
+	_resolve_choice(choice, selection)
+	_check_win_condition()
+	_open_next_choice()
+	resolve_to_quiescence()
+	return {"ok": true}
+
+## Applies an answered choice through the shared operations. A multi-step
+## effect re-opens itself as its next step here rather than finishing.
+func _resolve_choice(choice: Dictionary, selection: String) -> void:
+	var effect := str(choice["effect"])
+	var amount := int(choice["amount"])
+	var actor_id := str(choice["player_id"])
+	var target := find_minion(selection)
 	match effect:
 		CHOICE_RESTORE_HEALTH:
 			restore_health(target, amount)
@@ -388,13 +476,150 @@ func answer_choice(choice_id: String, selection_instance_id: String) -> Dictiona
 			gain_max_health(target, amount)
 		CHOICE_DAMAGE_HIGH_ATTACK:
 			apply_on_play_damage(target, amount, actor_id)
-	_check_win_condition()
-	return {"ok": true}
 
 ## Abandons the open choice without resolving it - used when a match is torn
 ## down, so nothing is left waiting on an answer that will never come.
 func cancel_pending_choice() -> void:
 	pending_choice = {}
+	_choice_queue.clear()
+
+## Which queued work still has to be worked off before the next command. Migrated
+## queue families turn their entries into choices here (one at a time, in
+## PENDING_QUEUES order); the rest are still drained by the controllers.
+const MIGRATED_QUEUES: Array[String] = []
+
+## Works off every effect that needs no decision, and opens the first one that
+## does, so that after any accepted command the match is either quiet or
+## waiting on exactly one named player. Controllers no longer loop over queues.
+func resolve_to_quiescence() -> void:
+	for _i in 128:
+		if current_phase == Phase.GAME_OVER:
+			return
+		if has_pending_choice():
+			return
+		if _open_next_choice():
+			return
+		if not _convert_next_queue_entry():
+			return
+
+## Pops one entry from the first non-empty migrated queue and turns it into a
+## choice request (or resolves it outright). Returns false when nothing was left.
+func _convert_next_queue_entry() -> bool:
+	for queue_name in PENDING_QUEUES:
+		if queue_name not in MIGRATED_QUEUES:
+			continue
+		var queue: Array = get(queue_name)
+		if queue.is_empty():
+			continue
+		var entry = queue.pop_front()
+		_queue_entry_to_choice(queue_name, entry)
+		return true
+	return false
+
+## Per-family conversion of a queue entry; filled in as each family migrates.
+func _queue_entry_to_choice(_queue_name: String, _entry) -> void:
+	pass
+
+# --- Event feed ---
+#
+# Ordered, advisory records of what just happened, for animation and the log.
+# State is never read from them. Off by default: a simulation copy must not
+# pay for (or leak) them, and nothing consumes them until a controller or the
+# match host turns them on.
+
+var events_enabled: bool = false
+var events: Array[Dictionary] = []
+var _event_n: int = 0
+## Set when a match ends by something other than the rules' own win check.
+var end_reason: String = ""
+
+func set_events_enabled(enabled: bool) -> void:
+	events_enabled = enabled
+	player.log_draws = enabled
+	opponent.log_draws = enabled
+
+func _emit(type: String, data: Dictionary = {}) -> void:
+	if not events_enabled:
+		return
+	_event_n += 1
+	data["n"] = _event_n
+	data["type"] = type
+	events.append(data)
+
+func _flush_draw_events() -> void:
+	for p in [player, opponent]:
+		for d in p.draw_log:
+			_emit("discard_burn" if d.get("burned", false) else "draw", d)
+		p.draw_log.clear()
+
+## Returns and clears the events accumulated since the last call.
+func drain_events() -> Array[Dictionary]:
+	if events_enabled:
+		_flush_draw_events()
+	var out := events
+	events = []
+	return out
+
+## What `seat_id` is allowed to see of `evts`: the opponent's draws carry no
+## card identity; every other event is public (a played card becomes visible
+## when played). No event ever names a card still in a hidden zone.
+static func filter_events_for(seat_id: String, evts: Array) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for e in evts:
+		var ev: Dictionary = (e as Dictionary).duplicate(true)
+		if ev.get("type", "") == "draw" and str(ev.get("owner", "")) != seat_id:
+			ev.erase("uid")
+			ev.erase("card_id")
+		elif ev.get("type", "") == "discard_burn" and str(ev.get("owner", "")) != seat_id:
+			ev.erase("uid")
+			ev.erase("card_id")
+		out.append(ev)
+	return out
+
+## Timeout: resolves whatever is open with its deterministic default, then ends
+## the turn if `actor_id` is the active player. Used by the server's turn clock;
+## recorded in the action log as a "timeout_default".
+func apply_timeout(actor_id: String) -> Dictionary:
+	if current_phase == Phase.GAME_OVER:
+		return _reject("game is over")
+	var guard := 0
+	while has_pending_choice() and guard < 64:
+		guard += 1
+		var res := answer_choice(str(pending_choice["id"]), str(pending_choice["default"]))
+		if not res["ok"]:
+			cancel_pending_choice()
+			break
+	if current_phase != Phase.GAME_OVER and actor_id == active_player_id and not has_pending_choice():
+		end_turn()
+		resolve_to_quiescence()
+	return {"ok": true, "kind": "timeout_default", "events": drain_events()}
+
+## A stable digest of the FULL authoritative state, hidden zones and generator
+## position included. Used to detect divergence between a live match and its
+## replay; never sent to a client.
+func state_hash() -> String:
+	var parts: PackedStringArray = []
+	for p in [player, opponent]:
+		parts.append("P|%s|%d|%d|%d|%d|%d" % [p.player_id, p.hero_health, p.current_mana, p.max_mana, p.fatigue_damage, p._next_card_uid])
+		for zone in [p.hand, p.deck, p.graveyard]:
+			var cs: PackedStringArray = []
+			for c in zone:
+				cs.append("%s:%s:%d:%d:%s" % [c.uid, c.id, c.cost_modifier, c.rummage_count, ",".join(c.abilities)])
+			parts.append("Z|" + ";".join(cs))
+		var ms: PackedStringArray = []
+		for m in p.board:
+			ms.append("%s:%s:%d:%d:%d:%d:%d:%d:%s:%s:%s:%d" % [
+				m.instance_id, m.data.id, m.current_attack, m.current_health, m.max_health,
+				int(m.has_attacked), int(m.is_exhausted), int(m.is_nulled), ",".join(m.abilities),
+				m.card_uid, m.piloted_by.id if m.piloted_by != null else "", m.transform_counter])
+		parts.append("B|" + ";".join(ms))
+	parts.append("G|%d|%s|%d|%s|%d" % [current_phase, active_player_id, turn_number, winner_id, _next_choice_id])
+	parts.append("R|%d|%d" % [rng.seed, rng.state])
+	parts.append("C|" + JSON.stringify(pending_choice) + "|" + JSON.stringify(_choice_queue))
+	for qn in PENDING_QUEUES:
+		parts.append("Q|%s|%s" % [qn, JSON.stringify(get(qn))])
+	parts.append("T|" + JSON.stringify(temp_shielded) + "|" + JSON.stringify(growvin_granted) + "|" + ",".join(death_reinforce_used))
+	return "|".join(parts).sha256_text()
 
 # --- Validated command boundary ---
 #
@@ -420,6 +645,8 @@ const CMD_PLAY_CREATURE := "play_creature"
 const CMD_PLAY_STRATAGEM := "play_stratagem"
 const CMD_ATTACK := "attack"
 const CMD_END_TURN := "end_turn"
+const CMD_ANSWER_CHOICE := "answer_choice"
+const CMD_CONCEDE := "concede"
 
 ## Unknown ids map to null rather than silently falling through to the
 ## opponent the way _get_player_by_id() does - a command from an unrecognised
@@ -452,14 +679,26 @@ func validate(cmd: Dictionary) -> Dictionary:
 		return _reject("missing command type")
 	if current_phase == Phase.GAME_OVER:
 		return _reject("game is over")
-	if has_pending_choice():
-		# The match cannot be driven forward around an unanswered decision.
-		return _reject("a pending choice must be answered first")
 
 	var actor_id: String = str(cmd.get("actor", ""))
 	var actor := find_player(actor_id)
 	if actor == null:
 		return _reject("unknown actor")
+
+	# These two are not "turn actions": the owner of an open choice answers it
+	# whoever's turn it is, and either player may concede at any time.
+	if cmd_type == CMD_CONCEDE:
+		return {"ok": true, "actor": actor}
+	if cmd_type == CMD_ANSWER_CHOICE:
+		if not has_pending_choice():
+			return _reject("no choice is pending")
+		if str(pending_choice["player_id"]) != actor_id:
+			return _reject("that choice is not yours to answer")
+		return {"ok": true, "actor": actor}
+
+	if has_pending_choice():
+		# The match cannot be driven forward around an unanswered decision.
+		return _reject("a pending choice must be answered first")
 	if actor_id != active_player_id:
 		return _reject("not this player's turn")
 
@@ -550,6 +789,13 @@ func _validate_attack(actor: PlayerState, cmd: Dictionary) -> Dictionary:
 ## produced ("minion" for a creature play), so callers that need the result
 ## do not have to re-find it.
 func execute(cmd: Dictionary) -> Dictionary:
+	var result := _execute_validated(cmd)
+	if result.get("ok", false):
+		resolve_to_quiescence()
+	result["events"] = drain_events()
+	return result
+
+func _execute_validated(cmd: Dictionary) -> Dictionary:
 	var check := validate(cmd)
 	if not check["ok"]:
 		return check
@@ -571,6 +817,11 @@ func execute(cmd: Dictionary) -> Dictionary:
 		CMD_ATTACK:
 			attack(check["attacker"], check["target"], check["target_player_id"])
 			return {"ok": true}
+		CMD_ANSWER_CHOICE:
+			return answer_choice(str(cmd.get("choice_id", "")), str(cmd.get("selection", "")))
+		CMD_CONCEDE:
+			concede(actor.player_id)
+			return {"ok": true}
 	return _reject("unhandled command type")
 
 # --- Actions ---
@@ -588,6 +839,7 @@ func play_creature(acting_player_id: String, card: CardData, at_index: int = -1)
 		if node_modifier_ability == Abilities.RUSH:
 			minion.is_exhausted = false
 	acting.place_minion(minion, at_index)
+	_emit("play", {"owner": acting_player_id, "uid": card.uid, "card_id": card.id, "kind": "creature", "instance_id": minion.instance_id})
 	Abilities.fire_on_play(minion, acting, self)
 	if minion.has_ability(Abilities.MECH) and minion in acting.board:
 		var has_growvin := false
@@ -718,6 +970,7 @@ func play_stratagem(acting_player_id: String, card: CardData,
 	if not acting.play_card_from_hand(card):
 		return false
 	acting.graveyard.append(card)
+	_emit("play", {"owner": acting_player_id, "uid": card.uid, "card_id": card.id, "kind": "stratagem", "target": target_minion.instance_id if target_minion != null else "", "target_player": target_player_id})
 	_apply_stratagem(card, target_minion, target_player_id, acting_player_id)
 	return true
 
@@ -1329,6 +1582,7 @@ func _remove_dead_minions() -> void:
 			var p: PlayerState = entry["owner"]
 			p.remove_minion(m)
 			p.graveyard.append(m.data)
+			_emit("death", {"instance_id": m.instance_id, "owner": p.player_id, "card_id": m.data.id, "index": entry["index"]})
 
 		# 3. Only now resolve what each death triggers.
 		for entry in dying:
@@ -1351,13 +1605,29 @@ func _remove_dead_minions() -> void:
 			if minion.has_ability(Abilities.GROWVIN_AURA):
 				reconcile_lasting_effects(p.player_id)
 
+## A player gives up: the other side wins immediately.
+func concede(loser_id: String) -> void:
+	if current_phase == Phase.GAME_OVER:
+		return
+	winner_id = _opponent_id(loser_id)
+	current_phase = Phase.GAME_OVER
+	end_reason = "conceded"
+	cancel_pending_choice()
+	_emit("game_over", {"winner": winner_id, "reason": end_reason})
+
 func _check_win_condition() -> void:
+	if current_phase == Phase.GAME_OVER:
+		return
 	if opponent.is_dead():
 		winner_id = player.player_id
 		current_phase = Phase.GAME_OVER
+		end_reason = "completed"
+		_emit("game_over", {"winner": winner_id, "reason": end_reason})
 	elif player.is_dead():
 		winner_id = opponent.player_id
 		current_phase = Phase.GAME_OVER
+		end_reason = "completed"
+		_emit("game_over", {"winner": winner_id, "reason": end_reason})
 
 func get_rummage_options(player_id: String, max_cost: int = -1, type_filter: String = "", allow_equal_cost: bool = false) -> Array[CardData]:
 	var p = _get_player_by_id(player_id)
@@ -1451,7 +1721,10 @@ func duplicate_for_sim() -> GameState:
 	gs.rng.seed = rng.seed
 	gs.rng.state = rng.state
 	gs.pending_choice = pending_choice.duplicate(true)
+	gs._choice_queue = _choice_queue.duplicate(true)
 	gs._next_choice_id = _next_choice_id
+	gs.end_reason = end_reason
+	# events_enabled stays false: a simulation copy never emits events.
 	return gs
 
 ## Builds the view for ONE recipient: their own hand in full, the opponent's
@@ -1473,7 +1746,11 @@ func to_net_dict(for_player_id: String = "") -> Dictionary:
 		"winner_id": winner_id,
 		"host_state": host_state.to_net_dict(reveal_host),
 		"guest_state": guest_state.to_net_dict(reveal_guest),
-		"pending_choice": pending_choice.duplicate(true),
+		# Only the player who must answer sees the open choice (its options
+		# may point at things the other side should not be asked about).
+		"pending_choice": pending_choice.duplicate(true) if (for_player_id.is_empty() or str(pending_choice.get("player_id", "")) == for_player_id) else {},
+		"choice_queue": _choice_queue.duplicate(true) if for_player_id.is_empty() else [],
+		"end_reason": end_reason,
 		"pending_rummages": pending_rummages.duplicate(true),
 		"pending_tank_shots": pending_tank_shots.duplicate(),
 		"pending_nulls": pending_nulls.duplicate(true),
@@ -1495,6 +1772,7 @@ static func from_net_dict(d: Dictionary, my_id: String) -> GameState:
 	gs.turn_number = int(d["turn_number"])
 	gs.winner_id = str(d.get("winner_id", ""))
 	gs.pending_choice = (d.get("pending_choice", {}) as Dictionary).duplicate(true)
+	gs.end_reason = str(d.get("end_reason", ""))
 	gs.pending_rummages.clear()
 	for r in d.get("pending_rummages", []):
 		gs.pending_rummages.append(r)

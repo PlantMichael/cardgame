@@ -149,6 +149,14 @@ resolve. Add a `--match-host` CLI hook that never instantiates `Board`,
 and cold start; if `preload` of textures forces large assets, split card art
 and UI textures out of the rules-only path or export a server PCK.
 
+**Findings so far (T004/T005)**:
+- `Net`, `Auth` and `Economy` only connect signals in `_ready()`; `Net` opens a
+  socket only when `connect_to_relay()` is called, so the autoloads are inert in
+  `--match-host` mode. `--core-tests` already runs headless with them loaded.
+- A `server/Dockerfile` is written (pinned Godot Linux binary, build-time
+  `--import`) but **has not been built**: Docker was not available where it was
+  authored. Image size and cold start are still unmeasured.
+
 **Alternatives rejected**: exporting a Linux dedicated-server build (extra
 export pipeline for a first release).
 

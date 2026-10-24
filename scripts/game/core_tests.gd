@@ -1338,6 +1338,148 @@ static func _test_snowdrift_matriarch() -> void:
 	gs4._remove_dead_minions()
 	_eq("a Reinforce return does not fire on-play healing", hurt.current_health, 2)
 
+## Rules-core mechanisms for server-authoritative play (spec 003, Phase A):
+## determinism guard, generalized choices, events, defaults, state hash.
+
+## Source text of a rules script with comments removed, for the determinism scan.
+static func _code_only(path: String) -> String:
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return ""
+	var out := PackedStringArray()
+	for line in f.get_as_text().split("\n"):
+		var hash_at := line.find("#")
+		# A '#' inside a quoted string (e.g. "%s#%d") is not a comment; only
+		# strip when what precedes it has an even number of quotes.
+		while hash_at >= 0 and line.substr(0, hash_at).count("\"") % 2 == 1:
+			hash_at = line.find("#", hash_at + 1)
+		out.append(line.substr(0, hash_at) if hash_at >= 0 else line)
+	return "\n".join(out)
+
+static func _test_determinism_guard() -> void:
+	print("[determinism guard]")
+	var forbidden := ["randi(", "randf(", "randi_range(", "randf_range(", ".shuffle(", "pick_random(",
+		"Time.get_", "OS.get_ticks", "OS.get_unix"]
+	for path in ["res://scripts/game/game_state.gd", "res://scripts/game/player_state.gd",
+			"res://scripts/game/minion.gd", "res://scripts/game/abilities.gd"]:
+		# The match's own generator (rng.randi_range(...)) is exactly what rules
+		# are supposed to use; only the GLOBAL functions are forbidden.
+		var code := _code_only(path)
+		for own in ["rng.randi_range(", "rng.randi(", "rng.randf_range(", "rng.randf("]:
+			code = code.replace(own, "")
+		_check("%s was readable" % path, not code.is_empty())
+		for token in forbidden:
+			_check("%s never calls %s" % [path.get_file(), token], not code.contains(token),
+				"rule code must use GameState.rand_*/shuffle_array and no wall clock")
+
+static func _test_choice_mechanics(card_id: String) -> void:
+	print("[choices: queue, command, decline, default]")
+	var gs := _fresh_match(card_id)
+	var a := gs.player.player_id
+	var b := gs.opponent.player_id
+	_put_on_board(gs, a, card_id)
+	var m1 := _put_on_board(gs, a, "gen_015")  # Frontier Medic
+	var m2 := _put_on_board(gs, a, "gen_015")
+	Abilities.fire_on_play(m1, gs.player, gs)
+	Abilities.fire_on_play(m2, gs.player, gs)
+	_check("the first request opened a choice", gs.has_pending_choice())
+	var first_id := str(gs.pending_choice["id"])
+	_eq("it is a declinable target pick", [gs.pending_choice["kind"], gs.pending_choice["allow_none"]], ["target", true])
+	_eq("the second request waits (queued, not lost)", gs._choice_queue.size(), 1)
+
+	# Commands: wrong owner, stale id, illegal selection are refused untouched.
+	var wrong := gs.execute({"type": "answer_choice", "actor": b, "choice_id": first_id, "selection": ""})
+	_check("the other player cannot answer", not wrong["ok"])
+	var stale := gs.execute({"type": "answer_choice", "actor": a, "choice_id": "choice-999", "selection": ""})
+	_check("a stale id is refused", not stale["ok"])
+	var illegal := gs.execute({"type": "answer_choice", "actor": a, "choice_id": first_id, "selection": "nope#1"})
+	_check("an illegal selection is refused", not illegal["ok"])
+	_eq("and the choice is still the same one", str(gs.pending_choice["id"]), first_id)
+	var other_cmd := gs.execute({"type": "end_turn", "actor": a})
+	_check("ordinary commands are refused while it is open", not other_cmd["ok"])
+
+	# Declining answers it and opens the queued one.
+	var declined := gs.execute({"type": "answer_choice", "actor": a, "choice_id": first_id, "selection": ""})
+	_check("declining is accepted", declined["ok"])
+	_check("the queued request opened next", gs.has_pending_choice() and str(gs.pending_choice["id"]) != first_id)
+	_eq("and the queue is empty", gs._choice_queue.size(), 0)
+
+	# Timeout: defaults resolve it and the turn ends.
+	var turn_before := gs.active_player_id
+	var timed := gs.apply_timeout(a)
+	_check("timeout resolved with defaults", timed["ok"] and not gs.has_pending_choice())
+	_check("and ended the actor's turn", gs.active_player_id != turn_before)
+
+	# Concede.
+	var gs2 := _fresh_match(card_id)
+	var conceded := gs2.execute({"type": "concede", "actor": gs2.opponent.player_id})
+	_check("a player may concede out of turn", conceded["ok"])
+	_eq("the other side wins", gs2.winner_id, gs2.player.player_id)
+	_eq("recorded as a concession", gs2.end_reason, "conceded")
+	_check("nothing is accepted afterwards", not gs2.execute({"type": "end_turn", "actor": gs2.player.player_id})["ok"])
+
+static func _test_event_feed(card_id: String) -> void:
+	print("[event feed]")
+	var gs := _fresh_match(card_id)
+	gs.set_events_enabled(true)
+	var a := gs.player.player_id
+	var creature := _hand_add(gs, a, card_id)
+	var r := gs.execute({"type": "play_creature", "actor": a, "card_uid": creature.uid, "at_index": -1})
+	_check("the play was accepted", r["ok"])
+	var types: Array = r["events"].map(func(e): return e["type"])
+	_check("a play event was produced", "play" in types)
+	_check("events are numbered in order", _event_numbers_increase(r["events"]))
+	var again := gs.execute({"type": "end_turn", "actor": a})
+	var types2: Array = again["events"].map(func(e): return e["type"])
+	_check("ending the turn emits turn_end and turn_start", "turn_end" in types2 and "turn_start" in types2)
+	_check("a refused command emits nothing", gs.execute({"type": "end_turn", "actor": a})["events"].is_empty())
+
+	# Per-seat filtering: the opponent's draw hides its identity.
+	var draw_event := {"type": "draw", "owner": a, "uid": "a-c9", "card_id": card_id, "n": 1}
+	var for_owner := GameState.filter_events_for(a, [draw_event])
+	var for_other := GameState.filter_events_for(gs.opponent.player_id, [draw_event])
+	_check("the owner sees their draw", for_owner[0].has("card_id") and for_owner[0].has("uid"))
+	_check("the opponent does not", not for_other[0].has("card_id") and not for_other[0].has("uid"))
+
+	# Draw events come from the real draw path.
+	var gs3 := _fresh_match(card_id)
+	gs3.set_events_enabled(true)
+	gs3.player.draw_card()
+	var drew := gs3.drain_events().filter(func(e): return e["type"] == "draw")
+	_check("a real draw produced a draw event", drew.size() == 1 and drew[0].has("uid"))
+
+	# Simulation copies are silent.
+	var copy := gs.duplicate_for_sim()
+	_check("a sim copy has events off", not copy.events_enabled)
+	copy.player.draw_card()
+	copy.execute({"type": "end_turn", "actor": copy.active_player_id})
+	_check("and emits none", copy.drain_events().is_empty())
+
+static func _event_numbers_increase(evts: Array) -> bool:
+	var last := 0
+	for e in evts:
+		if int(e["n"]) <= last:
+			return false
+		last = int(e["n"])
+	return true
+
+static func _test_state_hash(card_id: String) -> void:
+	print("[state hash]")
+	var gs := _fresh_match(card_id)
+	_put_on_board(gs, gs.player.player_id, card_id)
+	var twin := gs.duplicate_for_sim()
+	_eq("a copy has the same hash", twin.state_hash(), gs.state_hash())
+	var cmd := {"type": "end_turn", "actor": gs.active_player_id}
+	gs.execute(cmd)
+	_check("a change alters the hash", twin.state_hash() != gs.state_hash())
+	twin.execute(cmd)
+	_eq("the same command on the twin converges", twin.state_hash(), gs.state_hash())
+	# Hidden information is part of the hash (it is never sent, only compared).
+	var h_before := gs.state_hash()
+	gs.opponent.deck[0] = CardDatabase.get_card("gen_013")
+	_check("deck contents are covered", h_before != gs.state_hash())
+
+
 ## Handoff items 11/12, scenario 12: a payload sent to one player must not
 ## carry the other player's hidden information.
 static func _test_player_views(card_id: String) -> void:
@@ -1390,9 +1532,13 @@ static func _test_player_views(card_id: String) -> void:
 	var qm := _put_on_board(gs2, "host", "gen_016")
 	Abilities.fire_on_play(qm, gs2.player, gs2)
 	if gs2.has_pending_choice():
-		var mirror2 := GameState.from_net_dict(gs2.to_net_dict("guest"), "guest")
-		_check("a pending choice reaches the client", mirror2.has_pending_choice())
+		var owner_id := str(gs2.pending_choice["player_id"])
+		var other_id := "guest" if owner_id == "host" else "host"
+		var mirror2 := GameState.from_net_dict(gs2.to_net_dict(owner_id), owner_id)
+		_check("a pending choice reaches the client that must answer it", mirror2.has_pending_choice())
 		_eq("with the same id", str(mirror2.pending_choice["id"]), str(gs2.pending_choice["id"]))
+		var other_view := GameState.from_net_dict(gs2.to_net_dict(other_id), other_id)
+		_check("and is not shown to the other player", not other_view.has_pending_choice())
 
 # --- Entry point ----------------------------------------------------------
 
@@ -1428,6 +1574,10 @@ static func run() -> int:
 	_test_extraction_replay()
 	_test_whiteout()
 	_test_snowdrift_matriarch()
+	_test_determinism_guard()
+	_test_choice_mechanics(card_id)
+	_test_event_feed(card_id)
+	_test_state_hash(card_id)
 	_test_player_views(card_id)
 	print("CORE TESTS: %d checks, %d failed" % [_checks, _failures])
 	print("RESULT: %s" % ("PASS" if _failures == 0 else "FAIL"))
