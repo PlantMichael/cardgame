@@ -2413,13 +2413,53 @@ func show_transform_picker(options: Array[CardData]) -> CardData:
 ## opening hand is kept and play continues immediately.
 var auto_confirm_mulligan: bool = false
 
+## The mulligan shows the opening hand at the LARGE card size (it is the one
+## screen where reading every card matters most), shrunk only if a hand is ever
+## too wide for the screen.
+const MULLIGAN_MAX_ROW_WIDTH := 1700.0
+const MULLIGAN_CARD_GAP := 28.0
+const MULLIGAN_DEAL_TIME := 0.5
+const MULLIGAN_DEAL_GAP := 0.14
+const MULLIGAN_START_DIAMETER := 132.0
+
+## A green, round confirm button - same look at rest, hover and press.
+static func _make_round_start_button(diameter: float) -> Button:
+	var button := Button.new()
+	button.text = "START"
+	button.custom_minimum_size = Vector2(diameter, diameter)
+	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_font_size_override("font_size", 24)
+	button.add_theme_color_override("font_color", Color.WHITE)
+	button.add_theme_color_override("font_hover_color", Color.WHITE)
+	button.add_theme_color_override("font_pressed_color", Color(0.9, 1.0, 0.9))
+	button.add_theme_color_override("font_disabled_color", Color(0.8, 0.9, 0.8, 0.7))
+	button.add_theme_color_override("font_outline_color", Color(0.0, 0.25, 0.05))
+	button.add_theme_constant_override("outline_size", 5)
+	var states := {
+		"normal": Color(0.16, 0.68, 0.28),
+		"hover": Color(0.24, 0.80, 0.37),
+		"pressed": Color(0.10, 0.50, 0.20),
+		"disabled": Color(0.25, 0.45, 0.30),
+	}
+	for state in states:
+		var box := StyleBoxFlat.new()
+		box.bg_color = states[state]
+		box.set_corner_radius_all(int(diameter / 2.0))
+		box.border_color = Color(0.78, 1.0, 0.80)
+		box.set_border_width_all(5)
+		box.shadow_color = Color(0, 0, 0, 0.45)
+		box.shadow_size = 10
+		button.add_theme_stylebox_override(state, box)
+	return button
+
 func show_mulligan_screen(hand: Array[CardData]) -> Array[CardData]:
 	if auto_confirm_mulligan:
 		return [] as Array[CardData]
 	var overlay := _open_modal_overlay()
 
 	var bg = ColorRect.new()
-	bg.color = Color(0, 0, 0, 0.78)
+	bg.color = Color(0, 0, 0, 0.82)
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	overlay.add_child(bg)
@@ -2428,17 +2468,29 @@ func show_mulligan_screen(hand: Array[CardData]) -> Array[CardData]:
 	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-	panel.add_theme_constant_override("separation", 18)
+	panel.add_theme_constant_override("separation", 30)
 	overlay.add_child(panel)
 
 	var title = Label.new()
 	title.text = "Mulligan - click a card to replace it"
-	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_font_size_override("font_size", 34)
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_constant_override("outline_size", 6)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	panel.add_child(title)
 
+	# LARGE unless the row would not fit.
+	var card_scale: Vector2 = Card.SCALE_LARGE
+	var card_pixels: Vector2 = Card.PIXELS_LARGE
+	var row_width := hand.size() * (card_pixels.x + 14.0) + maxi(0, hand.size() - 1) * MULLIGAN_CARD_GAP
+	if row_width > MULLIGAN_MAX_ROW_WIDTH and hand.size() > 0:
+		var fit := MULLIGAN_MAX_ROW_WIDTH / row_width
+		card_scale *= fit
+		card_pixels *= fit
+	var wrapper_size := card_pixels + Vector2(14, 18)
+
 	var cards_row = HBoxContainer.new()
-	cards_row.add_theme_constant_override("separation", 14)
+	cards_row.add_theme_constant_override("separation", int(MULLIGAN_CARD_GAP))
 	cards_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	panel.add_child(cards_row)
 
@@ -2446,29 +2498,34 @@ func show_mulligan_screen(hand: Array[CardData]) -> Array[CardData]:
 	# two copies of the same card in hand can be marked independently.
 	var marked: Dictionary = {}
 	# card_data -> its Card node, so the Start handler below can pull marked
-	# cards out of cards_row and fly them to the deck (see PICKER_CARD_SIZE's
-	# comment for the enlarged sizing shared with the other pickers).
+	# cards out of cards_row and fly them to the deck.
 	var card_nodes: Dictionary = {}
+	var wrappers: Array[Button] = []
 
 	for card_data in hand:
 		var wrapper = Button.new()
-		wrapper.custom_minimum_size = PICKER_WRAPPER_SIZE
+		wrapper.custom_minimum_size = wrapper_size
 		wrapper.flat = true
+		wrapper.disabled = true  # until the deal finishes
 		cards_row.add_child(wrapper)
+		wrappers.append(wrapper)
 		var card = CardScene.instantiate()
-		card.scale = PICKER_CARD_SCALE
+		card.scale = card_scale
 		card.position = Vector2(0, 0)
 		wrapper.add_child(card)
 		card.setup(card_data)
 		card.input_pickable = false
 		card.set_process_input(false)
 		_ignore_control_input(card)
+		card.visible = false  # revealed by the deal below
 		card_nodes[card_data] = card
 
 		var x_label = Label.new()
 		x_label.text = "X"
-		x_label.add_theme_font_size_override("font_size", 88)
+		x_label.add_theme_font_size_override("font_size", 150)
 		x_label.add_theme_color_override("font_color", Color(1.0, 0.2, 0.2, 0.92))
+		x_label.add_theme_color_override("font_outline_color", Color.BLACK)
+		x_label.add_theme_constant_override("outline_size", 8)
 		x_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		x_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		x_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -2485,11 +2542,46 @@ func show_mulligan_screen(hand: Array[CardData]) -> Array[CardData]:
 			card.set_playable(not now_marked)
 		)
 
-	var start_button = Button.new()
-	start_button.text = "Start"
-	start_button.custom_minimum_size = Vector2(160, 44)
-	start_button.add_theme_font_size_override("font_size", 18)
+	var start_button := _make_round_start_button(MULLIGAN_START_DIAMETER)
+	start_button.disabled = true
+	start_button.modulate.a = 0.0
 	panel.add_child(start_button)
+
+	# --- Deal the opening hand from the deck, one card at a time ---
+	# The container lays the row out on the next frames; flight paths are
+	# measured from the real slots, so wait for them.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var deck_center := Vector2(1690, 725) + Vector2(41, 60)
+	if is_instance_valid(_player_deck_icon):
+		deck_center = _player_deck_icon.global_position + Vector2(41, 60)
+	var deck_visual: Node2D = CardBackScene.instantiate()
+	deck_visual.scale = Vector2(0.75, 0.75)
+	deck_visual.position = deck_center - Vector2(41, 60)
+	overlay.add_child(deck_visual)
+	for i in hand.size():
+		if not is_instance_valid(overlay):
+			return [] as Array[CardData]
+		var card: Card = card_nodes[hand[i]]
+		var wrapper := wrappers[i]
+		card.visible = true
+		var rest_scale: Vector2 = card.scale
+		card.position = deck_center - wrapper.global_position - card_pixels * 0.15
+		card.scale = rest_scale * 0.3
+		card.modulate.a = 0.0
+		var tween := create_tween()
+		tween.set_parallel(true)
+		tween.tween_property(card, "position", Vector2.ZERO, MULLIGAN_DEAL_TIME).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tween.tween_property(card, "scale", rest_scale, MULLIGAN_DEAL_TIME).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tween.tween_property(card, "modulate:a", 1.0, MULLIGAN_DEAL_TIME * 0.4)
+		await tween.finished
+		await get_tree().create_timer(MULLIGAN_DEAL_GAP).timeout
+	if is_instance_valid(deck_visual):
+		deck_visual.queue_free()
+	for wrapper in wrappers:
+		wrapper.disabled = false
+	start_button.disabled = false
+	create_tween().tween_property(start_button, "modulate:a", 1.0, 0.25)
 
 	await start_button.pressed
 	start_button.disabled = true
