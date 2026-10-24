@@ -2,7 +2,7 @@
 // The relay glue: flag handling, connection adapters, size cap and routing.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { Authoritative, isEnabled } = require('../authoritative/relay_wire');
+const { Authoritative, isEnabled, configFromEnv } = require('../authoritative/relay_wire');
 const { MAX_FRAME_BYTES } = require('../authoritative/protocol');
 
 function fakeManager() {
@@ -54,4 +54,10 @@ test('pairing passes only player ids and deck names; ownership follows the manag
   assert.deepEqual(m.calls[0][1], { matchId: 'rk_1', a: { playerId: 1, deckName: 'g' }, b: { playerId: 2, deckName: 'c' } });
   assert.equal(a.owns('rk_known'), true);
   assert.equal(a.owns('rk_other'), false);
+});
+
+test('operator settings come from the environment and ignore junk', () => {
+  assert.deepEqual(configFromEnv({}), {});
+  assert.deepEqual(configFromEnv({ RANKED_MAX_LIVE_MATCHES: '40', RANKED_TURN_SECONDS: '60' }), { maxLiveMatches: 40, turnSeconds: 60 });
+  assert.deepEqual(configFromEnv({ RANKED_MAX_LIVE_MATCHES: 'lots', RANKED_TURN_SECONDS: '-5', RANKED_GRACE_SECONDS: '0' }), {});
 });

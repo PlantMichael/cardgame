@@ -11,6 +11,22 @@ const { makeSettler } = require('./settle');
 const { loadCards } = require('./decks');
 const { MAX_FRAME_BYTES } = require('./protocol');
 
+/** Tunables from the environment; anything unset keeps the manager's default (FR-023). */
+function configFromEnv(env = process.env) {
+  const map = {
+    RANKED_MAX_LIVE_MATCHES: 'maxLiveMatches',
+    RANKED_TURN_SECONDS: 'turnSeconds',
+    RANKED_MULLIGAN_SECONDS: 'mulliganSeconds',
+    RANKED_GRACE_SECONDS: 'graceSeconds',
+  };
+  const out = {};
+  for (const [key, name] of Object.entries(map)) {
+    const n = Number(env[key]);
+    if (env[key] !== undefined && Number.isFinite(n) && n > 0) out[name] = n;
+  }
+  return out;
+}
+
 const MATCH_TYPES = new Set(['match_join', 'match_command', 'match_mulligan', 'match_concede', 'match_ping']);
 
 function isEnabled(env = process.env) {
@@ -42,6 +58,7 @@ class Authoritative {
         host: this.host,
         cards: loadCards(),
         settle: makeSettler(this.pool),
+        config: configFromEnv(),
         log: this.log,
       });
       await this.host.start(); // 'ready' triggers manager.resume() for matches in flight
@@ -102,4 +119,4 @@ class Authoritative {
   }
 }
 
-module.exports = { Authoritative, isEnabled, MATCH_TYPES };
+module.exports = { Authoritative, isEnabled, configFromEnv, MATCH_TYPES };
