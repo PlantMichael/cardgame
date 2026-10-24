@@ -202,6 +202,8 @@ func _ready() -> void:
 	_style_combat_log_panel()
 	_create_decline_button()
 	set_process_input(true)
+	_fit_to_viewport()
+	get_viewport().size_changed.connect(_fit_to_viewport)
 	# Board.tscn still carries an older hand-set scale (1.5); the placement math
 	# below assumes the LARGE preset, so apply it rather than trust the scene.
 	preview_card.apply_size(Card.Size.LARGE)
@@ -302,6 +304,27 @@ func _style_center_bar() -> void:
 	turn_label.add_theme_color_override("font_color", Color(0.92, 0.87, 0.75))
 	turn_label.add_theme_constant_override("outline_size", 3)
 	turn_label.add_theme_color_override("font_outline_color", Color.BLACK)
+
+## The board is laid out in a fixed 1920x1080 design space. In the browser the
+## project runs with the "expand" stretch aspect (see Main), so a window wider
+## or taller than 16:9 gets MORE canvas instead of black bars - this centers
+## the 1920x1080 layout inside it and lets the background cover the extra. With
+## the default "keep" aspect (desktop/editor) the canvas is exactly 1920x1080
+## and the offset is zero, so nothing changes there.
+const DESIGN_SIZE := Vector2(1920, 1080)
+func _fit_to_viewport() -> void:
+	var vp := get_viewport_rect().size
+	position = ((vp - DESIGN_SIZE) * 0.5).max(Vector2.ZERO).floor()
+	var bg := get_node_or_null("Background") as Control
+	if bg != null:
+		# Placed explicitly (top-left anchored) rather than anchored full-rect:
+		# a Control under a Node2D does not re-resolve its anchors when the
+		# viewport grows, which left a strip of bare window on the far side.
+		bg.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		bg.offset_left = -position.x
+		bg.offset_top = -position.y
+		bg.offset_right = -position.x + vp.x
+		bg.offset_bottom = -position.y + vp.y
 
 func _style_combat_log_panel() -> void:
 	var style := StyleBoxFlat.new()
@@ -907,7 +930,7 @@ func _show_card_preview(data: CardData, minion: Minion = null, source_rect: Rect
 			px = source_rect.position.x - _PREVIEW_W - _PREVIEW_PAD
 		var py: float = source_rect.get_center().y - _PREVIEW_H * 0.5
 		py = clamp(py, 0.0, vp.y - _PREVIEW_H - _PREVIEW_BOTTOM_MARGIN)
-		card_preview_zone.position = Vector2(px, py)
+		card_preview_zone.global_position = Vector2(px, py)
 	preview_card.visible = true
 	preview_card.modulate = Color(1, 1, 1, 1)
 
@@ -1012,11 +1035,12 @@ func _build_keyword_blocks() -> void:
 	if _keyword_vbox.get_child_count() == 0:
 		return
 	var vp = get_viewport_rect().size
-	var bx = card_preview_zone.position.x + _PREVIEW_W + _KEYWORD_GAP
+	var zone_pos := card_preview_zone.global_position
+	var bx = zone_pos.x + _PREVIEW_W + _KEYWORD_GAP
 	if bx + _KEYWORD_W > vp.x:
-		bx = card_preview_zone.position.x - _KEYWORD_W - _KEYWORD_GAP
-	var by = lerp(card_preview_zone.position.y, _keyword_source_rect.position.y, 0.5) if _keyword_source_rect.size != Vector2.ZERO else card_preview_zone.position.y
-	_keyword_vbox.position = Vector2(bx, by)
+		bx = zone_pos.x - _KEYWORD_W - _KEYWORD_GAP
+	var by = lerp(zone_pos.y, _keyword_source_rect.position.y, 0.5) if _keyword_source_rect.size != Vector2.ZERO else zone_pos.y
+	_keyword_vbox.global_position = Vector2(bx, by)
 
 func _clear_keyword_blocks() -> void:
 	for child in _keyword_vbox.get_children():
@@ -2002,7 +2026,7 @@ func _animate_reinforce_drop(card: Card) -> void:
 ## before its effect (or its arrival on the battlefield) lands.
 func announce_card(card_data: CardData, hold_time: float = 0.8) -> void:
 	var vp: Vector2 = get_viewport_rect().size
-	card_preview_zone.position = Vector2(vp.x - _PREVIEW_W - _PREVIEW_PAD, (vp.y - _PREVIEW_H - _PREVIEW_BOTTOM_MARGIN) * 0.5)
+	card_preview_zone.global_position = Vector2(vp.x - _PREVIEW_W - _PREVIEW_PAD, (vp.y - _PREVIEW_H - _PREVIEW_BOTTOM_MARGIN) * 0.5)
 	_show_card_preview(card_data)
 	await get_tree().create_timer(hold_time).timeout
 	preview_card.modulate = Color(1, 1, 1, 0)

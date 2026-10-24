@@ -48,6 +48,10 @@ Every card on screen is the same `Card.tscn`, shown at one of exactly four prese
 - `rendering/textures/canvas_textures/default_texture_filter=2` (Nearest Mipmap) is set project-wide, and `mipmaps/generate=true` is on for everything in `assets/card_assets/` and the per-faction card-art folders. Both halves matter: the art is authored far bigger than the slot it lands in (a 1254px mana orb into a 29-72px slot, a 1042px frame into 132-330px), so without mipmaps any filter is just subsampling a fraction of the texels — nearest turns the orb into noise, linear turns it into mush. Mipmaps pick a correctly pre-averaged level; nearest then keeps it crisp rather than soft.
 - So: **any new card-facing art needs `mipmaps/generate=true` on its import**, or it will look wrong at card sizes. Don't override `texture_filter` per node without a reason.
 
+## Window shape (web)
+
+Board positions are absolute in a 1920x1080 design space. In the browser the viewport can be larger than that (expand aspect, set in `main.gd`), so any code placing something from a viewport size or a mouse/`get_global_rect()` position must use **global** coordinates (`global_position`), not `position` - `Board` is offset to center itself and the two differ there. Previews and keyword blocks already do.
+
 ## Rules commands
 
 - Player actions enter the rules through `GameState.execute(cmd)` only — human,

@@ -72,6 +72,12 @@ func _ready() -> void:
 	# board.gd's own targeting-cursor logic happened to fire its first
 	# Input.set_custom_mouse_cursor() call deep into an actual match.
 	Input.set_custom_mouse_cursor(CursorDefault, Input.CURSOR_ARROW, Vector2.ZERO)
+	# Browser only: fill whatever shape the page is instead of letterboxing the
+	# 1920x1080 layout with black bars. Desktop/editor keep the exact 16:9
+	# canvas (project.godot's default "keep"). Board centers its own layout in
+	# the extra space; see Board._fit_to_viewport().
+	if OS.has_feature("web"):
+		get_window().content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
 	if "--mcts-timing" in OS.get_cmdline_user_args():
 		_run_mcts_timing_cli()
 		return
