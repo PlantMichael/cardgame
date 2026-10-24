@@ -113,10 +113,10 @@ theme_override_constants/separation = 12
 alignment = 1
 
 [node name="CombatLogPanel" type="PanelContainer" parent="."]
-offset_left = 24.0
-offset_top = 300.0
-offset_right = 200.0
-offset_bottom = 720.0
+offset_left = 20.0
+offset_top = 190.0
+offset_right = 510.0
+offset_bottom = 860.0
 
 [node name="CombatLogScroll" type="ScrollContainer" parent="CombatLogPanel"]
 layout_mode = 2
@@ -125,7 +125,7 @@ horizontal_scroll_mode = 0
 [node name="CombatLogVBox" type="VBoxContainer" parent="CombatLogPanel/CombatLogScroll"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/separation = 2
+theme_override_constants/separation = 7
 
 [node name="CardPreviewZone" type="Control" parent="."]
 layout_mode = 3

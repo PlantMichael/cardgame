@@ -1858,15 +1858,100 @@ func _clear_selections() -> void:
 		hide_decline_button()
 		tank_shot_resolved.emit(null, "")
 
+const LOG_FONT_SIZE := 17
+const LOG_MAX_ENTRIES := 400
+const LOG_NAME_COLOR := "#ffd36a"
+const LOG_TEXT_COLOR := Color(0.93, 0.93, 0.95)
+const LOG_HEADER_COLOR := Color(0.72, 0.58, 0.25)
+
+## Matches any catalog card name as a whole phrase, longest first so "Commander
+## Maurice, Local Legend" wins over a shorter name inside it. Built once, on
+## first use (the catalog autoload is ready by then).
+var _log_name_regex: RegEx = null
+var _log_name_to_id: Dictionary = {}
+
+func _build_log_name_regex() -> void:
+	_log_name_regex = RegEx.new()
+	var names: Array[String] = []
+	for card in CardDatabase.get_all_cards():
+		if card.card_name.is_empty() or _log_name_to_id.has(card.card_name):
+			continue
+		_log_name_to_id[card.card_name] = card.id
+		names.append(card.card_name)
+	names.sort_custom(func(a: String, b: String): return a.length() > b.length())
+	var escaped: Array[String] = []
+	for n in names:
+		var e := n
+		for ch in ["\\", ".", "+", "*", "?", "(", ")", "[", "]", "{", "}", "|", "^", "$"]:
+			e = e.replace(ch, "\\" + ch)
+		escaped.append(e)
+	if escaped.is_empty():
+		_log_name_regex = null
+		return
+	_log_name_regex.compile("(?<![A-Za-z0-9])(?:" + "|".join(escaped) + ")(?![A-Za-z0-9])")
+
+static func _bb_escape(text: String) -> String:
+	return text.replace("[", "[lb]")
+
+## BBCode for one log line: every known card name becomes a gold link whose
+## meta is the card id (hovering it shows the card, see _on_log_meta_hover).
+func _log_markup(text: String) -> String:
+	if _log_name_regex == null and _log_name_to_id.is_empty():
+		_build_log_name_regex()
+	if _log_name_regex == null:
+		return _bb_escape(text)
+	var out := ""
+	var last := 0
+	for m in _log_name_regex.search_all(text):
+		out += _bb_escape(text.substr(last, m.get_start() - last))
+		var matched := m.get_string()
+		out += "[url=%s][color=%s]%s[/color][/url]" % [_log_name_to_id.get(matched, ""), LOG_NAME_COLOR, _bb_escape(matched)]
+		last = m.get_end()
+	out += _bb_escape(text.substr(last))
+	return out
+
 func log_action(text: String) -> void:
-	var label = Label.new()
-	label.text = text
-	label.add_theme_font_size_override("font_size", 11)
+	var is_header := text.begins_with("---")
+	var label := RichTextLabel.new()
+	label.bbcode_enabled = true
+	label.fit_content = true
+	label.scroll_active = false
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.size_flags_horizontal = Control.SIZE_FILL | Control.SIZE_EXPAND
+	label.add_theme_font_size_override("normal_font_size", LOG_FONT_SIZE)
+	label.add_theme_color_override("default_color", LOG_HEADER_COLOR if is_header else LOG_TEXT_COLOR)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 3)
+	if is_header:
+		label.text = "[center]%s[/center]" % _bb_escape(text)
+	else:
+		label.text = _log_markup(text)
+		label.meta_hover_started.connect(_on_log_meta_hover)
+		label.meta_hover_ended.connect(_on_log_meta_hover_ended)
 	combat_log_vbox.add_child(label)
+	while combat_log_vbox.get_child_count() > LOG_MAX_ENTRIES:
+		var oldest := combat_log_vbox.get_child(0)
+		combat_log_vbox.remove_child(oldest)
+		oldest.queue_free()
+	# fit_content sizes the label a frame after it is added.
 	await get_tree().process_frame
-	combat_log_scroll.scroll_vertical = combat_log_scroll.get_v_scroll_bar().max_value
+	await get_tree().process_frame
+	if is_instance_valid(combat_log_scroll):
+		combat_log_scroll.scroll_vertical = int(combat_log_scroll.get_v_scroll_bar().max_value)
+
+## Hovering a card name in the log shows that card beside the log, with its
+## keyword tooltips, exactly like hovering it on the board.
+func _on_log_meta_hover(meta: Variant) -> void:
+	var card_data: CardData = CardDatabase.get_card(str(meta))
+	if card_data == null:
+		return
+	var panel_rect: Rect2 = $CombatLogPanel.get_global_rect()
+	var mouse_y := get_viewport().get_mouse_position().y
+	_hover_card = null
+	_show_card_preview(card_data, null, Rect2(panel_rect.position.x, mouse_y - 1.0, panel_rect.size.x, 2.0))
+
+func _on_log_meta_hover_ended(_meta: Variant) -> void:
+	_hide_card_preview()
 
 func _blink_card_green(card: Card) -> void:
 	var tween = card.create_tween().set_loops(3)
