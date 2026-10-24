@@ -4,7 +4,7 @@
   "main": "relay.js",
   "scripts": {
     "start": "node relay.js",
-    "test": "node --test test/"
+    "test": "node --test \"test/*.test.js\""
   },
   "dependencies": {
     "pg": "^8.22.0",
