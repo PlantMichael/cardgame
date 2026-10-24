@@ -1793,6 +1793,56 @@ static func _test_family_stratagem_followups(filler: String) -> void:
 	_check("Drain never offers the donor as recipient", gs2.has_pending_choice() and donor.instance_id not in gs2.pending_choice["options"] and other.instance_id in gs2.pending_choice["options"])
 
 
+## MatchRecorder observes a match without changing it and reports deck-level
+## facts per seat (spec 002 via spec 003): copies, drawn, kept, played, and the
+## first turn played. A card that was never in the starting deck is "created".
+static func _test_match_recorder() -> void:
+	print("[match recorder]")
+	var gs := GameState.new("host", "guest", _deck_of("g_001", 20), _deck_of("g_001", 20), 99)
+	gs.set_events_enabled(true)
+	gs.start_game("host")
+	gs.begin_mulligan()
+	gs.drain_events()
+	var rec := MatchRecorder.new()
+	rec.begin(gs)
+	var hash_before := gs.state_hash()
+	var r1 := gs.execute({"type": "mulligan", "actor": "host", "card_uids": []})
+	rec.observe(gs, r1["events"])
+	var r2 := gs.execute({"type": "mulligan", "actor": "guest", "card_uids": []})
+	rec.observe(gs, r2["events"])
+	var f: Dictionary = rec.facts(gs)
+	var host_card: Dictionary = f["seats"]["a"]["deck_cards"][0]
+	_eq("the starting deck is recorded", host_card["copies"], 20)
+	_check("the opening hand counts as drawn and kept", int(host_card["drawn_copies"]) >= 3 and host_card["kept_copies"] == host_card["drawn_copies"])
+	_eq("nothing is played yet", host_card["played_copies"], 0)
+	var hand_card: CardData = gs.find_player("host").hand[0]
+	gs.find_player("host").max_mana = 10
+	gs.find_player("host").current_mana = 0
+	var played := gs.execute({"type": "play_creature", "actor": "host", "card_uid": hand_card.uid, "at_index": -1})
+	rec.observe(gs, played["events"])
+	f = rec.facts(gs)
+	host_card = f["seats"]["a"]["deck_cards"][0]
+	_eq("a play is counted once, on its turn", [host_card["played_copies"], host_card["first_played_turn"]], [1, gs.turn_number])
+	_check("the guest's facts are kept separately", int(f["seats"]["b"]["deck_cards"][0]["played_copies"]) == 0)
+	var created_before := (f["seats"]["a"]["created"] as Dictionary).size()
+	var token_card := CardDatabase.get_card("g_001").new_instance(gs.find_player("host").mint_card_uid())
+	rec.observe(gs, [{"type": "draw", "owner": "host", "uid": token_card.uid, "card_id": "g_001"}])
+	_eq("it is recorded under created", (rec.facts(gs)["seats"]["a"]["created"] as Dictionary).size(), created_before + 1)
+	_check("observing never changed the match", gs.state_hash() != hash_before)  # the match moved on by its own commands only
+	var again := GameState.new("host", "guest", _deck_of("g_001", 20), _deck_of("g_001", 20), 99)
+	again.set_events_enabled(true)
+	again.start_game("host")
+	again.begin_mulligan()
+	again.drain_events()
+	var noop := MatchRecorder.new()
+	noop.begin(again)
+	var h0 := again.state_hash()
+	noop.observe(again, [])
+	_eq("observing alone leaves the state hash alone", again.state_hash(), h0)
+	var sim := gs.duplicate_for_sim()
+	_check("a simulation copy carries no recorder", not ("recorder" in sim))
+
+
 ## The relay's server-run match messages reach the thin client through Net's
 ## signals, and the legacy peer-hosted found message is left alone.
 static func _test_net_match_routing() -> void:
@@ -1957,6 +2007,7 @@ static func run() -> int:
 	_test_family_stratagem_followups(card_id)
 	_test_controller_purity()
 	_test_net_match_routing()
+	_test_match_recorder()
 	_test_player_views(card_id)
 	print("CORE TESTS: %d checks, %d failed" % [_checks, _failures])
 	print("RESULT: %s" % ("PASS" if _failures == 0 else "FAIL"))

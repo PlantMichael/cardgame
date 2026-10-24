@@ -175,3 +175,10 @@ Re-evaluated after `data-model.md` and `contracts/`:
   docs-table row for `.docs/stats.md`.
 - No principle is violated, so no entry beyond the Complexity Tracking table
   above is needed.
+
+## Amendment (spec 003)
+
+Server-run ranked matches supply **server-observed, verified** facts (the
+recorder runs inside the server's match host), replacing the two-report
+cross-check for those matches. Only casual/campaign/AI matches still use the
+client-reported path and its weaker labels.

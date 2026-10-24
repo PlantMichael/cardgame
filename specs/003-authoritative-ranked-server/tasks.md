@@ -196,14 +196,14 @@ expected facts, marked verified, regardless of anything clients send.
 
 ### Tests for User Story 4
 
-- [ ] T063 [P] [US4] `scripts/game/core_tests.gd` suite for `MatchRecorder` over the event feed: drawn/kept/played counts, first-played turn, created-vs-deck cards, and that `duplicate_for_sim()` copies stay silent; plus `server/test/stats_handoff.test.js` asserting the stored record is `verified`, `attested_by = 'server'`, with facts for both seats.
+- [x] T063 [P] [US4] `scripts/game/core_tests.gd` suite for `MatchRecorder` over the event feed: drawn/kept/played counts, first-played turn, created-vs-deck cards, and that `duplicate_for_sim()` copies stay silent; plus `server/test/stats_handoff.test.js` asserting the stored record is `verified`, `attested_by = 'server'`, with facts for both seats. (done: core MatchRecorder suite + `server/test/stats_handoff.test.js`; the "stored record is `verified`/`attested_by = server`" part waits for spec 002 ingestion, so the test asserts the facts are stored on the match)
 
 ### Implementation for User Story 4
 
-- [ ] T064 [P] [US4] Create `scripts/game/match_recorder.gd` (RefCounted, logic layer, as designed in `specs/002-card-stats-database`) consuming the event feed plus the starting decks and mulligan result; never attached to simulation copies.
-- [ ] T065 [US4] Attach the recorder inside `scripts/game/match_host.gd` for every `create`d match and return its `facts` in the `over` reply (IPC contract).
-- [ ] T066 [US4] In `server/authoritative/match_manager.js` persist the facts at match end: if spec 002's `stat_*` ingestion exists, call it with `status='verified'`, `attested_by='server'`; otherwise store them in a `facts JSONB` column added to `ranked_matches` so they can be imported later — keeping the two specs decoupled.
-- [ ] T067 [US4] Update `specs/002-card-stats-database/spec.md` and `plan.md` to state that server-run ranked matches are verified by construction (replacing the two-report cross-check for them) and that casual/campaign/AI keep the weaker labels.
+- [x] T064 [P] [US4] Create `scripts/game/match_recorder.gd` (RefCounted, logic layer, as designed in `specs/002-card-stats-database`) consuming the event feed plus the starting decks and mulligan result; never attached to simulation copies. (done)
+- [x] T065 [US4] Attach the recorder inside `scripts/game/match_host.gd` for every `create`d match and return its `facts` in the `over` reply (IPC contract). (done; recorder also fed during `replay`, so a resumed match keeps its facts)
+- [x] T066 [US4] In `server/authoritative/match_manager.js` persist the facts at match end: if spec 002's `stat_*` ingestion exists, call it with `status='verified'`, `attested_by='server'`; otherwise store them in a `facts JSONB` column added to `ranked_matches` so they can be imported later — keeping the two specs decoupled. (done via the `facts JSONB` fallback: spec 002 ingestion does not exist yet)
+- [x] T067 [US4] Update `specs/002-card-stats-database/spec.md` and `plan.md` to state that server-run ranked matches are verified by construction (replacing the two-report cross-check for them) and that casual/campaign/AI keep the weaker labels. (done)
 
 ---
 

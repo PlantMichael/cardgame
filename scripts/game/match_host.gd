@@ -155,7 +155,9 @@ func _build_match(msg: Dictionary) -> Dictionary:
 	gs.start_game(_internal(first))
 	gs.begin_mulligan()
 	gs.drain_events()  # the opening deal is shown through each seat's view
-	return {"ok": true, "gs": gs}
+	var rec := MatchRecorder.new()
+	rec.begin(gs)
+	return {"ok": true, "gs": gs, "rec": rec}
 
 func _op_create(msg: Dictionary) -> Dictionary:
 	var match_id := str(msg.get("match_id", ""))
@@ -167,7 +169,7 @@ func _op_create(msg: Dictionary) -> Dictionary:
 	if not built["ok"]:
 		return built
 	var gs: GameState = built["gs"]
-	_matches[match_id] = {"gs": gs, "seq": 0}
+	_matches[match_id] = {"gs": gs, "seq": 0, "rec": built["rec"]}
 	return _snapshot(match_id, "create", [])
 
 func _op_view(msg: Dictionary) -> Dictionary:
@@ -238,6 +240,7 @@ func _op_replay(msg: Dictionary) -> Dictionary:
 	if not built["ok"]:
 		return built
 	var gs: GameState = built["gs"]
+	var rec: MatchRecorder = built["rec"]
 	var hashes: Array = []
 	var index := 0
 	for action in msg.get("actions", []):
@@ -245,30 +248,36 @@ func _op_replay(msg: Dictionary) -> Dictionary:
 		var kind := str(action.get("kind", "command"))
 		var internal := _internal(seat)
 		if kind == "timeout_default":
+			var timed_out: Dictionary
 			if gs.mulligan_pending.get(internal, false):
-				gs.execute({"type": GameState.CMD_MULLIGAN, "actor": internal, "card_uids": []})
+				timed_out = gs.execute({"type": GameState.CMD_MULLIGAN, "actor": internal, "card_uids": []})
 			else:
-				gs.apply_timeout(internal)
+				timed_out = gs.apply_timeout(internal)
+			rec.observe(gs, timed_out.get("events", []))
 		else:
 			var cmd: Dictionary = (action.get("cmd", {}) as Dictionary).duplicate(true)
 			cmd["actor"] = internal
 			var r := gs.execute(cmd)
 			if not r["ok"]:
 				return {"ok": false, "error": "replay_refused", "at": index, "detail": str(r.get("error", ""))}
+			rec.observe(gs, r.get("events", []))
 		index += 1
 		if bool(msg.get("step_hashes", false)):
 			hashes.append(gs.state_hash())
-	_matches[match_id] = {"gs": gs, "seq": index}
+	_matches[match_id] = {"gs": gs, "seq": index, "rec": rec}
 	var out := {"ok": true, "seq": index, "state_hash": gs.state_hash(), "step_hashes": hashes}
 	if gs.current_phase == GameState.Phase.GAME_OVER:
-		out["over"] = _over_block(gs)
+		out["over"] = _over_block(gs, rec)
 	return out
 
 # --- replies -----------------------------------------------------------------
 
-static func _over_block(gs: GameState) -> Dictionary:
-	return {"winner": _seat_of(gs.winner_id) if not gs.winner_id.is_empty() else "",
+static func _over_block(gs: GameState, rec: MatchRecorder = null) -> Dictionary:
+	var block := {"winner": _seat_of(gs.winner_id) if not gs.winner_id.is_empty() else "",
 		"reason": gs.end_reason if not gs.end_reason.is_empty() else "completed"}
+	if rec != null:
+		block["facts"] = rec.facts(gs)
+	return block
 
 ## The reply shape shared by create / command / timeout: a view and a filtered
 ## event list per seat, the new sequence number and the state hash.
@@ -278,11 +287,13 @@ func _snapshot(match_id: String, kind: String, events: Array) -> Dictionary:
 	# Draws announced to the local player's UI are an in-process convenience;
 	# nothing here displays them, and they must not accumulate.
 	gs.pending_drawn_cards.clear()
+	var rec: MatchRecorder = m["rec"]
+	rec.observe(gs, events)
 	var out := {
 		"ok": true, "kind": kind, "seq": m["seq"], "state_hash": gs.state_hash(),
 		"views": {"a": gs.to_net_dict(HOST_ID), "b": gs.to_net_dict(GUEST_ID)},
 		"events": {"a": GameState.filter_events_for(HOST_ID, events), "b": GameState.filter_events_for(GUEST_ID, events)},
 	}
 	if gs.current_phase == GameState.Phase.GAME_OVER:
-		out["over"] = _over_block(gs)
+		out["over"] = _over_block(gs, rec)
 	return out

@@ -254,7 +254,10 @@ test('concede ends the match at once and settles once, from the server\'s own re
   await doMulligans(ctx, m);
   await ctx.manager.handleMessage(1, { type: 'match_concede', match_id: m.id }, m.ca);
   assert.equal(ctx.settled.length, 1);
-  assert.deepEqual(ctx.settled[0], { id: m.id, winner: 'b', endReason: 'conceded', facts: null });
+  assert.deepEqual({ ...ctx.settled[0], facts: undefined }, { id: m.id, winner: 'b', endReason: 'conceded', facts: undefined });
+  const facts = ctx.settled[0].facts;
+  assert.ok(facts && facts.seats.a.deck_cards.length > 0 && facts.seats.b.deck_cards.length > 0, 'the host verified facts reach settlement');
+  assert.deepEqual(ctx.store.matches.get(m.id).facts, facts, 'and are stored with the match for the stats database');
   assert.equal(m.cb.last('match_over').winner_is_me, true);
   assert.equal(m.ca.last('match_over').winner_is_me, false);
   assert.deepEqual(m.ca.last('match_over').ranked_outcome, { rank: 'moved' });

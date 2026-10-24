@@ -362,3 +362,15 @@ published releases (already anonymous) are unaffected.
   matchmaking, ranked ratings, rewards or card balance.
 - Matches played before this feature ships are not recoverable and are not
   part of any statistics.
+
+## Amendment (spec 003): server-run ranked matches
+
+Ranked matches run by the server (`specs/003-authoritative-ranked-server`) are
+**verified by construction**: the server's own rules host observes every draw,
+mulligan and play (`scripts/game/match_recorder.gd`) and its facts are stored
+with the match (`ranked_matches.facts`). For those matches the two-report
+cross-check and the `attested` flag do not apply - nothing is reported by a
+client. Casual, campaign and AI matches keep the weaker, client-reported labels
+described above. Facts are stored on the match row until the statistics
+ingestion in this spec exists, at which point they are imported with
+`status = 'verified'` and `attested_by = 'server'`.
