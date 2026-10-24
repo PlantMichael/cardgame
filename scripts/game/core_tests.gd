@@ -1793,6 +1793,42 @@ static func _test_family_stratagem_followups(filler: String) -> void:
 	_check("Drain never offers the donor as recipient", gs2.has_pending_choice() and donor.instance_id not in gs2.pending_choice["options"] and other.instance_id in gs2.pending_choice["options"])
 
 
+## The relay's server-run match messages reach the thin client through Net's
+## signals, and the legacy peer-hosted found message is left alone.
+static func _test_net_match_routing() -> void:
+	print("[net routing]")
+	var got := {"match": [], "server_found": [], "legacy_found": [], "refused": [], "settled": []}
+	var on_match := func(m: Dictionary) -> void: got["match"].append(str(m.get("type", "")))
+	var on_server := func(id: String, opp: String, rating: int) -> void: got["server_found"].append([id, opp, rating])
+	var on_legacy := func(_l: String, role: String, _o: String, _r: int) -> void: got["legacy_found"].append(role)
+	var on_refused := func(reason: String) -> void: got["refused"].append(reason)
+	var on_settled := func(ok: bool, _p: Dictionary) -> void: got["settled"].append(ok)
+	Net.match_message_received.connect(on_match)
+	Net.server_ranked_match_found.connect(on_server)
+	Net.ranked_match_found.connect(on_legacy)
+	Net.ranked_refused.connect(on_refused)
+	Net.ranked_result_received.connect(on_settled)
+	for t in ["match_view", "match_ack", "match_error", "match_clock", "match_over", "match_voided",
+			"opponent_disconnected", "opponent_reconnected"]:
+		Net._handle_incoming({"type": t, "match_id": "rk_1"})
+	_eq("every match message type is routed to the client", (got["match"] as Array).size(), 8)
+	Net._handle_incoming({"type": "ranked_match_found", "server_run": true, "match_id": "rk_1", "opponent_name": "Ann", "opponent_rating": 1200})
+	_eq("a server-run found message names the match, not a lobby", got["server_found"], [["rk_1", "Ann", 1200]])
+	_eq("and does not look like a peer-hosted match", (got["legacy_found"] as Array).size(), 0)
+	Net._handle_incoming({"type": "ranked_match_found", "lobby_id": "rk_2", "role": "host", "opponent_name": "Bo", "opponent_rating": 900})
+	_eq("a peer-hosted found message still takes the legacy path", got["legacy_found"], ["host"])
+	Net._handle_incoming({"type": "ranked_refused", "reason": "update_required"})
+	_eq("a refusal carries its reason", got["refused"], ["update_required"])
+	Net.publish_settled_outcome({"rank_lp": 12, "rating": 1010})
+	Net.publish_settled_outcome({})
+	_eq("a settled outcome feeds the existing result display; an empty one reads as a failed sync", got["settled"], [true, false])
+	Net.match_message_received.disconnect(on_match)
+	Net.server_ranked_match_found.disconnect(on_server)
+	Net.ranked_match_found.disconnect(on_legacy)
+	Net.ranked_refused.disconnect(on_refused)
+	Net.ranked_result_received.disconnect(on_settled)
+
+
 ## Controllers hold no rules (Constitution Principle I, spec 003): they send
 ## commands and answers and render what comes back. A controller that calls a
 ## rules mutator is deciding an outcome the server could not then control.
@@ -1920,6 +1956,7 @@ static func run() -> int:
 	_test_family_queues(card_id)
 	_test_family_stratagem_followups(card_id)
 	_test_controller_purity()
+	_test_net_match_routing()
 	_test_player_views(card_id)
 	print("CORE TESTS: %d checks, %d failed" % [_checks, _failures])
 	print("RESULT: %s" % ("PASS" if _failures == 0 else "FAIL"))

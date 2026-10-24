@@ -20,6 +20,15 @@ signal login_result(success: bool, message: String, profile: Dictionary)
 signal logged_out
 signal ranked_result_received(success: bool, profile: Dictionary)
 signal ranked_match_found(lobby_id: String, role: String, opponent_name: String, opponent_rating: int)
+## A ranked match the SERVER runs (specs/003-authoritative-ranked-server): there
+## is no host/guest role, the client only ever talks to the match by id.
+signal server_ranked_match_found(match_id: String, opponent_name: String, opponent_rating: int)
+## The queue refused this player: update_required, ranked_busy, invalid_deck,
+## already_in_match or ranked_unavailable.
+signal ranked_refused(reason: String)
+## Every message belonging to a server-run match (match_view, match_ack,
+## match_error, match_clock, match_over, match_voided, opponent_*).
+signal match_message_received(msg: Dictionary)
 signal campaign_match_found(lobby_id: String, role: String, opponent_name: String, size: int)
 signal save_deck_result(success: bool, message: String, deck_name: String)
 signal delete_deck_result(success: bool, message: String, deck_name: String)
@@ -122,7 +131,18 @@ func _handle_incoming(msg: Dictionary) -> void:
 				int(msg.get("amount_awarded", 0)),
 				str(msg.get("reason", ""))
 			)
+		"match_view", "match_ack", "match_error", "match_clock", "match_over", "match_voided", 		"opponent_disconnected", "opponent_reconnected":
+			match_message_received.emit(msg)
+		"ranked_refused":
+			ranked_refused.emit(str(msg.get("reason", "")))
 		"ranked_match_found":
+			if bool(msg.get("server_run", false)):
+				server_ranked_match_found.emit(
+					str(msg.get("match_id", "")),
+					str(msg.get("opponent_name", "")),
+					int(msg.get("opponent_rating", 1000))
+				)
+				return
 			ranked_match_found.emit(
 				str(msg.get("lobby_id", "")),
 				str(msg.get("role", "")),
@@ -183,8 +203,30 @@ func report_ranked_result(token: String, won: bool, opponent_rating: int = -1, m
 		msg["opponent_rating"] = opponent_rating
 	send(msg)
 
-func queue_ranked(token: String) -> void:
-	send({"type": "queue_ranked", "token": token})
+## `deck_name` names one of the player's saved (or starter) decks: the server
+## reads the card list itself and never accepts one from the client.
+func queue_ranked(token: String, deck_name: String = "", rules_version: int = 0) -> void:
+	var msg := {"type": "queue_ranked", "token": token}
+	if not deck_name.is_empty():
+		msg["deck_name"] = deck_name
+		msg["rules_version"] = rules_version
+	send(msg)
+
+## Sends a message addressed to a server-run match; the session token is added
+## here so callers never handle it.
+func send_match(msg: Dictionary) -> void:
+	var framed := msg.duplicate()
+	framed["token"] = Auth.token
+	send(framed)
+
+## A server-run match already settled the ladder: feed the same signal the
+## legacy result ack uses so the game-over screen and Auth update unchanged.
+## An empty outcome shows the existing "Rank sync failed" state.
+func publish_settled_outcome(outcome: Dictionary) -> void:
+	if outcome.is_empty():
+		ranked_result_received.emit(false, {})
+	else:
+		ranked_result_received.emit(true, _rank_fields_from(outcome))
 
 func cancel_ranked_queue(token: String) -> void:
 	send({"type": "cancel_ranked_queue", "token": token})

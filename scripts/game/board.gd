@@ -144,6 +144,8 @@ var _player_deck_icon: Node2D
 var _deck_count_label: Label
 
 var is_online: bool = false
+## True only in a server-run ranked match (see remote_match_client.gd).
+var concede_enabled: bool = false
 var _pause_overlay: CanvasLayer = null
 var _game_over: bool = false
 var _opponent_name_label: Label = null
@@ -169,6 +171,8 @@ signal end_turn_pressed
 signal decline_pressed
 signal restart_requested
 signal ranked_requeue_requested
+## A server-run ranked match: the pause menu offers Concede instead of Quit.
+signal concede_requested
 signal campaign_continue_requested
 signal challenge_target_selected(target: Minion)
 signal on_play_damage_target_selected(target_minion: Minion, target_player_id: String)
@@ -2870,9 +2874,18 @@ func _show_pause_menu() -> void:
 		)
 		vbox.add_child(restart_btn)
 
-	var quit_btn := _pause_btn("Quit to Menu")
-	quit_btn.pressed.connect(func(): get_tree().reload_current_scene())
-	vbox.add_child(quit_btn)
+	if concede_enabled:
+		# Leaving a server-run match is conceding it: the server settles it.
+		var concede_btn := _pause_btn("Concede")
+		concede_btn.pressed.connect(func():
+			_close_pause_menu()
+			concede_requested.emit()
+		)
+		vbox.add_child(concede_btn)
+	else:
+		var quit_btn := _pause_btn("Quit to Menu")
+		quit_btn.pressed.connect(func(): get_tree().reload_current_scene())
+		vbox.add_child(quit_btn)
 
 func _close_pause_menu() -> void:
 	if _pause_overlay != null:
@@ -2919,6 +2932,37 @@ func set_node_modifier_label(text: String) -> void:
 		_node_modifier_label.add_theme_font_size_override("font_size", 16)
 		layer.add_child(_node_modifier_label)
 	_node_modifier_label.text = text
+
+## A blocking message with one button back to the menu (a match that ended
+## without a result, such as a voided ranked match).
+func show_notice(text: String) -> void:
+	_game_over = true
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(root)
+	var bg := ColorRect.new()
+	bg.color = Color(0, 0, 0, 0.75)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(bg)
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	vbox.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	vbox.grow_vertical = Control.GROW_DIRECTION_BOTH
+	root.add_child(vbox)
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", 28)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(label)
+	var btn := Button.new()
+	btn.text = "Back to Menu"
+	btn.custom_minimum_size = Vector2(180, 48)
+	btn.pressed.connect(func(): get_tree().reload_current_scene())
+	vbox.add_child(btn)
 
 func show_game_over(won: bool, is_ranked: bool = false, old_bracket: int = 0,
 					 old_in_legend: bool = false, old_legend_rating: int = 0,

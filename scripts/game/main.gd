@@ -35,6 +35,14 @@ const RANKED_MATCH_COUNTDOWN_SEC := 5
 # of hijacking whatever search is active now.
 var _ranked_search_id: int = 0
 var _ranked_match_found_callable: Callable = Callable()
+# Server-run ranked matches (specs/003-authoritative-ranked-server): the found
+# message and any queue refusal arrive on their own signals.
+var _ranked_server_found_callable: Callable = Callable()
+var _ranked_refused_callable: Callable = Callable()
+## Name of the deck chosen for ranked. The server reads that deck's card list
+## itself; the client only ever names it.
+var _player_deck_name: String = ""
+var _remote_match: RemoteMatchClient = null
 var _ranked_searching: bool = false
 # Separate top-layer CanvasLayer (sibling of _canvas, not a child of it) so
 # the "Searching for opponent..."/"Searching for campaign opponent..."
@@ -1897,6 +1905,7 @@ func _on_ranked_pressed() -> void:
 			_player_deck_ids.clear()
 			for id in deck["card_ids"]:
 				_player_deck_ids.append(str(id))
+			_player_deck_name = str(deck.get("name", ""))
 			_clear_screen()
 			_show_ranked_start()
 	)
@@ -1994,14 +2003,22 @@ func _begin_ranked_search() -> void:
 	_show_queue_overlay("Searching for opponent...", _cancel_ranked_search, func() -> bool:
 		return _ranked_search_id == search_id
 	)
-	Auth.queue_ranked()
+	Auth.queue_ranked(_player_deck_name)
 	_ranked_match_found_callable = _on_ranked_match_found.bind(search_id)
 	Net.ranked_match_found.connect(_ranked_match_found_callable, CONNECT_ONE_SHOT)
+	_ranked_server_found_callable = _on_server_ranked_match_found.bind(search_id)
+	Net.server_ranked_match_found.connect(_ranked_server_found_callable, CONNECT_ONE_SHOT)
+	_ranked_refused_callable = _on_ranked_refused.bind(search_id)
+	Net.ranked_refused.connect(_ranked_refused_callable, CONNECT_ONE_SHOT)
 	get_tree().create_timer(RANKED_SEARCH_TIMEOUT_SEC).timeout.connect(_on_ranked_search_timeout.bind(search_id))
 
 func _disconnect_ranked_match_found() -> void:
 	if _ranked_match_found_callable.is_valid() and Net.ranked_match_found.is_connected(_ranked_match_found_callable):
 		Net.ranked_match_found.disconnect(_ranked_match_found_callable)
+	if _ranked_server_found_callable.is_valid() and Net.server_ranked_match_found.is_connected(_ranked_server_found_callable):
+		Net.server_ranked_match_found.disconnect(_ranked_server_found_callable)
+	if _ranked_refused_callable.is_valid() and Net.ranked_refused.is_connected(_ranked_refused_callable):
+		Net.ranked_refused.disconnect(_ranked_refused_callable)
 
 ## Small bottom-right status indicator + Cancel button, shared by Ranked and
 ## Campaign matchmaking. Lives in its own CanvasLayer (sibling of _canvas,
@@ -2085,6 +2102,76 @@ func _on_ranked_match_found(lobby_id: String, role: String, opponent_name: Strin
 	_show_match_found_popup(opponent_name, opponent_rating, func():
 		_ranked_searching = false
 		_start_ranked_pvp_match(role, opponent_name, opponent_rating)
+	)
+
+## A match the server runs: same "Match Found!" countdown, then the thin client.
+func _on_server_ranked_match_found(match_id: String, opponent_name: String, opponent_rating: int,
+								   search_id: int) -> void:
+	if search_id != _ranked_search_id:
+		return
+	_ranked_search_id += 1
+	_disconnect_ranked_match_found()
+	_hide_queue_overlay()
+	_show_match_found_popup(opponent_name, opponent_rating, func():
+		_ranked_searching = false
+		_start_server_ranked_match(match_id, opponent_name, opponent_rating)
+	)
+
+func _start_server_ranked_match(match_id: String, opponent_name: String, opponent_rating: int) -> void:
+	if is_instance_valid(_canvas):
+		_canvas.queue_free()
+	var board := BoardScene.instantiate()
+	add_child(board)
+	_connect_ranked_requeue(board)
+	_remote_match = RemoteMatchClient.new()
+	board.add_child(_remote_match)
+	_remote_match.start(board, match_id, opponent_name, opponent_rating)
+
+## The server turned the queue request down. Whatever the reason, the search
+## ends and the player is told - never left on the searching indicator.
+func _on_ranked_refused(reason: String, search_id: int) -> void:
+	if search_id != _ranked_search_id:
+		return
+	_ranked_search_id += 1
+	_ranked_searching = false
+	_disconnect_ranked_match_found()
+	_hide_queue_overlay()
+	var text := "Ranked is unavailable right now. Try again shortly."
+	match reason:
+		"update_required":
+			text = "Update the game to play ranked."
+		"ranked_busy":
+			text = "Ranked is busy right now. Try again in a moment."
+		"invalid_deck":
+			text = "That deck can't be used in ranked. Pick a legal deck."
+		"already_in_match":
+			text = "You already have a ranked match in progress."
+	_show_transient_notice(text)
+
+## A short message pinned near the top of the screen that clears itself.
+func _show_transient_notice(text: String) -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 15
+	add_child(layer)
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	panel.position = Vector2(-240, 24)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.45, 0.12, 0.12, 0.95)
+	style.set_corner_radius_all(8)
+	style.content_margin_left = 18
+	style.content_margin_right = 18
+	style.content_margin_top = 12
+	style.content_margin_bottom = 12
+	panel.add_theme_stylebox_override("panel", style)
+	layer.add_child(panel)
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", 18)
+	panel.add_child(label)
+	get_tree().create_timer(5.0).timeout.connect(func():
+		if is_instance_valid(layer):
+			layer.queue_free()
 	)
 
 ## Popup shown on top of whatever screen the player is currently on (menu,

@@ -81,8 +81,8 @@ func _on_pfp_sync_result(success: bool, message: String, _pfp_id: String) -> voi
 func report_ranked_result(won: bool, opponent_rating: int = -1, match_id: String = "") -> void:
 	Net.report_ranked_result(token, won, opponent_rating, match_id)
 
-func queue_ranked() -> void:
-	Net.queue_ranked(token)
+func queue_ranked(deck_name: String = "") -> void:
+	Net.queue_ranked(token, deck_name, RulesVersion.RULES_VERSION)
 
 func cancel_ranked_queue() -> void:
 	Net.cancel_ranked_queue(token)
