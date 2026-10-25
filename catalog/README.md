@@ -67,6 +67,11 @@ The same envelope plus:
 
 **Known gap:** most ability keys (about 75 at the time of writing, mostly "On Play…" / "On Death…" triggers) have **no keyword entry** and map to `null`. Their readable text lives in the card's `description`. The exporter prints the list on every run; filling it in means adding entries to `data/keywords.json` — it is not scraped from GDScript.
 
+Building something on this API? [`stats-website-spec.md`](stats-website-spec.md)
+is a self-contained brief for a third-party statistics site: both schemas
+written out, the suppression rules, fixtures to develop against, and what is
+not published yet.
+
 ## Local use
 
 ```bash
