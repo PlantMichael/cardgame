@@ -1,13 +1,17 @@
 # Relay + Godot match host (specs/003-authoritative-ranked-server, T005).
-# NOT BUILT YET: Docker was not available where this was written. Verify the
-# build, image size and cold start (research.md §7) before relying on it.
+#
+# Built and exercised: 1.3 GB, ~3.5 s from process start to a match host ready
+# for commands, and the whole server suite (42 tests) passes inside the image.
+# Numbers and the remaining size levers are in research.md §7.
 FROM node:20-bookworm-slim
 
 ARG GODOT_VERSION=4.7.2-stable
 ENV GODOT_BIN=/usr/local/bin/godot
 
+# curl/unzip fetch Godot below. No X or GL libraries: the headless binary runs
+# without them, and installing them cost 300 MB (measured — the suite passes
+# either way), so do not add them back without checking that they are needed.
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl unzip \
-    libfontconfig1 libgl1 libx11-6 libxcursor1 libxinerama1 libxrandr1 libxi6 \
  && rm -rf /var/lib/apt/lists/*
 
 # Pinned Godot Linux headless-capable editor binary (same version the project is authored in).

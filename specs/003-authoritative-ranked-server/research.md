@@ -153,9 +153,32 @@ and UI textures out of the rules-only path or export a server PCK.
 - `Net`, `Auth` and `Economy` only connect signals in `_ready()`; `Net` opens a
   socket only when `connect_to_relay()` is called, so the autoloads are inert in
   `--match-host` mode. `--core-tests` already runs headless with them loaded.
-- A `server/Dockerfile` is written (pinned Godot Linux binary, build-time
-  `--import`) but **has not been built**: Docker was not available where it was
-  authored. Image size and cold start are still unmeasured.
+- `server/Dockerfile` is **built and exercised** (Docker 28.5.2, linux/amd64):
+
+  | | |
+  |---|---|
+  | image size | **1.3 GB** |
+  | build | ~37 s with warm layers; a cold build is dominated by the 146 MB Godot download and the 31 s build-time `--import` |
+  | match host ready | **3.3-3.6 s** from the supervising process's start (`HostProcess.start()` to a `stats` answer) |
+  | container start → host ready | ~11.5 s on the first run of a fresh image, ~4.9 s once the image's pages are cached |
+  | the suite inside the image | **42/42 pass in 22 s** (`docker run --rm cardgame-relay sh -c 'node --test test/*.test.js'`) — the Linux host really runs matches, the hidden-info sweep, the 216 cheating cases, restart-replay and settlement |
+
+  Two things the build taught us:
+
+  - `libxrandr1` does not exist in bookworm (it is `libxrandr2`), so the first
+    build failed outright at `apt-get install`.
+  - The headless binary needs **no** X or GL libraries at all. Dropping
+    `libfontconfig1 libgl1 libx11-6 libxcursor1 libxinerama1 libxrandr2 libxi6`
+    took the image from 1.6 GB to 1.3 GB with the host still booting in 3.5 s
+    and the suite still 42/42, so they are gone from the Dockerfile.
+
+- Remaining size levers, in order of value: `COPY assets` is 305 MB and the
+  build-time `--import` of it is another 104 MB — 409 MB the rules never touch.
+  They are in the image only because `main.gd` (which owns the `--match-host`
+  hook) `preload`s `Board.tscn`, the menu wallpaper, the cursor and a font, so
+  trimming them needs a host-only entry scene that does not reach the UI first.
+  After that the apt layer (236 MB → mostly removed already) and a multi-stage
+  build to drop `curl`/`unzip` are small change.
 
 **Alternatives rejected**: exporting a Linux dedicated-server build (extra
 export pipeline for a first release).

@@ -111,8 +111,12 @@ already in progress.
 ### Deploy procedure
 
 1. Build the image: `docker build -f server/Dockerfile -t cardgame-relay .`
-   (the relay and the pinned Godot host in one image; `.dockerignore` keeps the
-   294 MB asset tree's build context down to what the project needs).
+   — the relay and the pinned Godot host in one image, **1.3 GB**, with the
+   match host ready about 3.5 s after the process starts (`.dockerignore` keeps
+   the build context to the project rather than the 2.2 GB `.git`). Smoke-test
+   the image itself with
+   `docker run --rm cardgame-relay sh -c 'node --test test/*.test.js'`:
+   42/42 in ~22 s means the Linux host is running real matches.
 2. Deploy with `RANKED_AUTHORITATIVE` **unset** first and watch
    `node tools/matches.js status`. The relay logs the rules version at boot.
 3. **Drain before a restart:** stop pairing (unset the flag or take the instance
@@ -190,8 +194,12 @@ Verified locally (Windows, Godot 4.7.2, Node 24):
 - `GODOT_BIN=<godot> node server/test/load.js --matches=100` — see
   [`research.md` §13](../specs/003-authoritative-ranked-server/research.md) for
   the recorded numbers.
-- The Docker image builds and the Linux host inside it runs the same test suite
-  (see §13 for size and cold start).
+- The Docker image builds (1.3 GB) and the Linux host inside it passes the same
+  42-test suite in ~22 s. The host answers `stats` 3.3-3.6 s after its process
+  starts, and a fresh container reaches that point in ~11.5 s cold / ~4.9 s
+  warm. Numbers, the two build fixes and the remaining size levers (409 MB of
+  assets and their imports, which need a host-only entry scene) are in
+  [`research.md` §7](../specs/003-authoritative-ranked-server/research.md).
 
 Not verified:
 
