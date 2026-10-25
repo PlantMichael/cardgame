@@ -8,6 +8,9 @@ The codebase has a clean split between **game logic** (pure GDScript classes, no
 |---|---|
 | `scripts/game/event_presenter.gd` | `EventPresenter` - turns the rules core's advisory events into log lines and challenge/laser animations; shared by every controller that renders a match |
 | `scripts/game/parity_test.gd` | `ParityTest` - replays seeded AI-vs-AI matches from (seed, decks, command log) and requires identical state at every step; run via `--parity-test` |
+| `scripts/game/match_host.gd` | `MatchHost` - the server's headless rules host for server-run ranked matches: `--match-host` runs a `TCPServer` on `127.0.0.1`, holds one `GameState` per live match and answers the relay's `hello`/`create`/`command`/`timeout`/`view`/`replay`/`drop`/`stats` ops. Builds no UI and opens no network autoload connection; see [Authoritative Server](authoritative-server.md) |
+| `scripts/game/remote_match_client.gd` | `RemoteMatchClient` - the **thin** ranked client: sends commands with an increasing `client_seq`, holds no rules, rebuilds the board from each server `match_view` and plays animations from that seat's filtered events |
+| `scripts/game/match_recorder.gd` | `MatchRecorder` - per-match card facts (drawn/kept/played counts, first-played turn, created-vs-deck) read off the event feed; runs inside the match host and never on a simulation copy (spec 002) |
 | `scripts/game/rules_version.gd` | `RulesVersion.RULES_VERSION` - bumped when rules or card data change; a ranked client with a different version is told to update |
 | `scripts/game/game_state.gd` | Authoritative game state; drives all rule enforcement |
 | `scripts/game/core_tests.gd` | `CoreTests` — rules-core regression suite (copy isolation, command validation, card identity, tree-reuse fingerprint, Crypt Hunger, aura lifetime). Run via `--core-tests`; **exits with the failure count**, unlike the older hooks |
@@ -100,6 +103,9 @@ res://
     │   ├── economy.gd            (Autoload: "Economy"; currency/dust/owned-card collection)
     │   ├── pack_opener.gd        (PackOpener: pure pack-rolling/duplicate-to-dust logic)
     │   ├── mp_game_manager.gd    (MpGameManager: live host/guest multiplayer match)
+    │   ├── match_host.gd         (MatchHost: the server's headless rules host, --match-host)
+    │   ├── remote_match_client.gd (RemoteMatchClient: thin client for server-run ranked matches)
+    │   ├── match_recorder.gd      (MatchRecorder: per-match card facts from the event feed)
     │   ├── card_preview.gd       (unused — orphaned older preview panel)
     │   ├── drop_zone.gd          (DropZone Control, creature drop target)
     │   └── main.gd               (Entry point, main menu, deck select)
@@ -132,3 +138,35 @@ Board (UI events) → signals → GameManagerAutoload → GameState mutations �
 | `Net` | `scripts/game/net.gd` | WebSocket client for the relay server (lobbies, ranked matchmaking, auth, ranked results, currency/shop/crafting) |
 | `Auth` | `scripts/game/auth.gd` | Account/session state, ranked ladder fields, matchmaking Elo |
 | `Economy` | `scripts/game/economy.gd` | Currency/dust balance + owned-card collection, mirrored from server-authoritative state |
+
+## Server Processes
+
+The relay is a separate Node.js program (`server/`), not part of the Godot
+project. With ranked matches running on the server (`RANKED_AUTHORITATIVE=1`)
+there is a **second** process: a headless Godot that runs the rules and nothing
+else. Full description and operating notes: [Authoritative Server](authoritative-server.md).
+
+```
+server/
+├── relay.js                     (the WebSocket server clients talk to: accounts, lobbies,
+│                                 matchmaking, currency/shop, legacy ranked reporting)
+├── ladder.js                    (nextRankState/nextElo — the ladder math both ranked paths share)
+├── Dockerfile                   (relay + pinned Godot match host in one image)
+├── authoritative/               (server-run ranked matches; inert unless RANKED_AUTHORITATIVE=1)
+│   ├── relay_wire.js            (flag, env knobs, per-socket frame budget, pairing, routing)
+│   ├── match_manager.js         (seats, command path, clocks, forfeits, resume-from-log)
+│   ├── host_process.js          (spawns/supervises the headless Godot match host)
+│   ├── protocol.js              (client message validation, frame cap, rate limits)
+│   ├── decks.js                 (loads data/cards + data/starters.json; mirrors DeckManager's deck rules)
+│   ├── schema.js                (ranked_matches / _actions / _audit DDL and PgStore)
+│   ├── memory_store.js          (the same store interface in memory, for tests)
+│   └── settle.js                (idempotent ladder settlement from the server's own result)
+├── tools/matches.js             (maintainer CLI: status / history / replay / audit)
+└── test/                        (node --test; load.js is a separate manual load test)
+```
+
+```
+client ──websocket──> relay.js ──newline JSON on 127.0.0.1──> match_host.gd (headless Godot)
+                         │                                         │
+                         └──> Postgres (match log, audit, ladder) <─┘ (rules only; no DB, no accounts)
+```

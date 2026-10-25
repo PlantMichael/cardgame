@@ -79,7 +79,7 @@
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
-		"art": "res://assets/generic/laserbarrage.png",
+		"art": "res://assets/generic/LaserBarrage.png",
 		"effect": "deal_damage",
 		"effect_value": 5
 	},
@@ -95,7 +95,7 @@
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
-		"art": "res://assets/generic/blackhole.png",
+		"art": "res://assets/generic/BlackHole.png",
 		"effect": "destroy_all_creatures",
 		"effect_value": 0
 	},
@@ -113,7 +113,7 @@
 		"abilities": [
 			"dual_strike"
 		],
-		"art": "res://assets/generic/twinfang.png",
+		"art": "res://assets/generic/Twinfang.png",
 		"effect": "",
 		"effect_value": 0,
 		"in_starter": false
@@ -132,7 +132,7 @@
 		"abilities": [
 			"voidtouch"
 		],
-		"art": "res://assets/generic/voidstalker.png",
+		"art": "res://assets/generic/Voidstalker.png",
 		"effect": "",
 		"effect_value": 0,
 		"in_starter": false

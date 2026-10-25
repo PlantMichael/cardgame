@@ -172,6 +172,12 @@ class MatchManager {
       this._send(conn, { type: 'match_error', match_id: msg.match_id, client_seq: msg.client_seq, reason: 'unknown_match' });
       return;
     }
+    // Joins and pings cost a host round trip and a reply, so they are metered
+    // too; _command no longer takes a second token.
+    if (!seat.limiter.take()) {
+      this._send(conn, { type: 'match_error', match_id: sess.id, client_seq: msg.client_seq, reason: 'rate_limited' });
+      return;
+    }
     switch (msg.type) {
       case 'match_join': return this._exclusive(sess, () => this._join(sess, seat, msg, conn));
       case 'match_ping': return this._send(conn, { type: 'match_clock', match_id: sess.id, clock: this._clock(sess) });
@@ -244,7 +250,6 @@ class MatchManager {
     if (seat.conn !== conn) return refuse('illegal', 'stale_connection');
     if (sess.status !== 'active' && sess.status !== 'waiting') return refuse('illegal', 'match_not_active');
     if (sess.hostDown) return refuse('unavailable', 'host_down');
-    if (!seat.limiter.take()) return refuse('rate_limited');
     if (msg.client_seq <= seat.lastClientSeq) return refuse('duplicate');
     seat.lastClientSeq = msg.client_seq;
 

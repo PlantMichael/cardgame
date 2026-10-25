@@ -16,4 +16,5 @@ Guidance for Claude Code when working in this repository.
 | [AI](.docs/ai.md) | AI controller decision priority and behavior |
 | [Quests](.docs/quests.md) | Daily/weekly quest pool schema, track keys, filters, reward sizing |
 | [Conventions](.docs/conventions.md) | Coding style, IDs, board refresh rules, input handling, scene structure |
+| [Authoritative Server](.docs/authoritative-server.md) | Server-run ranked matches: relay + headless Godot match host, protocols, `RANKED_AUTHORITATIVE`, deploy, what is verified |
 | [Status](.docs/status.md) | What's working, TODO list, next steps |

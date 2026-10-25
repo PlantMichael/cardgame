@@ -5,7 +5,7 @@ A Hearthstone-style card game built in **Godot 4.3** (GDScript). Single-player v
 ## Tech Stack
 
 - **Engine:** Godot 4.3 (GDScript)
-- **Networking:** custom Node.js WebSocket relay (`server/relay.js`) — accounts, lobbies, ranked matchmaking, currency/shop (not Nakama)
+- **Networking:** custom Node.js WebSocket relay (`server/relay.js`) — accounts, lobbies, ranked matchmaking, currency/shop (not Nakama). Ranked matches can run their rules on the server instead of on a player's client, in a headless Godot "match host" the relay spawns (behind `RANKED_AUTHORITATIVE`, off by default — see [Authoritative Server](authoritative-server.md))
 - **Card data:** JSON files per color faction
 
 ## Game Design

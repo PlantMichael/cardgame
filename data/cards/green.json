@@ -31,7 +31,7 @@
 		"abilities": [
 			"rush"
 		],
-		"art": "res://assets/green/logirunner.png",
+		"art": "res://assets/green/LogiRunner.png",
 		"effect": "",
 		"effect_value": 0
 	},

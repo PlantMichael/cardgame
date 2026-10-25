@@ -34,6 +34,23 @@ class HostProcess extends EventEmitter {
 
   get ready() { return this.state === 'ready'; }
 
+  /**
+   * Ends the host process and anything it started. On Windows the Godot
+   * *console* binary is a shim that runs the engine as a child, so killing the
+   * spawned pid alone leaves a live engine behind (half a gigabyte of it); the
+   * whole tree has to go.
+   */
+  _kill() {
+    if (!this.proc || this.proc.exitCode !== null) return;
+    if (process.platform === 'win32') {
+      try {
+        spawn('taskkill', ['/PID', String(this.proc.pid), '/T', '/F'], { stdio: 'ignore' });
+        return;
+      } catch { /* fall through to the plain kill */ }
+    }
+    this.proc.kill();
+  }
+
   async start() {
     if (!this.godotBin) throw new Error('GODOT_BIN is not set; cannot start the match host');
     this.stopping = false;
@@ -54,7 +71,7 @@ class HostProcess extends EventEmitter {
     for (;;) {
       if (this.output.includes('MATCH_HOST_READY')) break;
       if (this.proc.exitCode !== null) throw new Error('match host exited during start:\n' + this.output);
-      if (Date.now() > deadline) { this.proc.kill(); throw new Error('match host start timed out:\n' + this.output); }
+      if (Date.now() > deadline) { this._kill(); throw new Error('match host start timed out:\n' + this.output); }
       await new Promise((r) => setTimeout(r, 150));
     }
     await this._connect();
@@ -135,7 +152,7 @@ class HostProcess extends EventEmitter {
 
   async restart(reason) {
     this.log.warn?.('restarting match host:', reason);
-    if (this.proc && this.proc.exitCode === null) this.proc.kill();
+    this._kill();
     // _onExit schedules the new start.
   }
 
@@ -143,7 +160,7 @@ class HostProcess extends EventEmitter {
     this.stopping = true;
     clearInterval(this._pinger);
     if (this.sock) this.sock.destroy();
-    if (this.proc && this.proc.exitCode === null) this.proc.kill();
+    this._kill();
     this.state = 'down';
   }
 }

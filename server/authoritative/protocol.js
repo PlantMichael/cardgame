@@ -6,6 +6,10 @@
 
 const MAX_FRAME_BYTES = 8192;
 const ACTIONS_PER_SECOND = 20;
+// Every match frame costs the relay work before a seat is even known (a session
+// lookup, validation, an audit row), so a socket gets its own budget just above
+// the per-seat one: a flood is dropped before it reaches the database.
+const FRAMES_PER_SECOND = 30;
 const MATCH_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -115,4 +119,4 @@ class RateLimiter {
   }
 }
 
-module.exports = { MAX_FRAME_BYTES, ACTIONS_PER_SECOND, COMMANDS, sanitizeCommand, validateClientMessage, publicReason, PUBLIC_REASONS, RateLimiter };
+module.exports = { MAX_FRAME_BYTES, ACTIONS_PER_SECOND, FRAMES_PER_SECOND, COMMANDS, sanitizeCommand, validateClientMessage, publicReason, PUBLIC_REASONS, RateLimiter };

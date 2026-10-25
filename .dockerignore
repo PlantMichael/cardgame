@@ -1,0 +1,15 @@
+# Keep the relay/match-host build context small (specs/003, T005).
+# The image needs: project.godot, icon.svg, scripts, data, scenes, assets, server.
+.git
+.godot
+build
+specs
+catalog
+.claude
+.agents
+.specify
+server/node_modules
+**/*.zip
+export_presets.cfg
+vercel.json
+project_summary.md

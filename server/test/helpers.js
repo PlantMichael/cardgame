@@ -38,10 +38,20 @@ async function startMatchHost() {
   for (;;) {
     if (log.includes('MATCH_HOST_READY') && await canConnect(port)) break;
     if (proc.exitCode !== null) throw new Error('match host exited early:\n' + log);
-    if (Date.now() > deadline) { proc.kill(); throw new Error('match host did not start:\n' + log); }
+    if (Date.now() > deadline) { killTree(proc); throw new Error('match host did not start:\n' + log); }
     await new Promise((r) => setTimeout(r, 200));
   }
-  return { port, secret, proc, log: () => log, stop: () => proc.kill() };
+  return { port, secret, proc, log: () => log, stop: () => killTree(proc) };
+}
+
+// On Windows the Godot console binary is a shim that runs the engine as a child
+// process: killing the spawned pid alone leaves a live engine behind.
+function killTree(proc) {
+  if (!proc || proc.exitCode !== null) return;
+  if (process.platform === 'win32') {
+    try { spawn('taskkill', ['/PID', String(proc.pid), '/T', '/F'], { stdio: 'ignore' }); return; } catch { /* fall through */ }
+  }
+  proc.kill();
 }
 
 function canConnect(port) {

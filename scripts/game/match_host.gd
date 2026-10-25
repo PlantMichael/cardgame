@@ -234,8 +234,11 @@ func _op_timeout(msg: Dictionary) -> Dictionary:
 
 func _op_replay(msg: Dictionary) -> Dictionary:
 	var match_id := str(msg.get("match_id", ""))
-	if match_id.is_empty():
+	if match_id.is_empty() or _matches.has(match_id):
+		# A live match is never replayed over: the relay drops it first.
 		return {"ok": false, "error": "invalid_match_id"}
+	if _matches.size() >= MAX_MATCHES:
+		return {"ok": false, "error": "at_capacity"}
 	var built := _build_match(msg)
 	if not built["ok"]:
 		return built
@@ -256,6 +259,10 @@ func _op_replay(msg: Dictionary) -> Dictionary:
 			rec.observe(gs, timed_out.get("events", []))
 		else:
 			var cmd: Dictionary = (action.get("cmd", {}) as Dictionary).duplicate(true)
+			if str(cmd.get("type", "")) not in ALLOWED_COMMANDS:
+				# A logged row the live path would have refused: the log is not
+				# trustworthy, so the caller must void the match.
+				return {"ok": false, "error": "replay_refused", "at": index, "detail": "unknown_command"}
 			cmd["actor"] = internal
 			var r := gs.execute(cmd)
 			if not r["ok"]:

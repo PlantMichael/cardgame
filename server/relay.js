@@ -489,12 +489,24 @@ async function main() {
       // Messages for a server-run match: authenticated by the session token,
       // size-capped, validated and rate-limited before anything touches the rules.
       if (auth && auth.isMatchMessage(msg.type)) {
-        if (auth.frameTooLarge(raw)) { sendTo(ws, { type: 'match_error', reason: 'invalid' }); return; }
+        if (auth.frameTooLarge(raw) || typeof msg.token !== 'string' || msg.token.length > 128) {
+          sendTo(ws, { type: 'match_error', reason: 'invalid' });
+          return;
+        }
+        // Spend the socket's frame budget BEFORE the session lookup: otherwise a
+        // flood of match frames from an unauthenticated socket is a flood of
+        // database queries.
+        if (!auth.allowFrame(ws)) { sendTo(ws, { type: 'match_error', reason: 'rate_limited' }); return; }
         try {
-          const found = await pool.query('SELECT player_id FROM sessions WHERE token = $1', [msg.token]);
-          if (!found.rows[0]) { sendTo(ws, { type: 'match_error', reason: 'unknown_match' }); return; }
+          let playerId = auth.cachedPlayer(ws, msg.token);
+          if (!playerId) {
+            const found = await pool.query('SELECT player_id FROM sessions WHERE token = $1', [msg.token]);
+            if (!found.rows[0]) { sendTo(ws, { type: 'match_error', reason: 'unknown_match' }); return; }
+            playerId = found.rows[0].player_id;
+            auth.rememberPlayer(ws, msg.token, playerId);
+          }
           const { token, ...frame } = msg; // the token never travels past authentication
-          await auth.route(found.rows[0].player_id, frame, ws, sendTo);
+          await auth.route(playerId, frame, ws, sendTo);
         } catch (err) {
           console.error('match message error', err);
         }

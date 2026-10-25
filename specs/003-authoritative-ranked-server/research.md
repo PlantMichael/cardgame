@@ -211,3 +211,47 @@ two-report cross-check. 002's report message remains for casual/AI/campaign.
 Measure with the bot-client load script; shard by `match_id % N` across
 multiple host processes if needed. Refuse new ranked pairings with a "busy"
 message at a configured live-match ceiling (FR-025).
+
+### Measured (T073)
+
+`server/test/load.js` drives the real client path (message validation →
+`MatchManager` → host IPC → store → `match_ack`) for N matches at once through
+**one** host process, with bots that answer choices, play creatures, attack and
+end turns. The store is the in-memory one, so these numbers are the rules host
+plus the relay's own work, not Postgres.
+
+`GODOT_BIN=<godot 4.7.2> node test/load.js --matches=100 --turns=40`, Windows 11,
+Node 24.11, one desktop machine, host and driver on the same box:
+
+| | |
+|---|---|
+| matches | 100 concurrent (75 played to game over) |
+| accepted actions | 8728 (748 refused as illegal by the bots' own bad attacks) |
+| throughput | 609 accepted actions/s over 14.3 s |
+| latency p50 | 136 ms |
+| **latency p95** | **159 ms** (budget 300 ms — SC-003 met) |
+| latency p99 | 178 ms |
+| latency max | 307 ms |
+| host peak memory | 586 MB (a 10-match run peaks at 580 MB: nearly all of it is Godot's own baseline, not per-match) |
+| host CPU | 19.8 s over 14.3 s wall (138% of one core; the engine is not single-threaded) |
+
+Sharding is **not** needed at 100 matches: one host holds them with p95 well
+inside the budget, and the memory cost is the engine itself rather than the
+matches. The tail (p99 178 ms, max 307 ms) comes from the single IPC socket
+serialising bursts, so it is the number to watch if the ceiling is ever raised;
+`match_id % N` across several host processes is still the lever. A 10-match run
+sits at p95 15 ms, so the latency at 100 is queueing, not rules cost.
+
+Two incidental findings: bots driven flat out trip the seat's own 20 actions/s
+budget (the script now waits one out and retries), and the per-seat limiter is
+therefore exercised under load as well as in `test/rate_limit.test.js`.
+
+Two measurement traps, both now avoided in the script and worth remembering:
+
+- Sampling the host's memory/CPU **synchronously** (`execFileSync` to
+  PowerShell, every 2 s) blocks Node's event loop while every request is in
+  flight, and reported p95 ≈ 2040 ms — pure measurement overhead. The sampler
+  is asynchronous.
+- On Windows, `Godot_*_console.exe` is a shim that runs the engine as a child
+  process: sampling the spawned pid alone reports ~7 MB and no CPU. The sampler
+  sums the pid and its direct children.
