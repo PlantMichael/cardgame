@@ -1,0 +1,8 @@
+Legendary sludge timing
+0.00-0.35s: quick outward splash, frames 0 through 6.
+0.35-1.15s: hold fully spread at frame 6 for exactly 0.8 seconds.
+1.15-2.55s: slow eased retraction, frames 6 through 15.
+After 2.55s: hide/free effect. Preview pauses before replaying.
+Blend adjacent frames for smoother transitions. Normal alpha blending.
+Draw beneath card; keep existing card and effect alignment.
+Frame art unchanged; this update changes timing and frame blending.

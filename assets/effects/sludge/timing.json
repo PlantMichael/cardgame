@@ -1,0 +1,1 @@
+{"duration":2.55,"loop":false,"atlas":{"columns":4,"rows":4},"phases":[{"name":"splash","start":0,"duration":0.35,"fromFrame":0,"toFrame":6,"easing":"linear"},{"name":"hold","start":0.35,"duration":0.8,"frame":6},{"name":"retract","start":1.15,"duration":1.4,"fromFrame":6,"toFrame":15,"easing":"sineInOut"}],"blendAdjacentFrames":true}

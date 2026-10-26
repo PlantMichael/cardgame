@@ -246,11 +246,17 @@ func _draw_mana_crystal(c: Control) -> void:
 	var filled: bool = c.get_meta("filled", true)
 	var w := c.size.x
 	var h := c.size.y
-	var top := Vector2(w * 0.5, 0)
-	var right := Vector2(w, h * 0.5)
-	var bottom := Vector2(w * 0.5, h)
-	var left := Vector2(0, h * 0.5)
+	# The gain "pop" (see _pop_new_mana_crystals()) is baked into the drawn
+	# geometry rather than applied as a `scale` on the Control, because a
+	# Container resets its children's scale and rotation every time it
+	# re-sorts - and the sort caused by this very crystal becoming visible
+	# is what wiped the pop before it ever drew a frame.
+	var pop: float = c.get_meta("pop", 1.0)
 	var mid := Vector2(w * 0.5, h * 0.5)
+	var top := mid.lerp(Vector2(w * 0.5, 0), pop)
+	var right := mid.lerp(Vector2(w, h * 0.5), pop)
+	var bottom := mid.lerp(Vector2(w * 0.5, h), pop)
+	var left := mid.lerp(Vector2(0, h * 0.5), pop)
 	if filled:
 		var light := Color(0.62, 0.84, 1.0)
 		var dark := Color(0.08, 0.32, 0.72)
@@ -1433,7 +1439,8 @@ func _run_slam_landing(ghost: Card, real_card: Card, wrapper: Control, target_sc
 	# generic one playing underneath it. Awaited (not fire-and-forget) so
 	# _slam_animating_zones - and thus await_slam_landed() - doesn't clear
 	# until the legendary's own landing beat (not its lingering atmospheric
-	# extras, like StinkPile's sludge puddle - see that function) is done.
+	# extras, like the tail of StinkPile's sludge splash - see that
+	# function) is done.
 	if LegendaryAnimations.has_landing_animation(card_id):
 		real_card.scale = target_scale
 		await LegendaryAnimations.play_landing(card_id, real_card, self, target_scale)
@@ -1646,16 +1653,29 @@ func _reconcile_board_zone(zone: HBoxContainer, minions: Array, wrapper_size: Ve
 	for instance_id in existing:
 		if not kept.has(instance_id):
 			var wrapper = existing[instance_id]
+			# Lift the dying Card out of its wrapper before the wrapper goes,
+			# so freeing the wrapper doesn't take the card with it mid-
+			# dissolve. Reparented straight to `self` at the exact global
+			# position it was already drawing at (the same trick
+			# _slam_ghost_onto_card() uses for in-flight ghosts) - out of the
+			# container, nothing re-sorts it, and its row closes the gap
+			# behind it while it fades.
+			var dying_card := _get_card_child(wrapper)
+			if dying_card:
+				var death_pos := dying_card.global_position
+				wrapper.remove_child(dying_card)
+				add_child(dying_card)
+				dying_card.global_position = death_pos
+				_play_death_animation(dying_card)
 			wrapper.hide()
 			wrapper.queue_free()
 			zone.remove_child(wrapper)
 
-## Disabled for now - the removal loop above frees a dying minion's wrapper
-## outright, which takes the Card with it before any death animation could
-## play. Card.animate_death() itself is left intact - re-enable by detaching the
-## dying Card from its wrapper before freeing it (reparent to `self` at its
-## current global_position, same trick _slam_ghost_onto_card() uses) and
-## awaiting this before actually freeing it, the way this used to work.
+## Dissolves a dying minion's Card and then frees it. Called (deliberately
+## NOT awaited) by the removal loop above once that loop has detached the
+## card from its wrapper - refresh() runs on nearly every action anywhere in
+## a turn, including the AI's, so making it wait on a death fade would stall
+## the whole board behind every trade.
 func _play_death_animation(card: Card) -> void:
 	await card.animate_death()
 	if is_instance_valid(card):
@@ -1724,6 +1744,7 @@ func _refresh_boards() -> void:
 			# Locations never attack, so the summoning-sick treatment would
 			# just read as a permanent malfunction on them.
 			card.set_summoning_sick(minion.is_exhausted and not minion.is_location())
+			_note_minion_health(card, minion)
 			if minion.is_newly_reinforced:
 				minion.is_newly_reinforced = false
 				_animate_reinforce_drop(card)
@@ -1736,6 +1757,7 @@ func _refresh_boards() -> void:
 		func(card: Card, minion: Minion) -> void:
 			card.setup_as_minion(minion)
 			card.set_can_attack(false)
+			_note_minion_health(card, minion)
 			if minion.is_newly_reinforced:
 				minion.is_newly_reinforced = false
 				_animate_reinforce_drop(card)
@@ -1744,9 +1766,121 @@ func _refresh_boards() -> void:
 				card.animate_transform()
 	)
 
+	_prune_health_memory()
+
+## ── Floating combat numbers ─────────────────────────────────────────────
+## Purely a read of what changed between two refreshes: nothing in the rules
+## core announces damage to the presentation layer, and nothing here feeds
+## back into it. A minion's health moving down since the last refresh floats
+## a red "-N" off its card, up floats a green "+N" - so a trade, a sweeper
+## or a buff all say how much they did instead of only leaving a new number
+## in the card's health box.
+##
+## Keyed on Minion.instance_id (stable per copy, the same key
+## _reconcile_board_zone() reconciles on) rather than on the Card node,
+## which survives some refreshes and is rebuilt on others.
+var _last_minion_health: Dictionary = {}
+var _last_hero_health: Dictionary = {}
+
+const DAMAGE_NUMBER_COLOR := Color(1.0, 0.33, 0.28)
+const HEAL_NUMBER_COLOR := Color(0.45, 0.92, 0.45)
+
+func _note_minion_health(card: Card, minion: Minion) -> void:
+	var key: String = minion.instance_id
+	var now: int = minion.current_health
+	# First sighting (a minion that just arrived, or the first refresh of the
+	# match) has no "before" to compare against - record it and stay quiet,
+	# so a creature doesn't float its own starting health as it lands.
+	if not _last_minion_health.has(key):
+		_last_minion_health[key] = now
+		return
+	var before: int = _last_minion_health[key]
+	_last_minion_health[key] = now
+	if now == before:
+		return
+	var at: Vector2 = card.global_position + Card.CARD_SIZE * card.scale * 0.5
+	if now < before:
+		_float_number(at, "-%d" % (before - now), DAMAGE_NUMBER_COLOR)
+	else:
+		_float_number(at, "+%d" % (now - before), HEAL_NUMBER_COLOR)
+
+## Same idea for the two hero badges. Read here rather than inside
+## HeroPanel.set_health() (which already does its own red gem flash) so every
+## floating number in the match is spawned and styled in one place.
+func _note_hero_health(hero: Panel, key: String, now: int) -> void:
+	if not _last_hero_health.has(key):
+		_last_hero_health[key] = now
+		return
+	var before: int = _last_hero_health[key]
+	_last_hero_health[key] = now
+	if now == before:
+		return
+	# Lifted off the badge's centre rather than starting on it: a hero badge
+	# is a filled disc with an emblem drawn across the middle, and a number
+	# spawning there spends its first beat unreadable on top of that emblem.
+	var hero_rect: Rect2 = hero.get_global_rect()
+	var at: Vector2 = hero_rect.get_center() - Vector2(0, hero_rect.size.y * 0.52)
+	if now < before:
+		_float_number(at, "-%d" % (before - now), DAMAGE_NUMBER_COLOR)
+	else:
+		_float_number(at, "+%d" % (now - before), HEAL_NUMBER_COLOR)
+
+## Drops remembered health for minions that are no longer on either board, so
+## a long match doesn't accumulate an entry per creature ever played. Safe to
+## forget: instance_ids are unique per copy, so a minion that leaves and
+## comes back (a bounce, a resurrect) is a different copy and correctly
+## starts over with no "before".
+func _prune_health_memory() -> void:
+	if _last_minion_health.is_empty():
+		return
+	var live: Dictionary = {}
+	for minion in game_state.player.board:
+		live[minion.instance_id] = true
+	for minion in game_state.opponent.board:
+		live[minion.instance_id] = true
+	for key in _last_minion_health.keys():
+		if not live.has(key):
+			_last_minion_health.erase(key)
+
+## One floating number, parented to the board (not to the card it came off)
+## so it outlives the refresh - and the death - that produced it. Rises,
+## punches up to full size, then drifts and fades out.
+const _FLOAT_NUMBER_BOX := Vector2(120, 56)
+func _float_number(at: Vector2, text: String, color: Color) -> void:
+	var label := Label.new()
+	label.text = text
+	label.custom_minimum_size = _FLOAT_NUMBER_BOX
+	label.size = _FLOAT_NUMBER_BOX
+	label.pivot_offset = _FLOAT_NUMBER_BOX * 0.5
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_override("font", Card.CARD_FONT)
+	label.add_theme_font_size_override("font_size", 40)
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_constant_override("outline_size", 7)
+	label.add_theme_color_override("font_outline_color", Color(0.04, 0.02, 0.02))
+	# Above every card and board zone - a number that reads as half-hidden
+	# behind the card it belongs to is worse than none.
+	label.z_as_relative = false
+	label.z_index = 120
+	add_child(label)
+	label.global_position = at - _FLOAT_NUMBER_BOX * 0.5
+	label.scale = Vector2(0.4, 0.4)
+	label.modulate.a = 0.0
+
+	var tween := label.create_tween().set_parallel(true)
+	tween.tween_property(label, "scale", Vector2.ONE, 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "modulate:a", 1.0, 0.10)
+	tween.tween_property(label, "position", label.position + Vector2(0, -46), 0.75).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "modulate:a", 0.0, 0.30).set_delay(0.45)
+	tween.chain().tween_callback(label.queue_free)
+
 func _refresh_heroes() -> void:
 	player_hero.set_health(game_state.player.hero_health)
 	opponent_hero.set_health(game_state.opponent.hero_health)
+	_note_hero_health(player_hero, "player", game_state.player.hero_health)
+	_note_hero_health(opponent_hero, "opponent", game_state.opponent.hero_health)
 
 func _refresh_ui() -> void:
 	var is_my_turn = game_state.is_local_player_turn()
@@ -1763,7 +1897,98 @@ func _refresh_ui() -> void:
 			dot.queue_redraw()
 		else:
 			dot.hide()
+	_pop_new_mana_crystals(game_state.player.max_mana)
 	_deck_count_label.text = str(game_state.player.get_deck_size())
+	_announce_turn_change(is_my_turn)
+
+## Punches in each crystal the player gained since the last refresh, so the
+## turn's new mana is something you see arrive rather than a row that is
+## quietly one wider than it was.
+##
+## Animates the crystal's drawn size (the "pop" metadata
+## _draw_mana_crystal() reads back - see there for why not the Control's own
+## `scale`) and nothing else: _refresh_ui() above rewrites every dot's
+## `modulate` on every refresh, and the drag-time affordability flash owns
+## `modulate.a` outright (see _set_flash_alpha()), so a tween on colour here
+## would be stomped or would fight that flash.
+const MANA_POP_SCALE := 2.1
+var _last_max_mana: int = -1
+func _pop_new_mana_crystals(max_mana: int) -> void:
+	# -1 is "first refresh of the match" - the opening crystals are part of
+	# the board appearing, not something the player just gained.
+	if _last_max_mana >= 0 and max_mana > _last_max_mana:
+		for i in range(_last_max_mana, mini(max_mana, _mana_dots.size())):
+			var dot: Control = _mana_dots[i]
+			var tween := dot.create_tween()
+			tween.tween_method(func(pop: float) -> void:
+				dot.set_meta("pop", pop)
+				dot.queue_redraw(),
+				MANA_POP_SCALE, 1.0, 0.38).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_last_max_mana = max_mana
+
+## ── Turn banner ─────────────────────────────────────────────────────────
+## Sweeps "YOUR TURN" / "OPPONENT'S TURN" across the middle of the board
+## whenever whose turn it is changes. Driven off what refresh() already
+## knows rather than off a new signal out of the rules core, which stays
+## unaware that any of this exists: the turn number plus whose turn it is
+## is the whole state this needs, and comparing it against the last refresh
+## is enough to fire exactly once per change.
+var _last_turn_key: Array = []
+const _TURN_BANNER_HOLD := 0.55
+func _announce_turn_change(is_my_turn: bool) -> void:
+	var turn_key: Array = [game_state.turn_number, is_my_turn]
+	if _last_turn_key.is_empty():
+		# First refresh of the match: there is no change to announce yet, and
+		# the mulligan is still on screen over the board anyway.
+		_last_turn_key = turn_key
+		return
+	if turn_key == _last_turn_key:
+		return
+	_last_turn_key = turn_key
+	if _game_over:
+		return
+	_show_turn_banner(is_my_turn)
+
+func _show_turn_banner(is_my_turn: bool) -> void:
+	var vp: Vector2 = get_viewport_rect().size
+	var banner := Label.new()
+	banner.text = "YOUR TURN" if is_my_turn else "OPPONENT'S TURN"
+	banner.size = Vector2(vp.x, 70)
+	banner.pivot_offset = banner.size * 0.5
+	banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	banner.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# Never in the way of a click: this fires on the opponent's turn ending
+	# too, which is the exact moment the player reaches for the board.
+	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	banner.add_theme_font_override("font", Card.CARD_FONT)
+	banner.add_theme_font_size_override("font_size", 44)
+	banner.add_theme_color_override("font_color",
+		Color(0.98, 0.93, 0.72) if is_my_turn else Color(0.92, 0.70, 0.66))
+	banner.add_theme_constant_override("outline_size", 8)
+	banner.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.02))
+	banner.z_as_relative = false
+	banner.z_index = 130
+	add_child(banner)
+	# Sits above the centre bar, not across it: at the bar's own height the
+	# banner reads on top of the turn counter and the End Turn button, which
+	# is exactly what the player is looking at when a turn changes hands.
+	banner.global_position = Vector2(0, vp.y * 0.30 - 35.0)
+	banner.modulate.a = 0.0
+
+	# Slides in from the side the turn is passing from - left for the
+	# player's own turn, right for the opponent's - so the direction itself
+	# says which way the turn just went.
+	var from_x: float = -vp.x * 0.22 if is_my_turn else vp.x * 0.22
+	var rest_x: float = banner.position.x
+	banner.position.x = rest_x + from_x
+	var tween := banner.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(banner, "position:x", rest_x, 0.26).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(banner, "modulate:a", 1.0, 0.18)
+	tween.chain().tween_interval(_TURN_BANNER_HOLD)
+	tween.chain().tween_property(banner, "modulate:a", 0.0, 0.25)
+	tween.parallel().tween_property(banner, "position:x", rest_x - from_x, 0.25).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tween.chain().tween_callback(banner.queue_free)
 
 ## True if the player still has a card they could play or a minion that
 ## hasn't attacked yet - drives End Turn's yellow-vs-green color and whether

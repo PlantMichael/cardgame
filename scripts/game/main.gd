@@ -101,6 +101,9 @@ func _ready() -> void:
 	if "--live-ai-test" in OS.get_cmdline_user_args():
 		_run_live_ai_test_cli()
 		return
+	if "--legendary-anim" in OS.get_cmdline_user_args():
+		_run_legendary_anim_cli()
+		return
 	if "--campaign-test" in OS.get_cmdline_user_args():
 		_run_campaign_test_cli()
 		return
@@ -169,6 +172,35 @@ func _clear_screen() -> void:
 		var child := _canvas.get_child(i)
 		_canvas.remove_child(child)
 		child.queue_free()
+	_fade_in_next_screen()
+
+## Fades whatever screen the caller is about to build in over the wallpaper,
+## instead of every menu hard-cutting to the next one.
+##
+## Deferred rather than wired into each screen builder: _clear_screen() is
+## the one thing all ~20 of them already call, and a deferred call from here
+## runs at the end of this frame - by which point the builder that called it
+## has finished adding its nodes. Anything a builder adds later (a screen
+## that waits on a network round trip before filling itself in) simply isn't
+## faded, which is correct: that content is arriving on its own schedule,
+## not as part of this transition.
+##
+## Only ever touches `modulate.a`, and only on children added after the
+## wallpaper at index 0, so the background never flickers between screens.
+const _SCREEN_FADE_TIME := 0.16
+func _fade_in_next_screen() -> void:
+	call_deferred("_start_screen_fade")
+
+func _start_screen_fade() -> void:
+	if not is_instance_valid(_canvas):
+		return
+	for i in range(1, _canvas.get_child_count()):
+		var child := _canvas.get_child(i) as CanvasItem
+		if child == null:
+			continue
+		child.modulate.a = 0.0
+		var tween := child.create_tween()
+		tween.tween_property(child, "modulate:a", 1.0, _SCREEN_FADE_TIME)
 
 ## Dev-only headless verification hook: run via
 ##   godot --headless --path <project> -- --mcts-benchmark
@@ -319,6 +351,59 @@ func _run_live_ai_test_cli() -> void:
 			get_tree().quit()
 			return
 	print("RESULT: INCONCLUSIVE - loop ended without a clear stall or game over")
+	get_tree().quit()
+
+## Dev-only visual check for the one-off legendary landing animations in
+## legendary_animations.gd (StinkPile's sludge splash, Qu3tzalcoatl's
+## flight): stands up a real Board, drops the card straight onto the
+## battlefield and replays its landing beat, so the effect can be watched
+## without first drawing and affording a 9-mana legendary in a real match.
+##   godot --path <project> -- --legendary-anim [card_id]
+## Run WITHOUT --headless (there is nothing to look at otherwise); pair it
+## with --write-movie <dir>/frame.png to capture the sequence frame by
+## frame. Defaults to StinkPile.
+func _run_legendary_anim_cli() -> void:
+	var args := OS.get_cmdline_user_args()
+	var card_id := "b_017"
+	var at := args.find("--legendary-anim")
+	if at >= 0 and at + 1 < args.size() and not args[at + 1].begins_with("--"):
+		card_id = args[at + 1]
+	print("Previewing landing animation for %s..." % card_id)
+
+	var board := BoardScene.instantiate()
+	add_child(board)
+	board.auto_confirm_mulligan = true
+	var pd := DeckManager.build_random_faction_deck(CardData.CardColor.BLACK)
+	var od := DeckManager.build_random_faction_deck(CardData.CardColor.GREEN)
+	GameManagerAutoload.start_local_game(board, pd, od, 1, false)
+	# Same settle time _run_live_ai_test_cli() uses - the coinflip and
+	# mulligan have to clear before the battlefield is actually on screen.
+	await get_tree().create_timer(5.0).timeout
+
+	# Put the creature on the board directly rather than playing it through
+	# the rules: this hook exists to look at the animation, and paying a
+	# 9-mana cost first would mean sitting through nine turns of AI.
+	var gs := GameManagerAutoload.game_state
+	var minion := Minion.new(CardDatabase.get_card(card_id), gs.player.player_id)
+	gs.player.board.append(minion)
+	board.refresh()
+	await get_tree().process_frame
+	var card: Card = board.find_card_node(minion.instance_id)
+	if card == null:
+		print("RESULT: FAIL - no board card for %s" % card_id)
+		get_tree().quit(1)
+		return
+	if not LegendaryAnimations.has_landing_animation(card_id):
+		print("RESULT: FAIL - %s has no landing animation" % card_id)
+		get_tree().quit(1)
+		return
+
+	await LegendaryAnimations.play_landing(card_id, card, board, Card.SCALE_BOARD)
+	# play_landing() returns as soon as the card itself is done landing; hold
+	# on past it so the atmospheric tail (StinkPile's hold-and-retract) is in
+	# the capture too.
+	await get_tree().create_timer(3.0).timeout
+	print("RESULT: PASS - %s landing animation played" % card_id)
 	get_tree().quit()
 
 ## Dev-only headless sanity check for Campaign mode (campaign_state.gd /
@@ -1398,7 +1483,41 @@ func _menu_text_btn(label: String) -> Button:
 	var empty := StyleBoxEmpty.new()
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		btn.add_theme_stylebox_override(state, empty)
+	_add_menu_text_motion(btn)
 	return btn
+
+## Gives a boxless nav item something to do besides recolour. With no button
+## box to light up, the colour swap alone is easy to miss on a busy
+## wallpaper - a short sideways slide on hover and a quick squash on press
+## give the row the physical feedback the box used to.
+##
+## Scales and slides the button around its own centre (pivot_offset is kept
+## in step with its size, which its VBoxContainer owns and can change on a
+## window resize), so the row's layout is untouched: a Control's `scale` and
+## `position` are transforms its container does not read back.
+const _MENU_HOVER_SLIDE := 14.0
+const _MENU_HOVER_SCALE := 1.06
+const _MENU_PRESS_SCALE := 0.94
+func _add_menu_text_motion(btn: Button) -> void:
+	# Rest x is 0: these sit in the main menu's VBoxContainer, which lays
+	# every child out at its own left edge. The container rewrites
+	# `position` whenever it re-sorts, so a resize mid-hover just snaps the
+	# slide back to rest - which is where the next mouse_exited was going to
+	# put it anyway.
+	var retarget := func(slide: float, target_scale: float, time: float) -> void:
+		if not is_instance_valid(btn):
+			return
+		# Re-read each time rather than once at build time: the button has no
+		# size yet when this is wired up, and the container re-lays it out on
+		# every window resize.
+		btn.pivot_offset = btn.size * 0.5
+		var tween := btn.create_tween().set_parallel(true)
+		tween.tween_property(btn, "position:x", slide, time).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tween.tween_property(btn, "scale", Vector2(target_scale, target_scale), time).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	btn.mouse_entered.connect(func(): retarget.call(_MENU_HOVER_SLIDE, _MENU_HOVER_SCALE, 0.16))
+	btn.mouse_exited.connect(func(): retarget.call(0.0, 1.0, 0.16))
+	btn.button_down.connect(func(): retarget.call(_MENU_HOVER_SLIDE, _MENU_PRESS_SCALE, 0.07))
+	btn.button_up.connect(func(): retarget.call(_MENU_HOVER_SLIDE, _MENU_HOVER_SCALE, 0.12))
 
 # ── Multiplayer ────────────────────────────────────────────────────────
 
