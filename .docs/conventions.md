@@ -5,6 +5,12 @@
 - Use **tabs**, not spaces, for indentation
 - All game logic lives in `game_state.gd` — `board.gd` is purely visual
 
+## Asynchronous menu callbacks
+
+- GDScript lambdas capture scalar locals by value. Use a shared Dictionary for a loading animation's stop state; use a separate state for each phase so an old animation cannot restart.
+- Pending relay connections use `connection_wait.gd`, parented to the requesting screen. It disconnects readiness and stops its timer on completion or screen exit; a successful connection must never later run its timeout.
+- Bind persistent autoload signals to disposable menu controls through Main's `_connect_screen_signal`, which disconnects on the screen's `tree_exiting`. Checking a freed capture inside its callback is too late.
+
 ## Identity & IDs
 
 - `Minion.instance_id` is the runtime identity for attack targeting — format: `"{card_id}_{randi()}"`
@@ -96,6 +102,10 @@ deliberate failure for checking the harness itself reports one. The older
 `--fatigue-test` / `--tank-test` / `--haven-test` / `--newcards-test` /
 `--locations-test` / `--shop-test` hooks still print `RESULT: PASS|FAIL` but
 always exit 0 — treat their logs, not their exit status, as the result.
+
+With `GODOT_BIN` set, `node --test server/test/web_connection_client.test.js`
+checks real connection deadlines, auth loading/results, and currency subscription
+teardown without opening a relay or submitting account requests.
 
 A headless hook that drives a real match must set `Board.auto_confirm_mulligan`
 before starting it. The mulligan blocks on a button press no headless run can

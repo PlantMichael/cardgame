@@ -13,6 +13,7 @@ const PackOpenerScript = preload("res://scripts/game/pack_opener.gd")
 const ShopScreenScript = preload("res://scripts/ui/shop_screen.gd")
 const PackOpenScreenScript = preload("res://scripts/ui/pack_open_screen.gd")
 const CoreTestsScript = preload("res://scripts/game/core_tests.gd")
+const ConnectionWaitScript = preload("res://scripts/game/connection_wait.gd")
 
 var _canvas: CanvasLayer
 var _player_deck_ids: Array[String] = []
@@ -1166,13 +1167,9 @@ func _currency_cell(icon: Control, kind: String) -> Control:
 	lbl.add_theme_font_size_override("font_size", 15)
 	lbl.add_theme_color_override("font_color", Color(0.92, 0.92, 0.96))
 	cell.add_child(lbl)
-	var update: Callable
-	update = func():
-		if not is_instance_valid(lbl):
-			Economy.balance_changed.disconnect(update)
-			return
+	var update := func():
 		lbl.text = str(Economy.dust if kind == "dust" else Economy.currency)
-	Economy.balance_changed.connect(update)
+	_connect_screen_signal(Economy.balance_changed, update, cell)
 	update.call()
 	return cell
 
@@ -1618,21 +1615,22 @@ func _require_login_then(on_ready: Callable, allow_back: bool = true) -> void:
 # If the connection doesn't open within CONNECT_TIMEOUT_SEC, on_timeout runs instead (if given).
 const CONNECT_TIMEOUT_SEC := 8.0
 
-func _with_connection(on_ready: Callable, on_timeout: Callable = Callable()) -> void:
+func _with_connection(on_ready: Callable, on_timeout: Callable = Callable(), scope: Node = null) -> void:
 	if Net._connected:
 		on_ready.call()
 		return
-	var fired := false
-	Net.connected_to_server.connect(func():
-		fired = true
-		on_ready.call()
-	, CONNECT_ONE_SHOT)
+	var pending := ConnectionWaitScript.new()
+	(scope if scope != null else _canvas).add_child(pending)
+	pending.start(Net.connected_to_server, on_ready, on_timeout, CONNECT_TIMEOUT_SEC)
 	Net.connect_to_relay()
-	if on_timeout.is_valid():
-		get_tree().create_timer(CONNECT_TIMEOUT_SEC).timeout.connect(func():
-			if not fired:
-				on_timeout.call()
-		)
+
+# Persistent autoload signals must release callbacks before their screen is freed.
+func _connect_screen_signal(source: Signal, handler: Callable, scope: Node, flags: int = 0) -> void:
+	source.connect(handler, flags)
+	scope.tree_exiting.connect(func():
+		if source.is_connected(handler):
+			source.disconnect(handler)
+	, CONNECT_ONE_SHOT)
 
 func _show_reconnecting_screen(on_success: Callable, allow_back: bool = true) -> void:
 	var center := CenterContainer.new()
@@ -1654,17 +1652,17 @@ func _show_reconnecting_screen(on_success: Callable, allow_back: bool = true) ->
 	# a fresh page load with nothing else on screen changing — a static
 	# label in that stretch is indistinguishable from a real hang. Animating
 	# it is a cheap way to make "still working" visible while that happens.
-	var still_connecting := true
-	_animate_loading_dots(lbl, "Reconnecting", func() -> bool: return still_connecting)
+	var loading := {"active": true}
+	_animate_loading_dots(lbl, "Reconnecting", func() -> bool: return loading.active)
 
 	_with_connection(func():
-		Auth.login_result.connect(func(success: bool, message: String):
-			still_connecting = false
+		_connect_screen_signal(Auth.login_result, func(success: bool, message: String):
+			loading.active = false
 			_on_resume_session_result(success, message, on_success, allow_back)
-		, CONNECT_ONE_SHOT)
+		, center, CONNECT_ONE_SHOT)
 		Auth.try_resume_session()
 	, func():
-		still_connecting = false
+		loading.active = false
 		lbl.text = "Couldn't reach the server. Check your connection and try again."
 		var retry_btn := _menu_btn("RETRY")
 		retry_btn.pressed.connect(func():
@@ -1672,7 +1670,7 @@ func _show_reconnecting_screen(on_success: Callable, allow_back: bool = true) ->
 			_show_reconnecting_screen(on_success, allow_back)
 		)
 		vbox.add_child(retry_btn)
-	)
+	, center)
 
 ## Cycles `lbl`'s text through base_text, base_text+".", +"..", +"..." every
 ## 0.4s until `lbl` is freed or `should_continue` returns false — call
@@ -1761,16 +1759,16 @@ func _show_auth_screen(is_register: bool, on_success: Callable, allow_back: bool
 			status_lbl.text = "Enter a username and password."
 			return
 		submit_btn.disabled = true
-		var still_connecting := true
+		var connecting := {"active": true}
 		status_lbl.text = "Connecting..."
-		_animate_loading_dots(status_lbl, "Connecting", func() -> bool: return still_connecting)
+		_animate_loading_dots(status_lbl, "Connecting", func() -> bool: return connecting.active)
 		_with_connection(func():
-			still_connecting = false
+			connecting.active = false
 			status_lbl.text = "Registering..." if is_register else "Logging in..."
-			still_connecting = true
-			_animate_loading_dots(status_lbl, "Registering" if is_register else "Logging in", func() -> bool: return still_connecting)
+			var authenticating := {"active": true}
+			_animate_loading_dots(status_lbl, "Registering" if is_register else "Logging in", func() -> bool: return authenticating.active)
 			var handler := func(success: bool, message: String):
-				still_connecting = false
+				authenticating.active = false
 				if success:
 					_clear_screen()
 					_mp_name = Auth.username
@@ -1779,16 +1777,16 @@ func _show_auth_screen(is_register: bool, on_success: Callable, allow_back: bool
 					submit_btn.disabled = false
 					status_lbl.text = message
 			if is_register:
-				Auth.register_result.connect(handler, CONNECT_ONE_SHOT)
+				_connect_screen_signal(Auth.register_result, handler, center, CONNECT_ONE_SHOT)
 				Auth.register(uname, pw)
 			else:
-				Auth.login_result.connect(handler, CONNECT_ONE_SHOT)
+				_connect_screen_signal(Auth.login_result, handler, center, CONNECT_ONE_SHOT)
 				Auth.login(uname, pw)
 		, func():
-			still_connecting = false
+			connecting.active = false
 			submit_btn.disabled = false
 			status_lbl.text = "Couldn't reach the server. Check your connection and try again."
-		)
+		, center)
 	)
 
 func _show_lobby_browser() -> void:
