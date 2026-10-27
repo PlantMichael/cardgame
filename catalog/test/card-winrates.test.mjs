@@ -23,7 +23,8 @@ test('catalog projects only published counts and isolates bounded upstream failu
     if (mode === 'malformed') cards[0].wins = 2;
     if (mode === 'incomplete') cards.pop(), cards.pop();
     res.end(JSON.stringify({ schemaVersion: 1, catalogVersion: latest.catalogVersion,
-      generatedAt: new Date().toISOString(), cards, player_deck: ['private'], methodology: { secret: true } }));
+      generatedAt: new Date().toISOString(), cards, player_deck: ['private'],
+      methodology: { secret: true, ...(mode === 'missingSeats' ? {} : { aiSeats: mode === 'oldSeats' ? 'human_only' : 'both' }) } }));
   });
   await new Promise(r => upstream.listen(0, '127.0.0.1', r));
   const server = createCatalogServer(root, { statsOrigin: `http://127.0.0.1:${upstream.address().port}`, statsTimeoutMs: 100 });
@@ -39,8 +40,9 @@ test('catalog projects only published counts and isolates bounded upstream failu
   const data = JSON.parse(text);
   assert.equal(data.cards.length, published.length);
   assert.equal(data.cards[0].winRate, 1, 'rate is recomputed from validated counts');
+  assert.equal(data.methodology.aiSeats, 'both');
   for (const privateField of ['player_id', 'player_deck', 'gen_str_005', 'secret']) assert.ok(!text.includes(privateField));
-  for (mode of ['status', 'redirect', 'large', 'malformed', 'incomplete', 'timeout']) {
+  for (mode of ['status', 'redirect', 'large', 'malformed', 'incomplete', 'timeout', 'oldSeats', 'missingSeats']) {
     const response = await fetch(origin + STATS_PATH);
     assert.equal(response.status, 503, mode);
     assert.equal(response.headers.get('cache-control'), 'no-store');

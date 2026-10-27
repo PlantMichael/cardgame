@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { once } = require('node:events');
 const path = require('node:path');
+const { readFileSync } = require('node:fs');
 const { Pool } = require('pg');
 const WebSocket = require('ws');
 const { initLegacySchema } = require('../schema_legacy');
@@ -43,16 +44,16 @@ test('published card win rates combine actual starting decks through both HTTP e
     VALUES ('winrate_a', 'synthetic', 'synthetic'), ('winrate_b', 'synthetic', 'synthetic') RETURNING id`);
   const [a, b] = people.map(p => p.id);
   const cards = new Map([...loadCards()].filter(([, c]) => !c.is_token));
-  async function ai(id, won, deck) {
-    const record = normalizeAIRecord({ player_deck: deck, opponent_deck: ['cr_002'],
+  async function ai(id, won, deck, opponent = ['cr_002']) {
+    const record = normalizeAIRecord({ player_deck: deck, opponent_deck: opponent,
       ai_level: 1, turns: 10, rules_version: 1 }, id, cards);
     assert.ok(record);
     await pool.query(`INSERT INTO ranked_settlements (match_id, player_id, won, outcome, ai_match)
       VALUES ($1,$2,$3,'{}',$4) ON CONFLICT DO NOTHING`, [id, a, won, record]);
   }
-  await ai('ai_1_1', true, ['g_001', 'g_001', 'gen_str_005']);
+  await ai('ai_1_1', true, ['g_001', 'g_001', 'gen_str_005'], ['g_001', 'cr_002', 'cr_002', 'cr_003']);
   await ai('ai_1_2', false, ['g_001', 'g_002']);
-  await ai('ai_1_1', true, ['g_001']); // settlement redelivery remains one perspective
+  await ai('ai_1_1', true, ['g_001']); // redelivery cannot duplicate either seat
   await pool.query(`INSERT INTO ranked_settlements (match_id,player_id,won,outcome) VALUES ('ai_legacy',$1,true,'{}')`, [a]);
   let clock = 1800000000000;
   const root = path.join(PROJECT_DIR, 'catalog/public');
@@ -70,12 +71,15 @@ test('published card win rates combine actual starting decks through both HTTP e
   function card(body, id) { return JSON.parse(body).cards.find(c => c.id === id); }
   let response = await get();
   assert.equal(response.status, 200);
-  assert.deepEqual(card(response.text, 'g_001'), { id: 'g_001', matches: 2, wins: 1, losses: 1, winRate: 0.5 });
+  assert.deepEqual(card(response.text, 'g_001'), { id: 'g_001', matches: 3, wins: 1, losses: 2, winRate: 1 / 3 });
   assert.equal(card(response.text, 'g_002').winRate, 0, 'a single loss is published');
-  assert.equal(card(response.text, 'cr_002').winRate, null, 'AI opponent deck is excluded');
+  assert.deepEqual(card(response.text, 'cr_002'), { id: 'cr_002', matches: 2, wins: 1, losses: 1, winRate: 0.5 }, 'AI copies deduplicate and the human loss becomes an AI win');
+  assert.equal(card(response.text, 'cr_003').winRate, 0, 'historical human win becomes an AI loss');
+  assert.equal(card(response.text, 'o_001').winRate, null, 'no observed seat is no data');
   assert.equal(JSON.parse(response.text).methodology.minSample, 1);
   for (const origin of [relay, catalog]) {
     const r = await get(origin);
+    assert.equal(JSON.parse(r.text).methodology.aiSeats, 'both');
     assert.equal(card(r.text, 'gen_str_005'), undefined, 'private non-token cards are withheld at source and facade');
     assert.ok(!r.text.includes('ai_1_1') && !r.text.includes('winrate_a'));
     assert.equal(r.headers.get('access-control-allow-origin'), '*');
@@ -105,15 +109,32 @@ test('published card win rates combine actual starting decks through both HTTP e
   const tokenId = [...loadCards()].find(([, c]) => c.is_token)[0];
   await pool.query(`UPDATE ranked_settlements SET ai_match = jsonb_set(ai_match, '{player_deck}', $1::jsonb)
     WHERE match_id = 'ai_1_1'`, [JSON.stringify(['g_001', 'g_001', 'gen_str_005', tokenId, 'unknown_card'])]);
-  assert.equal(card((await get()).text, 'g_001').matches, 2, 'successful snapshot cached');
+  assert.equal(card((await get()).text, 'g_001').matches, 3, 'successful snapshot cached');
   clock += 60001;
   const concurrent = await Promise.all(Array.from({ length: 8 }, () => get(relay)));
   assert.ok(concurrent.every(r => r.text === concurrent[0].text));
   assert.equal(card(concurrent[0].text, tokenId), undefined);
   assert.equal(card(concurrent[0].text, 'unknown_card'), undefined);
   response = await get();
-  assert.deepEqual(card(response.text, 'g_001'), { id: 'g_001', matches: 4, wins: 2, losses: 2, winRate: 0.5 });
+  assert.deepEqual(card(response.text, 'g_001'), { id: 'g_001', matches: 5, wins: 2, losses: 3, winRate: 0.4 });
   assert.deepEqual(card(response.text, 'g_002'), { id: 'g_002', matches: 2, wins: 1, losses: 1, winRate: 0.5 });
+  const { rows: sqlRows } = await pool.query(readFileSync(path.join(PROJECT_DIR, 'server/tools/card-winrates.sql'), 'utf8'));
+  for (const c of JSON.parse(response.text).cards.filter(c => c.matches > 0)) {
+    const row = sqlRows.find(r => r.card_id === c.id);
+    assert.ok(row, `Railway query includes ${c.id}`);
+    assert.deepEqual([Number(row.games), Number(row.wins), Number(row.losses)], [c.matches, c.wins, c.losses]);
+    assert.equal(Number(row.win_rate_percent), Math.round(c.winRate * 10000) / 100);
+  }
+
+  // Some historical/partial summaries have no usable opponent deck. Never invent it.
+  await pool.query(`UPDATE ranked_settlements SET ai_match = ai_match - 'opponent_deck' WHERE match_id = 'ai_1_1'`);
+  clock += 60001;
+  response = await get();
+  assert.equal(card(response.text, 'cr_003').winRate, null);
+  assert.equal(card(response.text, 'g_001').matches, 4, 'human and PvP seats still count');
+  await pool.query(`UPDATE ranked_settlements SET ai_match = jsonb_set(ai_match, '{opponent_deck}', '"malformed"'::jsonb) WHERE match_id = 'ai_1_1'`);
+  clock += 60001;
+  assert.equal(card((await get()).text, 'cr_003').winRate, null);
 
   clock += 60001;
   await pool.query('ALTER TABLE ranked_settlements RENAME TO unavailable_settlements');

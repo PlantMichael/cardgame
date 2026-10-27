@@ -10,7 +10,7 @@ const STATS_PATH = '/data/v1/stats/card-winrates.json';
 const PUBLIC_ROOT = path.join(__dirname, '..', 'catalog', 'public');
 const METHODOLOGY = {
   metric: 'starting_deck_inclusion', modes: ['ranked_ai', 'authoritative_pvp'],
-  aiSeats: 'human_only', copies: 'once_per_player_game', rulesVersions: 'combined',
+  aiSeats: 'both', copies: 'once_per_player_game', rulesVersions: 'combined',
   minSample: 1, preliminary: true,
   privacy: 'No raw identities or deck lists. Small sample changes may reveal deck inclusion or outcomes.',
 };
@@ -33,19 +33,23 @@ async function aggregate(pool, root, now) {
   const { catalogVersion, ids } = publishedCards(root);
   const { rows: availability } = await pool.query("SELECT to_regclass('ranked_matches') IS NOT NULL AS available");
   const pvp = availability[0].available ? `UNION ALL
-    SELECT s.match_id, s.player_id, s.won,
+    SELECT s.match_id, s.player_id, 'player' AS side, s.won,
       CASE WHEN s.player_id = m.seat_a_player_id THEN m.deck_a
            WHEN s.player_id = m.seat_b_player_id THEN m.deck_b END AS deck
     FROM ranked_settlements s JOIN ranked_matches m USING (match_id)
     WHERE s.ai_match IS NULL AND m.mode = 'authoritative' AND m.status = 'finished'
       AND m.winner_seat IN ('a', 'b') AND m.end_reason = ANY($2::text[])` : '';
   const { rows } = await pool.query(`WITH perspectives AS (
-    SELECT match_id, player_id, won, ai_match->'player_deck' AS deck
-    FROM ranked_settlements
-    WHERE ai_match->>'mode' = 'ranked_ai' AND ai_match->>'source' = 'client_reported'
+    SELECT s.match_id, s.player_id, seat.side, seat.won, seat.deck
+    FROM ranked_settlements s
+    CROSS JOIN LATERAL (VALUES
+      ('player', s.won, s.ai_match->'player_deck'),
+      ('opponent', NOT s.won, s.ai_match->'opponent_deck')
+    ) AS seat(side, won, deck)
+    WHERE s.ai_match->>'mode' = 'ranked_ai' AND s.ai_match->>'source' = 'client_reported'
     ${pvp}
   ), inclusions AS (
-    SELECT DISTINCT match_id, player_id, won, card_id
+    SELECT DISTINCT match_id, player_id, side, won, card_id
     FROM perspectives CROSS JOIN LATERAL jsonb_array_elements_text(
       CASE WHEN jsonb_typeof(deck) = 'array' THEN deck ELSE '[]'::jsonb END) AS cards(card_id)
     WHERE card_id = ANY($1::text[])

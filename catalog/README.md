@@ -28,7 +28,7 @@ Fetch `/data/v1/stats/card-winrates.json` and join `cards[].id` to the printed c
   "methodology": {
     "metric": "starting_deck_inclusion",
     "modes": ["ranked_ai", "authoritative_pvp"],
-    "aiSeats": "human_only",
+    "aiSeats": "both",
     "copies": "once_per_player_game",
     "rulesVersions": "combined",
     "minSample": 1,
@@ -39,15 +39,17 @@ Fetch `/data/v1/stats/card-winrates.json` and join `cards[].id` to the printed c
 }
 ```
 
-`matches` means recorded **player-games with the card in the starting deck**, whether starter or custom. Two copies count once. The AI's opponent deck is excluded; only the human's result counts. Settled authoritative PvP counts both players, so a mirror match can add one win and one loss. AI results are client-reported, not verified PvP. All rules versions are combined. Created, drawn or played cards do not change this metric.
+`matches` means recorded **seat-games with the card in the starting deck**, whether starter or custom. Two copies count once per seat. Ranked AI counts BOTH decks: the human's cards receive the recorded outcome, and the AI's cards receive the opposite outcome. Settled authoritative PvP also counts both players. A card on both sides therefore gets one win and one loss from that match. AI results are client-reported, not verified PvP. All rules versions are combined. Created, drawn or played cards do not change this metric; it measures deck-inclusion outcomes rather than a card's causal strength.
 
-Every currently published collectible has a row. No recorded sample means counts of zero and `winRate: null`; otherwise the rate is a fraction from 0 to 1, visible from the first game. Legacy settlements without deck summaries, uncompleted/voided/drawn PvP, tokens and unpublished cards do not count. Already-recorded AI summaries count after deployment; old missing decks cannot be reconstructed.
+Every currently published collectible has a row. No recorded sample means counts of zero and `winRate: null`; otherwise the rate is a fraction from 0 to 1, visible from the first game. Legacy settlements without deck summaries, uncompleted/voided/drawn PvP, tokens and unpublished cards do not count. Already-recorded AI summaries include both saved starting decks automatically on the next refresh after deployment, without rewriting history or awarding results again. Missing/malformed historical deck fields contribute nothing for that seat; old missing decks cannot be reconstructed.
+
+For Railway's database query box, copy [server/tools/card-winrates.sql](../server/tools/card-winrates.sql). It counts both AI seats and settled PvP, replacing the earlier human-only query. This raw database view includes all recorded IDs (publication filtering lives in the API's file-based catalog), and requires `ranked_matches` to exist. The API also supports an AI-only schema without that table. Neither query nor API modifies match records.
 
 This is preliminary testing data. The owner explicitly selected the one-game minimum, superseding the earlier 100-game/anti-differencing policy **for this endpoint**. No raw identity, match ID or deck list is returned, but comparing small-sample snapshots can reveal a player's card inclusion and result. Do not describe this as protection against inference.
 
 The relay caches successful aggregates for 60 seconds and shares concurrent refreshes. `generatedAt` is snapshot time, not a match timestamp. Responses use `Cache-Control: no-cache`; failures are generic JSON **503**, `no-store`, never zero-filled or stale success. GET/HEAD/OPTIONS and anonymous CORS are supported. Printed card files and `/healthz` remain available during stats failures. The proposed immutable `/stats/latest.json` releases remain unimplemented; this endpoint does not supply drawn/played rates, tiers, caps or deck archetypes.
 
-Deploy both services from the same catalog release. The relay image includes `catalog/public/data/v1/`; it reads the committed publication allowlist and uses its existing database pool. No new database tables or variables are required. The catalog defaults to `https://cardgame-relay-production.up.railway.app`; optionally set **`CARD_WINRATES_ORIGIN`** on the catalog to an HTTP(S) origin for staging/local testing (no path, query, userinfo or fragment). The fetch has a 5-second timeout, 1 MiB response limit, refuses redirects, and validates/project counts. A mismatched catalog version returns 503 until both deployments agree. No Godot browser export is needed for this API-only change.
+Deploy both services from the same catalog release. For the two-seat update, deploy **catalog first, then relay**: the updated catalog requires upstream `methodology.aiSeats: "both"` and returns generic 503 while the relay still uses the old human-only methodology, rather than relabeling incompatible counts. The relay image includes `catalog/public/data/v1/`; it reads the committed publication allowlist and uses its existing database pool. No new database tables or variables are required. The catalog defaults to `https://cardgame-relay-production.up.railway.app`; optionally set **`CARD_WINRATES_ORIGIN`** on the catalog to an HTTP(S) origin for staging/local testing (no path, query, userinfo or fragment). The fetch has a 5-second timeout, 1 MiB response limit, refuses redirects, and validates/projects counts. A mismatched catalog version returns 503 until both deployments agree. No Godot browser export is needed for this API-only change.
 
 After deployment, fetch the new route, complete a ranked game using a client with AI-summary recording, then fetch again after 60 seconds and check the affected card counts. Local aggregate verification: from `server`, run `node --test test/card_winrates.test.js test/ranked_ai_record.test.js` with a disposable `DATABASE_URL`; from `catalog`, run `node --test 'test/*.test.mjs'` without `DATABASE_URL`.
 

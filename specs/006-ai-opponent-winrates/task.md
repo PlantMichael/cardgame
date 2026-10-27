@@ -1,0 +1,30 @@
+# Count both sides of ranked AI matches
+
+The user asks: "go ahead and count the ai opponent's cards too, including the games already recorded. i want a true winrate calculator, that takes a ranked match and scores what cards won and lost". Base `0df4933`, branch `codex/count-ai-opponent-winrates`. This is a bounded correction to the existing win-rate work; no new collection pipeline.
+
+## Behavior and design
+
+`server/card_winrates.js` currently expands only `ranked_settlements.ai_match.player_deck` with the human's `won`. `server/ranked_ai_record.js:14-23` already validates and snapshots BOTH decks; no migration, historical rewrite or client recording change is needed. Expand every qualifying AI settlement into two seat perspectives: human deck with `won`, opponent deck with `NOT won`. Deduplicate by match, reporting player, seat and card. Copies count once per seat; a card on both sides gets one win and one loss. Historical records with deck arrays count on the next aggregate refresh; absent/malformed decks contribute nothing, never inferred cards.
+
+Preserve authoritative PvP counting, custom decks, private/public card filtering, the one-game minimum, zero-sample null rates, 60-second cache, failures, identity privacy disclosures and all other routes. This is still starting-deck inclusion, not a causal strength estimate or a drawn/played statistic. Do not add AI settlement rows, rewards, storage, scheduling or dependencies. Reusing the existing read-time aggregate is sufficient; a backfill would unnecessarily mutate canonical history.
+
+Change metadata to `methodology.aiSeats: "both"` in relay and catalog. The catalog must require this upstream metadata so an older human-only relay cannot be relabeled as both-sided during rollout: return the existing generic 503 instead. Keep schemaVersion 1 because fields and types remain stable and the aiSeats value explicitly identifies the changed population. Deploy catalog first, then relay: the updated catalog returns a temporary 503 while the relay still declares human-only counts, then serves both-sided counts. This avoids the old catalog incorrectly labeling new counts as human-only during the planned rollout. Both services must be updated. No client/web export change is required.
+
+Update `catalog/README.md`, `catalog/stats-website-spec.md`, `.docs/authoritative-server.md`, `.docs/status.md`; add a reusable read-only SQL query in `server/tools/card-winrates.sql` for the user's Railway DB view using identical seat/outcome semantics (all recorded IDs, because publication metadata is file-based). Include a comment and docs that the SQL requires authoritative tables, unlike the API which also supports AI-only schema. Do not duplicate the full lifecycle in a new test harness.
+
+## Proof and completion
+
+- Extend existing real PostgreSQL -> relay HTTP -> catalog HTTP regression with historical AI rows inserted before server start: human win gives opponent-only cards losses, human loss gives opponent-only cards wins, duplicate AI copies count once, shared IDs count separately for each seat, replay remains idempotent, and PvP/exclusions remain correct. Assert `aiSeats: both` at both endpoints and empty rows remain null. Missing opponent arrays add no artificial perspective.
+- Extend existing catalog upstream HTTP test to reject `human_only` or missing aiSeats metadata, then recover for `both`; existing bounded failure tests remain green.
+- Run the real integration test and the reusable SQL on a task-owned disposable PostgreSQL 17 database, with existing production schema/normalizer/settlement producers. Compare observed SQL counts to the API for recorded public IDs. Reuse the existing test's fixture setup; no second competing count oracle. Run catalog tests after metadata changes. No production DB writes or retroactive settlement calls.
+- Formal spec and implementation get fresh inner/outer reviews using configured `codex/gpt-6.1-sol` xhigh, after-inner broad outer policy. Current Codex authors; standalone configured Claude is unavailable. Verify and commit the bounded correction; current-session authorization to push/merge this win-rate work covers its bounded correction to the same GitHub repository/master. Deployment stays with the user. Remaining operator proof: deploy both services and fetch the stats route after cache refresh, checking a previously recorded AI opponent card now has a loss or win as appropriate.
+
+## Evidence
+
+Spec inner and blind outer approved revision `7AA74A9BDB613B6FA2859A9E58D222D51A1F842D979A3AF49299CC1EC444221D`, no findings. Implementation adds only seat expansion/discriminator, both-seat metadata/compatibility check, the reusable query, existing-test assertions and owning docs. No client, build, schema, package or reward changes.
+
+- The strengthened database/API test failed on the old code as expected: shared `g_001` returned two samples and one loss instead of three samples and two losses. After the change, `server`: `node --test test/card_winrates.test.js` with exclusive disposable local PostgreSQL 17 passes 1/1. It covers existing saved snapshots, both outcome directions, duplicate/shared cards, repeated settlement, unchanged PvP, missing/malformed opponent arrays, API metadata and SQL count/percentage agreement.
+- `catalog`: `node --test 'test/*.test.mjs'` passes 24/24, including 503 for human-only/missing upstream metadata and subsequent recovery, plus existing static/failure regressions.
+- `git diff --check` passes. Tests use only private disposable schemas and temporary files; no production reads/writes. Existing recording and web-export evidence from the prior work remains valid because ingestion, client sources, templates and build files are unchanged. No new browser export or full engine image build is selected for this server/query-only delta.
+
+Local implementation is complete. Hosted deployment and previously recorded live-game count confirmation remain with the user; use the updated SQL instead of the old human-only query when querying Railway directly.
