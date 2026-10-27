@@ -2952,7 +2952,7 @@
     },
     {
       "id": "t_003",
-      "name": "Inyuite Infantry",
+      "name": "Mokotai Infantry",
       "color": "TEAL",
       "type": "CREATURE",
       "rarity": "COMMON",
@@ -2972,7 +2972,7 @@
     },
     {
       "id": "t_004",
-      "name": "Inyuite Vanguard",
+      "name": "Mokotai Vanguard",
       "color": "TEAL",
       "type": "CREATURE",
       "rarity": "RARE",
@@ -3074,7 +3074,7 @@
     },
     {
       "id": "t_009",
-      "name": "Inyuite Scout",
+      "name": "Mokotai Scout",
       "color": "TEAL",
       "type": "CREATURE",
       "rarity": "COMMON",
@@ -3196,7 +3196,7 @@
     },
     {
       "id": "t_015",
-      "name": "Inyuite Overwatch",
+      "name": "Mokotai Overwatch",
       "color": "TEAL",
       "type": "CREATURE",
       "rarity": "RARE",

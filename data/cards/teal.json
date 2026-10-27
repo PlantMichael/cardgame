@@ -55,7 +55,7 @@
 	},
 	{
 		"id": "t_003",
-		"card_name": "Inyuite Infantry",
+		"card_name": "Mokotai Infantry",
 		"cost": 2,
 		"color": "TEAL",
 		"card_type": "CREATURE",
@@ -67,7 +67,7 @@
 		"abilities": [
 			"on_play_buff_if_yeti"
 		],
-		"art": "res://assets/teal/inyuiteinfantry.png",
+		"art": "res://assets/teal/mokotaiinfantry.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -91,7 +91,7 @@
 	},
 	{
 		"id": "t_009",
-		"card_name": "Inyuite Scout",
+		"card_name": "Mokotai Scout",
 		"cost": 2,
 		"color": "TEAL",
 		"card_type": "CREATURE",
@@ -104,7 +104,7 @@
 			"recon",
 			"cloaked"
 		],
-		"art": "res://assets/teal/inyuitescout.png",
+		"art": "res://assets/teal/mokotaiscout.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -292,7 +292,7 @@
 	},
 	{
 		"id": "t_015",
-		"card_name": "Inyuite Overwatch",
+		"card_name": "Mokotai Overwatch",
 		"cost": 5,
 		"color": "TEAL",
 		"card_type": "CREATURE",
@@ -304,7 +304,7 @@
 		"abilities": [
 			"on_yeti_death_challenge"
 		],
-		"art": "res://assets/teal/inyuiteoverwatch.png",
+		"art": "res://assets/teal/mokotaioverwatch.png",
 		"effect": "",
 		"effect_value": 0
 	},
@@ -329,7 +329,7 @@
 	},
 	{
 		"id": "t_004",
-		"card_name": "Inyuite Vanguard",
+		"card_name": "Mokotai Vanguard",
 		"cost": 5,
 		"color": "TEAL",
 		"card_type": "CREATURE",
@@ -342,7 +342,7 @@
 			"guardian",
 			"cloaked"
 		],
-		"art": "res://assets/teal/inyuitevanguard.png",
+		"art": "res://assets/teal/mokotaivanguard.png",
 		"effect": "",
 		"effect_value": 0
 	},

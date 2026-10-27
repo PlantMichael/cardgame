@@ -5,7 +5,7 @@ const MAX_COPIES := 2
 const SAVE_DIR := "user://decks/"
 const LS_PREFIX := "cardgame_deck_"
 
-const FACTION_NAMES = ["SAPIENS", "MOONLIGHT COVEN", "JUNKLINGS", "GUNDARI", "INYUITES"]
+const FACTION_NAMES = ["SAPIENS", "MOONLIGHT COVEN", "JUNKLINGS", "GUNDARI", "MOKOTAI"]
 const FACTION_SWATCHES = [
 	Color(0.20, 0.65, 0.20),  # GREEN
 	Color(0.80, 0.20, 0.20),  # CRIMSON

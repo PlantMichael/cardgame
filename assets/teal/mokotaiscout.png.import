@@ -2,28 +2,28 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dygp521olbdwe"
-path="res://.godot/imported/inyuiteoverwatch.png-e7db2bdb2166b6bc14859362c06b00a6.ctex"
+uid="uid://dwx2yj03adpns"
+path="res://.godot/imported/mokotaiscout.png-4f0c14e955d84718d813c8c7081cc0aa.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/teal/inyuiteoverwatch.png"
-dest_files=["res://.godot/imported/inyuiteoverwatch.png-e7db2bdb2166b6bc14859362c06b00a6.ctex"]
+source_file="res://assets/teal/mokotaiscout.png"
+dest_files=["res://.godot/imported/mokotaiscout.png-4f0c14e955d84718d813c8c7081cc0aa.ctex"]
 
 [params]
 
-compress/mode=1
+compress/mode=0
 compress/high_quality=false
-compress/lossy_quality=0.85
+compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

@@ -179,7 +179,7 @@ func _draw_emblem(ctrl: Control) -> void:
 				Vector2(w * 0.22, h * 0.62),
 			]
 			ctrl.draw_colored_polygon(pts, EMBLEM_COLOR)
-		CardData.CardColor.TEAL: # Inyuites — snowflake
+		CardData.CardColor.TEAL: # Mokotai — snowflake
 			for i in 3:
 				var ang := i * PI / 3.0
 				var dir := Vector2(cos(ang), sin(ang))

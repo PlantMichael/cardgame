@@ -2554,7 +2554,7 @@ func _show_opponent_select() -> void:
 		{"label": "Random Moonlight Coven", "color": CardData.CardColor.CRIMSON, "swatch": Color(0.80, 0.20, 0.20)},
 		{"label": "Random Junklings",       "color": CardData.CardColor.BLACK,   "swatch": Color(0.45, 0.45, 0.50)},
 		{"label": "Random Gundari",         "color": CardData.CardColor.ORANGE,  "swatch": Color(0.90, 0.50, 0.10)},
-		{"label": "Random Inyuites",        "color": CardData.CardColor.TEAL,    "swatch": Color(0.10, 0.60, 0.70)},
+		{"label": "Random Mokotai",        "color": CardData.CardColor.TEAL,    "swatch": Color(0.10, 0.60, 0.70)},
 	]
 
 	for entry in FACTIONS:

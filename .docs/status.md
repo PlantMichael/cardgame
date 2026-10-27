@@ -49,7 +49,7 @@
 - Deck select screen (choose player deck, then opponent starter deck)
 - Deck builder UI: hub listing saved decks, faction picker, collection editor with search, filter buttons (All / Faction / Generic); custom decks are tied to the logged-in account (server-side, via `Auth.custom_decks`/`DeckManager`), not the browser — falls back to local disk/localStorage only when playtesting from the editor (no login there)
 - Generic card color (`CardData.CardColor.GENERIC`): cards usable by all factions; appear in a separate section after faction cards in the collection browser
-- Inyuites (Teal) starter deck: 2× every non-legendary teal card + 1× Abominus + 1× each of the 5 generic cards = 40
+- Mokotai (Teal) starter deck: 2× every non-legendary teal card + 1× Abominus + 1× each of the 5 generic cards = 40
 - `challenge_all` ability (Rampage): on play, challenges every enemy creature left-to-right; each challenge resolves fully before the next
 - `rummage_and_play` ability: retrieve a creature from graveyard and immediately play it to board (Greedy Junkling)
 - `force_challenge` stratagem effect: prompts a Yeti to challenge; if `effect_value > 0` and the Yeti kills the target, it gains that many +atk/+hp (Icewhip)
