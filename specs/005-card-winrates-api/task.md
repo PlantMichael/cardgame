@@ -49,4 +49,3 @@ Implemented the relay aggregate/HTTP owner, catalog projection, publication allo
 - `git diff --check`: pass. Tests write only disposable private database schemas/temp fixtures. Godot producer hook was not rerun (no client changes); existing relay result submission passed.
 
 Implementation source approved by fresh inner and outer reviews on `b028709` (base `27fdfaf`); no outstanding findings. Outer independently reran the SQL/HTTP test (1/1), real relay recorder tests (2/2), and catalog upstream test (1/1), all passing. Remaining operator proof: deploy both services, fetch the new route and compare counts after a newly completed game/cache expiry. Nothing pushed or deployed by this work item.
-
