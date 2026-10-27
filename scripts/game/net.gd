@@ -197,10 +197,14 @@ func logout(token: String) -> void:
 ## match the server actually started. `opponent_rating` is still sent for
 ## older servers but is no longer trusted - the server reads the opponent's
 ## rating from its own record of the match.
-func report_ranked_result(token: String, won: bool, opponent_rating: int = -1, match_id: String = "") -> void:
+func report_ranked_result(token: String, won: bool, opponent_rating: int = -1, match_id: String = "",
+						  ai_match: Dictionary = {}) -> void:
 	var msg := {"type": "report_ranked_result", "token": token, "won": won, "match_id": match_id}
 	if opponent_rating >= 0:
 		msg["opponent_rating"] = opponent_rating
+	# Only local ranked AI games supply this optional, unverified summary.
+	if not ai_match.is_empty():
+		msg["ai_match"] = ai_match
 	send(msg)
 
 ## `deck_name` names one of the player's saved (or starter) decks: the server

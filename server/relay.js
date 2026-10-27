@@ -4,6 +4,7 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 const { initLegacySchema } = require('./schema_legacy');
+const { normalizeAIRecord } = require('./ranked_ai_record');
 const PORT = process.env.PORT || 8080;
 
 // Railway injects DATABASE_URL automatically once a Postgres plugin is
@@ -809,6 +810,14 @@ async function main() {
             // rating change (an AI ranked match), so a fabricated id cannot
             // manufacture Elo.
             const match = rankedMatches.get(matchId);
+            let aiMatch = null;
+            if (Object.hasOwn(msg, 'ai_match')) {
+              aiMatch = match ? null : normalizeAIRecord(msg.ai_match, matchId, CARD_RARITY);
+              if (!aiMatch) {
+                sendTo(ws, { type: 'ranked_result_ack', success: false, message: 'Invalid AI match summary.' });
+                return;
+              }
+            }
             let opponentRating = null;
             if (match) {
               const isHost = match.host_name === player.username;
@@ -843,11 +852,11 @@ async function main() {
             try {
               await client.query('BEGIN');
               const claimed = await client.query(
-                `INSERT INTO ranked_settlements (match_id, player_id, won, outcome)
-                 VALUES ($1, $2, $3, $4)
+                `INSERT INTO ranked_settlements (match_id, player_id, won, outcome, ai_match)
+                 VALUES ($1, $2, $3, $4, $5)
                  ON CONFLICT (match_id, player_id) DO NOTHING
                  RETURNING match_id`,
-                [matchId, player.id, won, JSON.stringify(next)]
+                [matchId, player.id, won, JSON.stringify(next), aiMatch ? JSON.stringify(aiMatch) : null]
               );
               if (!claimed.rows[0]) {
                 // Another concurrent report won the race; replay theirs.

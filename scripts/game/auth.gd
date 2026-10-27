@@ -78,8 +78,9 @@ func _on_pfp_sync_result(success: bool, message: String, _pfp_id: String) -> voi
 ## `opponent_rating` should only be passed for a matchmade PvP result (the
 ## opponent's rating at match-found time, from Net.ranked_match_found) so the
 ## server can move this player's matchmaking Elo; omit it for AI matches.
-func report_ranked_result(won: bool, opponent_rating: int = -1, match_id: String = "") -> void:
-	Net.report_ranked_result(token, won, opponent_rating, match_id)
+func report_ranked_result(won: bool, opponent_rating: int = -1, match_id: String = "",
+						  ai_match: Dictionary = {}) -> void:
+	Net.report_ranked_result(token, won, opponent_rating, match_id, ai_match)
 
 func queue_ranked(deck_name: String = "") -> void:
 	Net.queue_ranked(token, deck_name, RulesVersion.RULES_VERSION)

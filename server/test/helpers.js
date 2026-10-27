@@ -142,4 +142,4 @@ async function hostSession() {
   };
 }
 
-module.exports = { PROJECT_DIR, godotBin, haveDatabase, disposableDatabase, startMatchHost, HostClient, buildDeck, hostSession };
+module.exports = { PROJECT_DIR, godotBin, haveDatabase, disposableDatabase, startMatchHost, HostClient, buildDeck, hostSession, killTree };

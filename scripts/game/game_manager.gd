@@ -10,10 +10,10 @@ var is_campaign: bool = false
 ## this, a second run reassigns turn/phase mid-flight and can double up draws
 ## or skip them, draining a hand over the course of several turns.
 var _end_turn_in_progress: bool = false
-## Identity for a ranked match against the AI. The server has no record of
-## these (so they move no Elo), but the id still makes settlement idempotent:
-## a retried report replays the stored outcome instead of awarding twice.
+## AI results and summaries are client-reported, so they move no matchmaking
+## Elo. The identity still makes settlement and recording idempotent.
 var _ranked_match_id: String = ""
+var _ranked_ai_match: Dictionary = {}
 
 const LOCAL_PLAYER_ID = "player_1"
 const OPPONENT_PLAYER_ID = "player_2"
@@ -45,6 +45,15 @@ func start_local_game(board_node: Board, player_deck: Array[CardData], opponent_
 	# guard already stuck true and End Turn would silently do nothing.
 	_end_turn_in_progress = false
 	_ranked_match_id = "ai_%d_%d" % [Time.get_unix_time_from_system(), randi()]
+	# Snapshot the starting lists before draws, transforms or deck depletion.
+	_ranked_ai_match = {}
+	if ranked:
+		_ranked_ai_match = {
+			"player_deck": player_deck.map(func(card: CardData): return card.id),
+			"opponent_deck": opponent_deck.map(func(card: CardData): return card.id),
+			"ai_level": ai_level,
+			"rules_version": RulesVersion.RULES_VERSION,
+		}
 	game_state = GameState.new(LOCAL_PLAYER_ID, OPPONENT_PLAYER_ID, player_deck, opponent_deck)
 	game_state.node_modifier_ability = node_modifier_ability
 	game_state.set_events_enabled(true)
@@ -323,7 +332,9 @@ func _handle_game_over() -> void:
 		var old_bracket := Auth.rank_bracket
 		var old_in_legend := Auth.rank_in_legend
 		var old_legend_rating := Auth.rank_legend_rating
-		Auth.report_ranked_result(won, -1, _ranked_match_id)
+		var ai_match := _ranked_ai_match.duplicate(true)
+		ai_match["turns"] = game_state.turn_number
+		Auth.report_ranked_result(won, -1, _ranked_match_id, ai_match)
 		board.show_game_over(won, true, old_bracket, old_in_legend, old_legend_rating)
 	elif is_campaign:
 		board.show_game_over(won, false, 0, false, 0, true)

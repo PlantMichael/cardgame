@@ -78,6 +78,8 @@ const LEGACY_DDL = [
       settled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (match_id, player_id)
     )`,
+  // Nullable for old clients and PvP. ALTER also upgrades populated installs.
+  'ALTER TABLE ranked_settlements ADD COLUMN IF NOT EXISTS ai_match JSONB',
 ];
 
 async function initLegacySchema(pool) {

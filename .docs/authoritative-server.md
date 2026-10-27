@@ -159,7 +159,52 @@ when it is done; nothing is left listening.
 5. Roll back by unsetting the flag and restarting: the previous ranked flow is
    one switch away as long as the client build still has the legacy path.
 
-### Checking on it
+### Ranked AI summaries
+
+Completed ranked games against the local AI are recorded separately from
+server-run PvP. The local manager snapshots both starting decks and attaches an
+optional `ai_match` object to `report_ranked_result`, with `player_deck` and
+`opponent_deck` (card ID arrays), `ai_level` (1–10), `turns` and `rules_version`.
+The relay validates bounded fields and known non-token IDs, and adds fixed
+`mode: "ranked_ai"` and `source: "client_reported"` labels. These records are
+unverified and must not be counted as verified PvP statistics. They are summaries,
+not replays or per-card draw/play counters.
+
+The summary lives in **`ranked_settlements.ai_match`**, with the existing `won`,
+`player_id`, `match_id` and `settled_at`. It is inserted in the same transaction
+as the ladder update. Retrying a settled result preserves the first summary and
+awards nothing twice; matchmaking Elo remains unchanged for AI. These records
+work with `RANKED_AUTHORITATIVE` either on or off. They do not create a row in
+`ranked_matches` or any public catalog files.
+
+```sql
+SELECT match_id, won, settled_at,
+       ai_match->>'ai_level' AS ai_level,
+       ai_match->>'turns' AS turns,
+       ai_match
+FROM ranked_settlements
+WHERE ai_match IS NOT NULL
+ORDER BY settled_at DESC
+LIMIT 10;
+```
+
+Deploy the new relay first (boot adds the nullable JSONB column to existing
+databases), then rebuild and publish the game client. Older clients still settle
+results but send no summaries; older rows keep `ai_match = NULL`. Only completed
+ranked AI games on the updated client are captured. Quitting mid-game, results
+lost while disconnected, and games played before this update are not recovered;
+there is no new offline retry queue. Malformed supplied summaries fail the result
+acknowledgment without writing a settlement. Campaign and casual AI games are
+unchanged. No additional environment variable is needed.
+
+Run `cd server && node --test test/ranked_ai_record.test.js`: validation runs
+without services; setting a disposable `DATABASE_URL` enables real relay and
+Postgres persistence/upgrade/replay/rollback checks. With `GODOT_BIN` also set,
+the same test launches `test/fixtures/ranked_ai_client.tscn` against its localhost
+relay to exercise the real GameManager → Auth → Net result producer. It creates
+and removes its own database schema and never truncates other suites' records.
+
+### Checking on server-run PvP
 
 ```
 node tools/matches.js status            # live count, capacity, 24 h endings, recent faults
