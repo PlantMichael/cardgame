@@ -40,3 +40,12 @@ Verification on Windows with Node 22.23.2, repo-pinned Godot 4.7.2, and a task-o
 - Godot import generated changes to tracked `.import` settings. Inspected and restored only those task-generated settings; imported cache stays ignored. No assets, dependencies or lockfiles changed.
 
 Deployment is intentionally not performed. Operator must deploy the updated relay, rebuild/publish the updated client, complete a ranked AI game, and inspect `ranked_settlements.ai_match`. No changes to catalog publication or per-card counters. Test container is stopped/removed after verification; no other stacks are operated on.
+
+## Web export and publication follow-up (2026-10-27)
+
+User authorized pushing the change to GitHub and specifically requested a Godot web export. Source candidate `4445cc4` received both inner and outer implementation approval without changes. This follow-up keeps those source files unchanged and adds the matching generated browser build.
+
+- Installed the official matching Godot 4.7.2 web export templates on this PC.
+- `Godot_v4.7.2-stable_win64_console.exe --headless --path . --export-release Web build/index.html`: exit 0. The existing `Web` preset and `vercel.json` remain unchanged. Updated `build/index.html`, `index.js`, `index.pck` and `index.wasm`; also retain the engine-generated UID for the test fixture script. Restored incidental import-setting churn after inspection.
+- Served `build/` on a task-owned localhost HTTP server with the correct WebAssembly MIME type. The exported game visibly reached its login screen in the in-app Chromium browser; captured browser console warnings/errors were empty. This checks startup, not an authenticated live game or hosted deployment. The earlier real Godot/relay/Postgres proof covers the report producer.
+- Publish the reviewed source and browser build together on `codex/ranked-ai-recording` in `PlantMichael/cardgame`. Existing deployment integrations tracking `master` still require merging this branch. No direct Railway or Vercel configuration mutation is part of the push.
