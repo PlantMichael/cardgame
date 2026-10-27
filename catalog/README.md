@@ -110,18 +110,65 @@ npm run export           # export release-input.json into ./public
 2. **Validate + export.** `npm run export`. The whole candidate is validated before anything is written; any failure (bad JSON, duplicate id, unknown id, invalid field, dangling transform reference, unsafe label) exits nonzero and leaves the existing output untouched. Re-running with identical inputs is a byte-identical no-op; the same version with different content is refused.
 3. **Retain.** `public/` is committed. Previous releases stay in `public/data/v1/releases/` and are served forever, so a stateless rebuild keeps history.
 4. **Review** the diff of `public/` — that is exactly what becomes public.
-5. **Publish** (needs owner approval of target and spend, see below): deploy the `catalog/` directory.
+5. **Publish** (needs owner approval of target and spend): deploy the `catalog/` directory - see [Deploying to Railway](#deploying-to-railway).
 6. **Switch latest.** The export already points `latest.json` at the new release (`--no-latest` exports without switching). Complete release files are written before `latest.json`.
 7. **Roll back** without rewriting any release: `node src/export.mjs --set-latest <older-version>`.
 
 Nothing publishes automatically from a development commit.
 
-## Deploying to Railway (prepared, not done)
+## Deploying to Railway
 
-- Create a service from this repository with **Root Directory = `catalog/`** — the serving code and the prepared releases are both inside it; nothing outside `catalog/` is needed at runtime.
-- `railway.json` sets `node src/server.mjs` as the start command and `/healthz` as the health check. `/healthz` is 200 only when `latest.json` and the two files it links to exist, so a bound port with missing data is reported unhealthy.
-- No environment variables are required (`PORT` is injected). No `DATABASE_URL`, no secrets.
-- Public domain, spend limits and rate limiting are platform settings the operator chooses; no developer-key system is built.
+Everything inside this directory is deploy-ready: no dependencies, no
+environment variables, no secrets, `PORT` honoured, `/healthz` implemented, and
+the release files committed under `public/`. What is left is account work.
+
+**Before the domain is public**, settle [Open decisions](#open-decisions). A
+release is write-once: whatever `catalogVersion` is live at
+`/data/v1/releases/<version>/` is that content forever, so publishing
+`0.1.0-candidate.1` with `gameVersion: "unreleased"` freezes those placeholder
+labels at a public URL. Decide the real labels and the card selection, re-run
+`npm run export`, review the diff of `public/`, and only then deploy.
+
+```bash
+railway login                  # opens a browser; the saved login expires
+cd catalog
+railway init                   # or: railway link, to attach to an existing project
+railway up                     # builds and deploys this directory
+railway domain                 # generates the public *.up.railway.app origin
+```
+
+- **Root Directory must be `catalog/`.** There is no `package.json` at the
+  repository root, so a service rooted there has nothing for Nixpacks to build.
+  `railway init` run from this directory sets it; in the dashboard it is
+  Settings → Source → Root Directory. A build that fails looking for a start
+  command is almost always this.
+- `railway.json` supplies the rest: Nixpacks, `node src/server.mjs`, `/healthz`
+  as the health check (200 only when `latest.json` and the two files it links to
+  all exist, so a bound port with missing data is reported unhealthy), and
+  restart-on-failure. `watchPatterns: ["catalog/**"]` keeps game-only commits
+  from rebuilding the catalog; the patterns are read relative to the repository
+  root, so drop them if a catalog change ever fails to trigger a deploy.
+- Public domain, spend limits and rate limiting are platform settings the
+  operator chooses. No developer-key system is built, by design.
+
+### Verifying a deploy
+
+```bash
+curl -s https://<origin>/healthz                        # {"status":"ok","catalogVersion":"…"}
+node examples/consume.mjs https://<origin>              # card count, keyword count, a filtered list
+curl -sI https://<origin>/data/v1/latest.json           # ETag, Cache-Control: no-cache, CORS
+```
+
+A release file should come back `Cache-Control: public, max-age=31536000,
+immutable`, and re-requesting either with `If-None-Match` should give `304`.
+All of that passes locally (`npm test`, 23 checks); none of it has been seen
+through Railway's CDN.
+
+Then give the consumer the origin — it is the `CATALOG_ORIGIN` in
+[`stats-website-spec.md`](stats-website-spec.md), and the one thing that
+document cannot supply. Tell them plainly that `/data/v1/stats/…` will 404:
+those files are a frozen contract with no implementation behind them, and the
+spec asks the site to show an honest empty state rather than an error.
 
 ## What is verified, and what is not
 
