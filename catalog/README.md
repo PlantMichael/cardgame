@@ -150,13 +150,14 @@ npm run export           # export release-input.json into ./public
 6. **Switch latest.** The export already points `latest.json` at the new release (`--no-latest` exports without switching). Complete release files are written before `latest.json`.
 7. **Roll back** without rewriting any release: `node src/export.mjs --set-latest <older-version>`.
 
-Nothing publishes automatically from a development commit.
+Publication uses the service's configured deployment branch or an explicit CLI deployment.
 
 ## Deploying to Railway
 
-Everything inside this directory is deploy-ready: no dependencies, no
-environment variables, no secrets, `PORT` honoured, `/healthz` implemented, and
-the release files committed under `public/`. What is left is account work.
+Everything inside this directory is deploy-ready: no dependencies or database
+credentials, `PORT` honoured, `/healthz` implemented, and release files committed
+under `public/`. The live stats route uses the default relay origin unless the
+operator sets `CARD_WINRATES_ORIGIN`.
 
 The content is settled (see [Decided](#decided)): release `0.1.0`, 176 cards.
 A release is write-once - whatever is live at `/data/v1/releases/0.1.0/` is
@@ -196,20 +197,21 @@ curl -sI https://<origin>/data/v1/latest.json           # ETag, Cache-Control: n
 
 A release file should come back `Cache-Control: public, max-age=31536000,
 immutable`, and re-requesting either with `If-None-Match` should give `304`.
-All of that passes locally (`npm test`, 23 checks); none of it has been seen
-through Railway's CDN.
+All of that passes locally (`npm test`, 24 checks). This task has not rechecked
+the printed catalog's behavior through Railway's CDN.
 
-Then give the consumer the origin — it is the `CATALOG_ORIGIN` in
-[`stats-website-spec.md`](stats-website-spec.md), and the one thing that
-document cannot supply. Tell them plainly that `/data/v1/stats/…` will 404:
-those files are a frozen contract with no implementation behind them, and the
-spec asks the site to show an honest empty state rather than an error.
+Give consumers the origin as `CATALOG_ORIGIN` in
+[`stats-website-spec.md`](stats-website-spec.md). The live
+`/data/v1/stats/card-winrates.json` route requires both updated services;
+unavailable stats return 503. The proposed `/data/v1/stats/latest.json` and
+immutable stats release routes remain unimplemented and return 404. Consumers
+must distinguish unavailable figures from genuine zero samples.
 
 ## What is verified, and what is not
 
 Verified locally by `npm test` and a live run: projection and exclusions, deterministic bytes, write-once versions, failure preservation, retained history across an update, rollback, real 404s, traversal/dotfile/non-JSON refusal, CORS headers and preflight, `Cache-Control`, `ETag` → `304`, `HEAD`, and `/healthz`.
 
-**Not verified** (needs an authorised deploy): the Railway build context, public HTTPS domain, deployed CORS / content-type / cache / ETag behaviour behind Railway's CDN, old-release retention across a real redeploy, and resource usage. Do not treat the API as live.
+**Remaining operator proof:** the new live route after deploying both services, deployed CORS / content-type / cache / ETag behavior behind Railway's CDN, old-release retention across a real redeploy, and resource usage. The owner reports the printed catalog is deployed at the origin above; this task verifies the new win-rate API locally only. The changed relay Docker COPY boundary was checked with a scratch image using the actual root build context and ignore rules; a full production image rebuild was not run.
 
 ## Decided
 
@@ -219,4 +221,4 @@ Verified locally by `npm test` and a live run: projection and exclusions, determ
 ## Still open
 
 - **Keyword text** for the unmapped ability keys (above): 76 of them export as `null` in `abilityKeywords`, which consumers must handle. Writing player-facing text for them is content work, not a code change.
-- **Hosting.** No service exists; see [Deploying to Railway](#deploying-to-railway).
+- **Win-rate rollout.** Deploy both updated services and verify counts after a game and cache expiry; see [Deploying to Railway](#deploying-to-railway).
