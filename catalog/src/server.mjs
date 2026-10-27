@@ -1,7 +1,7 @@
-// Static, read-only server for the prepared public catalog.
+// Read-only server for prepared card definitions and public win-rate aggregates.
 //
-// Serves ONLY files under the public directory (default ../public). No
-// database, no WebSocket relay, no credentials. Binds to $PORT (Railway
+// Serves prepared files plus a bounded aggregate fetch from the relay. No
+// database credentials. Binds to $PORT (Railway
 // injects it) on 0.0.0.0.
 
 import { createHash } from 'node:crypto';
@@ -9,6 +9,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { cardWinrates, STATS_PATH } from './card-winrates.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const IMMUTABLE = 'public, max-age=31536000, immutable';
@@ -74,14 +75,14 @@ export function healthStatus(root) {
   return { ok: true, catalogVersion: pointer.catalogVersion };
 }
 
-export function createCatalogServer(root) {
+export function createCatalogServer(root, options = {}) {
   const base = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Expose-Headers': 'ETag',
     'X-Content-Type-Options': 'nosniff',
   };
 
-  return http.createServer((req, res) => {
+  return http.createServer(async (req, res) => {
     const send = (status, headers, body) => {
       res.writeHead(status, { ...base, ...headers });
       res.end(req.method === 'HEAD' ? undefined : body);
@@ -110,6 +111,11 @@ export function createCatalogServer(root) {
     }
 
     const pathname = (req.url ?? '/').split('?')[0];
+    if (pathname === STATS_PATH) {
+      try { json(200, await cardWinrates(root, resolvePublicFile, options), { 'Cache-Control': REVALIDATE }); }
+      catch { json(503, { error: 'card win rates unavailable' }); }
+      return;
+    }
     if (pathname === '/healthz') {
       const h = healthStatus(root);
       json(h.ok ? 200 : 503, h.ok ? { status: 'ok', catalogVersion: h.catalogVersion } : { status: 'unavailable', reason: h.reason });
@@ -145,7 +151,7 @@ export function createCatalogServer(root) {
 export function main() {
   const root = path.resolve(process.env.CATALOG_PUBLIC_DIR ?? path.join(here, '..', 'public'));
   const port = Number(process.env.PORT ?? 8080);
-  const server = createCatalogServer(root);
+  const server = createCatalogServer(root, { statsOrigin: process.env.CARD_WINRATES_ORIGIN });
   server.listen(port, '0.0.0.0', () => {
     const h = healthStatus(root);
     console.log(`catalog server on :${port}, serving ${root} (${h.ok ? `latest ${h.catalogVersion}` : `NOT READY: ${h.reason}`})`);

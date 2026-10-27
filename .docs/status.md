@@ -2,6 +2,8 @@
 
 ## What's Working
 
+- Public starting-deck card win-rate API implemented at `/data/v1/stats/card-winrates.json`: combines recorded AI human decks and authoritative PvP, including custom decks, with one-game samples and a 60-second relay cache. Requires deploying both updated services; hosted operation remains an operator check. See `catalog/README.md` for limits and contract.
+
 - Card data system loading from per-color JSON files
 - Board scene with all zones (hand, board, heroes, center bar)
 - Drag and drop card playing from hand to board

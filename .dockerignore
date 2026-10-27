@@ -4,7 +4,7 @@
 .godot
 build
 specs
-catalog
+catalog/node_modules
 .claude
 .agents
 .specify

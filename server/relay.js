@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { initLegacySchema } = require('./schema_legacy');
 const { normalizeAIRecord } = require('./ranked_ai_record');
+const { createRelayServer } = require('./card_winrates');
 const PORT = process.env.PORT || 8080;
 
 // Railway injects DATABASE_URL automatically once a Postgres plugin is
@@ -404,7 +405,7 @@ async function main() {
     console.log('Ranked matches are server-authoritative (rules version', auth.rulesVersion + ')');
   }
 
-  const wss = new WebSocket.Server({ port: PORT });
+  const { server, wss } = createRelayServer({ pool });
 
   wss.on('connection', (ws) => {
     ws.isAlive = true;
@@ -1045,7 +1046,7 @@ async function main() {
   setInterval(sweepRankedQueue, RANKED_SWEEP_MS);
   setInterval(sweepCampaignQueue, CAMPAIGN_SWEEP_MS);
 
-  console.log('Relay server listening on port', PORT);
+  server.listen(PORT, () => console.log('Relay server listening on port', PORT));
 }
 
 function _handleDisconnect(ws) {

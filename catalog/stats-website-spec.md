@@ -1,5 +1,7 @@
 # Spec: card statistics website
 
+> **Current live-summary addition (2026-10-27):** `/data/v1/stats/card-winrates.json` is now implemented in source; deploy both updated services to enable it. See [README: live card win rates](README.md#live-card-win-rates) for its complete contract and example. It combines recorded AI human seats and authoritative PvP, counts starting-deck inclusion (custom decks included), and intentionally publishes samples from one game. Counts can permit inference by comparing snapshots. It is separate from the unimplemented batch/release API below; that older API's thresholds, caps, verified-only filtering and drawn/played fields do not apply to this live route. Printed catalog origin is `https://cardgame-catalog-production.up.railway.app`; the old unknown-origin/not-deployed statements below are historical planning context.
+
 A brief for whoever (or whatever) builds a public statistics website on top of
 this game's card catalog and card-statistics API. It is self-contained: every
 schema the site consumes is written out below, so you do not need the game's

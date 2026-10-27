@@ -1,8 +1,8 @@
 # Public card catalog
 
-A static, versioned, read-only copy of the game's printed card data for deck builders, bots and card browsers. No API key, no login, no database. Generated from the same six faction files the game loads (`data/cards/{green,crimson,black,orange,teal,generic}.json`); the game itself never reads from it.
+A versioned, read-only copy of the game's printed card data for deck builders, bots and card browsers, plus a live card win-rate summary. No API key or login. The catalog service needs no database credentials. Printed definitions are generated from the same six faction files the game loads (`data/cards/{green,crimson,black,orange,teal,generic}.json`); the game itself never reads from it.
 
-> **Status: release 0.1.0 approved and exported, not deployed.** `public/` holds the real first release (`catalogVersion` 0.1.0, `gameVersion` 0.1.0, 176 cards) and the content is final - releases are write-once. Nothing is hosted yet, so there is still no public origin: see [Deploying to Railway](#deploying-to-railway).
+> Printed catalog origin: `https://cardgame-catalog-production.up.railway.app`. `public/` holds release 0.1.0 (176 cards); releases are write-once. The live win-rate route requires deploying the updated relay AND catalog before it is available there.
 
 ## URLs
 
@@ -10,10 +10,46 @@ A static, versioned, read-only copy of the game's printed card data for deck bui
 GET /data/v1/latest.json
 GET /data/v1/releases/<catalog-version>/cards.json
 GET /data/v1/releases/<catalog-version>/keywords.json
+GET /data/v1/stats/card-winrates.json
 GET /healthz                       (operator health check, not part of the data contract)
 ```
 
 There is no server-side filtering and no per-card route. **Download once, index by `id`, filter locally.** `?query=` strings are ignored, not implemented.
+
+### Live card win rates
+
+Fetch `/data/v1/stats/card-winrates.json` and join `cards[].id` to the printed catalog. Example row and envelope (other cards omitted):
+
+```json
+{
+  "schemaVersion": 1,
+  "catalogVersion": "0.1.0",
+  "generatedAt": "2026-10-27T16:00:00.000Z",
+  "methodology": {
+    "metric": "starting_deck_inclusion",
+    "modes": ["ranked_ai", "authoritative_pvp"],
+    "aiSeats": "human_only",
+    "copies": "once_per_player_game",
+    "rulesVersions": "combined",
+    "minSample": 1,
+    "preliminary": true,
+    "privacy": "No raw identities or deck lists. Small sample changes may reveal deck inclusion or outcomes."
+  },
+  "cards": [{"id":"g_001","matches":2,"wins":1,"losses":1,"winRate":0.5}]
+}
+```
+
+`matches` means recorded **player-games with the card in the starting deck**, whether starter or custom. Two copies count once. The AI's opponent deck is excluded; only the human's result counts. Settled authoritative PvP counts both players, so a mirror match can add one win and one loss. AI results are client-reported, not verified PvP. All rules versions are combined. Created, drawn or played cards do not change this metric.
+
+Every currently published collectible has a row. No recorded sample means counts of zero and `winRate: null`; otherwise the rate is a fraction from 0 to 1, visible from the first game. Legacy settlements without deck summaries, uncompleted/voided/drawn PvP, tokens and unpublished cards do not count. Already-recorded AI summaries count after deployment; old missing decks cannot be reconstructed.
+
+This is preliminary testing data. The owner explicitly selected the one-game minimum, superseding the earlier 100-game/anti-differencing policy **for this endpoint**. No raw identity, match ID or deck list is returned, but comparing small-sample snapshots can reveal a player's card inclusion and result. Do not describe this as protection against inference.
+
+The relay caches successful aggregates for 60 seconds and shares concurrent refreshes. `generatedAt` is snapshot time, not a match timestamp. Responses use `Cache-Control: no-cache`; failures are generic JSON **503**, `no-store`, never zero-filled or stale success. GET/HEAD/OPTIONS and anonymous CORS are supported. Printed card files and `/healthz` remain available during stats failures. The proposed immutable `/stats/latest.json` releases remain unimplemented; this endpoint does not supply drawn/played rates, tiers, caps or deck archetypes.
+
+Deploy both services from the same catalog release. The relay image includes `catalog/public/data/v1/`; it reads the committed publication allowlist and uses its existing database pool. No new database tables or variables are required. The catalog defaults to `https://cardgame-relay-production.up.railway.app`; optionally set **`CARD_WINRATES_ORIGIN`** on the catalog to an HTTP(S) origin for staging/local testing (no path, query, userinfo or fragment). The fetch has a 5-second timeout, 1 MiB response limit, refuses redirects, and validates/project counts. A mismatched catalog version returns 503 until both deployments agree. No Godot browser export is needed for this API-only change.
+
+After deployment, fetch the new route, complete a ranked game using a client with AI-summary recording, then fetch again after 60 seconds and check the affected card counts. Local aggregate verification: from `server`, run `node --test test/card_winrates.test.js test/ranked_ai_record.test.js` with a disposable `DATABASE_URL`; from `catalog`, run `node --test 'test/*.test.mjs'` without `DATABASE_URL`.
 
 URLs in `latest.json` are root-relative: resolve them against the origin you fetched `latest.json` from (`new URL(latest.cardsUrl, origin)`).
 

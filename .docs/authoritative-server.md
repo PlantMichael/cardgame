@@ -161,6 +161,10 @@ when it is done; nothing is left listening.
 
 ### Ranked AI summaries
 
+Public win rates are exposed read-only at `/data/v1/stats/card-winrates.json` by the relay and the catalog service. `server/card_winrates.js` shares the relay port with websocket upgrades and uses the existing pool; the catalog proxies only validated public aggregate fields. It joins recorded AI human starting decks and settled authoritative PvP seats, deduplicates copies per player-game, and filters the committed published collectible catalog at both endpoints. Custom decks count. A successful snapshot is cached for 60 seconds; failed reads return generic 503 without blocking matchmaking. The relay Docker image must include `catalog/public/data/v1/`.
+
+The owner selected one-game publication for testing, mixing AI/PvP and rules versions. AI results remain unverified. Raw identities/deck lists are absent, but changing small counts can reveal card inclusion/outcomes; this is not an anti-differencing API. Deploy BOTH relay and catalog from the same release. No client/web export or new schema is needed. See [catalog contract](../catalog/README.md#live-card-win-rates) for response fields, optional catalog `CARD_WINRATES_ORIGIN`, failure behavior and operator proof.
+
 Completed ranked games against the local AI are recorded separately from
 server-run PvP. The local manager snapshots both starting decks and attaches an
 optional `ai_match` object to `report_ranked_result`, with `player_deck` and
