@@ -48,4 +48,5 @@ Implemented the relay aggregate/HTTP owner, catalog projection, publication allo
 - Docker root-context probe: `FROM scratch` plus the production `COPY catalog/public/data/v1 /catalog/public/data/v1` succeeds using the actual root `.dockerignore`, transferring 90.52 kB, image `sha256:93a54eeb6aadb2860d3ea8a42f1773c8076c7f85a266ee731ee2e8fe91c27292`. This proves the changed COPY/input boundary. Full Godot relay image rebuild is intentionally unrun; unchanged engine download/import layers are outside this delta.
 - `git diff --check`: pass. Tests write only disposable private database schemas/temp fixtures. Godot producer hook was not rerun (no client changes); existing relay result submission passed.
 
-Implementation review pending. Remaining operator proof: deploy both services, fetch the new route and compare counts after a newly completed game/cache expiry. Nothing pushed or deployed by this work item.
+Implementation source approved by fresh inner and outer reviews on `b028709` (base `27fdfaf`); no outstanding findings. Outer independently reran the SQL/HTTP test (1/1), real relay recorder tests (2/2), and catalog upstream test (1/1), all passing. Remaining operator proof: deploy both services, fetch the new route and compare counts after a newly completed game/cache expiry. Nothing pushed or deployed by this work item.
+
