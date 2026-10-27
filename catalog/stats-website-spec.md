@@ -18,7 +18,7 @@ release trains share one origin:
 
 | Data | URL space | Status |
 |---|---|---|
-| Card catalog (printed card data) | `/data/v1/…` | **Built and tested**, candidate release prepared, **not deployed to a public domain yet** |
+| Card catalog (printed card data) | `/data/v1/…` | **Built and tested**, release `0.1.0` exported (176 cards), **not deployed to a public domain yet** |
 | Card and deck statistics | `/data/v1/stats/…` | **Contract frozen, not implemented.** No release exists, so these URLs 404 today |
 | Health check | `/healthz` | Operator-only, not part of the data contract |
 
@@ -61,10 +61,10 @@ const cardsUrl = new URL(latest.cardsUrl, origin);
 ```json
 {
   "schemaVersion": 1,
-  "catalogVersion": "0.1.0-candidate.1",
+  "catalogVersion": "0.1.0",
   "gameVersion": "unreleased",
-  "cardsUrl": "/data/v1/releases/0.1.0-candidate.1/cards.json",
-  "keywordsUrl": "/data/v1/releases/0.1.0-candidate.1/keywords.json"
+  "cardsUrl": "/data/v1/releases/0.1.0/cards.json",
+  "keywordsUrl": "/data/v1/releases/0.1.0/keywords.json"
 }
 ```
 
@@ -78,7 +78,7 @@ const cardsUrl = new URL(latest.cardsUrl, origin);
 ### 3.2 Cards — `GET /data/v1/releases/<catalogVersion>/cards.json`
 
 Envelope (`schemaVersion`, `catalogVersion`, `gameVersion`) plus `cards`,
-sorted by `id`. The current candidate is 176 cards / ~82 KB — small enough to
+sorted by `id`. Release 0.1.0 is 176 cards / ~82 KB — small enough to
 fetch once and filter in the browser, which is the intended pattern.
 
 | Field | Type | Notes |
@@ -388,9 +388,9 @@ Do not build, and do not ask the API for:
 ## 8. Questions for the owner before launch
 
 1. What is the public origin for `CATALOG_ORIGIN`?
-2. Has a catalog release been published, and with which `catalogVersion` /
-   `gameVersion`? (The prepared one is labelled `0.1.0-candidate.1` /
-   `unreleased` — placeholders, not a release.)
+2. Has the catalog release been deployed yet? The content is settled -
+   `catalogVersion` 0.1.0, `gameVersion` 0.1.0, 176 cards - and is what you
+   will get once an origin exists.
 3. Do card statistics exist yet? They are specified but not implemented, so
    plan for the card-browser-only mode first.
 4. Is there an image source for card art? The API has none.

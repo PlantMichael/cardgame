@@ -2,7 +2,7 @@
 
 A static, versioned, read-only copy of the game's printed card data for deck builders, bots and card browsers. No API key, no login, no database. Generated from the same six faction files the game loads (`data/cards/{green,crimson,black,orange,teal,generic}.json`); the game itself never reads from it.
 
-> **Status: candidate, not published.** `release-input.json` is a *proposal* for owner review. The version label (`0.1.0-candidate.1`) and `gameVersion` (`unreleased`) are placeholders, and nothing here has been deployed. See [Open decisions](#open-decisions).
+> **Status: release 0.1.0 approved and exported, not deployed.** `public/` holds the real first release (`catalogVersion` 0.1.0, `gameVersion` 0.1.0, 176 cards) and the content is final - releases are write-once. Nothing is hosted yet, so there is still no public origin: see [Deploying to Railway](#deploying-to-railway).
 
 ## URLs
 
@@ -22,10 +22,10 @@ URLs in `latest.json` are root-relative: resolve them against the origin you fet
 ```json
 {
   "schemaVersion": 1,
-  "catalogVersion": "0.1.0-candidate.1",
+  "catalogVersion": "0.1.0",
   "gameVersion": "unreleased",
-  "cardsUrl": "/data/v1/releases/0.1.0-candidate.1/cards.json",
-  "keywordsUrl": "/data/v1/releases/0.1.0-candidate.1/keywords.json"
+  "cardsUrl": "/data/v1/releases/0.1.0/cards.json",
+  "keywordsUrl": "/data/v1/releases/0.1.0/keywords.json"
 }
 ```
 
@@ -122,12 +122,11 @@ Everything inside this directory is deploy-ready: no dependencies, no
 environment variables, no secrets, `PORT` honoured, `/healthz` implemented, and
 the release files committed under `public/`. What is left is account work.
 
-**Before the domain is public**, settle [Open decisions](#open-decisions). A
-release is write-once: whatever `catalogVersion` is live at
-`/data/v1/releases/<version>/` is that content forever, so publishing
-`0.1.0-candidate.1` with `gameVersion: "unreleased"` freezes those placeholder
-labels at a public URL. Decide the real labels and the card selection, re-run
-`npm run export`, review the diff of `public/`, and only then deploy.
+The content is settled (see [Decided](#decided)): release `0.1.0`, 176 cards.
+A release is write-once - whatever is live at `/data/v1/releases/0.1.0/` is
+that content forever - so the thing to check before deploying is the diff of
+`public/`, which is exactly what becomes public. A correction after that is a
+new `catalogVersion`, never a rewrite of this one.
 
 ```bash
 railway login                  # opens a browser; the saved login expires
@@ -176,8 +175,12 @@ Verified locally by `npm test` and a live run: projection and exclusions, determ
 
 **Not verified** (needs an authorised deploy): the Railway build context, public HTTPS domain, deployed CORS / content-type / cache / ETag behaviour behind Railway's CDN, old-release retention across a real redeploy, and resource usage. Do not treat the API as live.
 
-## Open decisions
+## Decided
 
-- **Initial public card selection.** `release-input.json` proposes every card in the six files (176) except three just-implemented, not-yet-balance-tested cards: `gen_str_005` Emergency Extraction, `t_str_004` Whiteout, `t_027` Snowdrift Matriarch. Being in the repository is not approval to publish.
-- **`catalogVersion` and `gameVersion`.** Placeholders until the owner states them.
-- **Keyword text** for the unmapped ability keys (above).
+- **Initial public card selection.** Every card in the six files (176) except three just-implemented, not-yet-balance-tested cards, held back by owner decision: `gen_str_005` Emergency Extraction, `t_str_004` Whiteout, `t_027` Snowdrift Matriarch. They can ship in a later release.
+- **`catalogVersion` 0.1.0 / `gameVersion` 0.1.0.** The game had no version scheme before this; 0.1.0 starts one. The never-published `0.1.0-candidate.1` export was deleted rather than carried forward, so the first thing served is the real release.
+
+## Still open
+
+- **Keyword text** for the unmapped ability keys (above): 76 of them export as `null` in `abilityKeywords`, which consumers must handle. Writing player-facing text for them is content work, not a code change.
+- **Hosting.** No service exists; see [Deploying to Railway](#deploying-to-railway).

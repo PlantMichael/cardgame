@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "0.1.0-candidate.1",
-  "gameVersion": "unreleased",
+  "catalogVersion": "0.1.0",
+  "gameVersion": "0.1.0",
   "keywords": [
     {
       "id": "ambush",
@@ -145,6 +145,7 @@
     "on_play_devour_friendly": null,
     "on_play_health_per_friendly": null,
     "on_play_pilot_mech": null,
+    "on_play_recon_if_fewer_cards": null,
     "on_play_restore_health": null,
     "on_play_rummage_buff": null,
     "on_play_swap_friendly_health": null,

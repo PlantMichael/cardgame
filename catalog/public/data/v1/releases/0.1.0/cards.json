@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "0.1.0-candidate.1",
-  "gameVersion": "unreleased",
+  "catalogVersion": "0.1.0",
+  "gameVersion": "0.1.0",
   "cards": [
     {
       "id": "b_001",
-      "name": "Garbage Addict",
+      "name": "Scrap Addict",
       "color": "BLACK",
       "type": "CREATURE",
       "rarity": "COMMON",
@@ -26,7 +26,7 @@
     },
     {
       "id": "b_002",
-      "name": "Lazy Junker",
+      "name": "Junkbuster Guardian",
       "color": "BLACK",
       "type": "CREATURE",
       "rarity": "RARE",
@@ -87,7 +87,7 @@
     },
     {
       "id": "b_005",
-      "name": "Greedy Junkling",
+      "name": "Greedy Splinterkin",
       "color": "BLACK",
       "type": "CREATURE",
       "rarity": "COMMON",
@@ -107,7 +107,7 @@
     },
     {
       "id": "b_006",
-      "name": "Trash Colossus",
+      "name": "Creeper Colossus",
       "color": "BLACK",
       "type": "CREATURE",
       "rarity": "EPIC",
@@ -196,7 +196,8 @@
       "tribe": null,
       "description": "If you have less cards in your hand than your opponent, Recon.",
       "abilities": [
-        "guardian"
+        "guardian",
+        "on_play_recon_if_fewer_cards"
       ],
       "collectible": true,
       "isToken": false,
@@ -228,7 +229,7 @@
     },
     {
       "id": "b_012",
-      "name": "Trash Tallyer",
+      "name": "Scrap Pack Tallyer",
       "color": "BLACK",
       "type": "CREATURE",
       "rarity": "EPIC",
@@ -310,7 +311,7 @@
     },
     {
       "id": "b_016",
-      "name": "Trash Collector",
+      "name": "Rubbleweaver Hauler",
       "color": "BLACK",
       "type": "CREATURE",
       "rarity": "RARE",
@@ -415,7 +416,7 @@
     },
     {
       "id": "b_021",
-      "name": "Slopscraper",
+      "name": "Dust Scraper",
       "color": "BLACK",
       "type": "CREATURE",
       "rarity": "EPIC",
@@ -435,7 +436,7 @@
     },
     {
       "id": "b_022",
-      "name": "Sludge Scout",
+      "name": "Sludgewalker Scout",
       "color": "BLACK",
       "type": "CREATURE",
       "rarity": "RARE",
@@ -1169,7 +1170,7 @@
     },
     {
       "id": "cr_026",
-      "name": "Blood drenched, the fuckening",
+      "name": "Bloodscar, the Reaper",
       "color": "CRIMSON",
       "type": "CREATURE",
       "rarity": "LEGENDARY",
