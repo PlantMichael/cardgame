@@ -7,4 +7,6 @@ extends RefCounted
 ## a client whose version differs is told to update before it can queue.
 ## Bump rule: any change to scripts/game/{game_state,player_state,minion,abilities}.gd
 ## behavior, or to data/cards/*.json costs/stats/abilities/effects, increments this.
-const RULES_VERSION := 1
+## 2: Junk Blockade (b_010) gained on_play_recon_if_fewer_cards - its card
+##    text promised a conditional Recon that nothing implemented.
+const RULES_VERSION := 2

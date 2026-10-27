@@ -182,6 +182,7 @@ Abilities are plain strings stored on `CardData.abilities` and copied to `Minion
 | `RUMMAGE_EQUAL_COST` | `"rummage_equal_cost"` | Passive: while this minion is on the board, rummages may also retrieve cards of equal cost (normally only strictly cheaper cards qualify) |
 | `ON_PLAY_BUFF_ALL_FRIENDLY_HEALTH` | `"on_play_buff_all_friendly_health"` | On play: give all friendly minions (including itself) +0/+1 |
 | `ON_PLAY_VOIDTOUCH_IF_RUMMAGED` | `"on_play_voidtouch_if_rummaged"` | On play: if this card's `rummage_count` is > 0 (i.e. it was retrieved by a rummage before being played), permanently gain Voidtouch |
+| `ON_PLAY_RECON_IF_FEWER_CARDS` | `"on_play_recon_if_fewer_cards"` | On play: draw a card if the owner now holds fewer cards than the opponent. The hands are compared *after* this card has left its owner's, which is where it is when on-play effects fire. Junk Blockade (`b_010`) only; covered by `CoreTests._test_conditional_recon` |
 | `FEAST_ATTENDANT` | `"feast_attendant"` | At the end of the owner's turn: give board-adjacent friendly creatures (index ±1) +0/+1 max and current health (displayed as "Feast") |
 | `ON_PLAY_DEVOUR_ALL` | `"on_play_devour_all"` | On play: destroy every other creature on both boards (fires death triggers), then gain the sum of their attack and health |
 | `REJUVENATE` | `"rejuvenate_N"` (e.g. `"rejuvenate_1"`) | At end of owner's turn, this minion heals N health (up to max_health); parsed via `is_rejuvenate` / `get_rejuvenate_value` |

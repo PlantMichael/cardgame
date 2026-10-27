@@ -27,12 +27,16 @@ const CardScene = preload("res://scenes/cards/Card.tscn")
 const CardBackScene = preload("res://scenes/cards/CardBack.tscn")
 
 ## Shared sizing for every "look at a row of cards and pick/view one" screen
-## (mulligan, rummage retrieval, graveyard viewer, transform choice). These
-## all show a card at the same MEDIUM preset the hand uses - see Card.Size
-## for the three sizes a card is ever drawn at - with the wrapper reserving
-## that preset's on-screen size plus a little breathing room.
-const PICKER_CARD_SCALE := Card.SCALE_MEDIUM
-const PICKER_WRAPPER_SIZE := Card.PIXELS_MEDIUM + Vector2(11, 16)
+## (rummage retrieval, graveyard viewer, transform choice; the mulligan lays
+## its own hand out).
+##
+## Bigger than the MEDIUM preset the hand uses: these overlays own the whole
+## screen and are the moment the player is reading card text rather than
+## glancing at it. Eight of these still fit across a row with room to spare
+## (8 x 196 against the 1920 the canvas always lays out at), and the picker
+## cards carry their own hover preview on top - see _make_picker_preview().
+const PICKER_CARD_SCALE := Vector2(0.84, 0.84)
+const PICKER_WRAPPER_SIZE := Card.CARD_SIZE * PICKER_CARD_SCALE.x + Vector2(11, 16)
 
 const BATTLEFIELD_TEXTURES: Array[Texture2D] = [
 	preload("res://assets/battlefield.png"),
@@ -1058,6 +1062,51 @@ func _release_cards_in(root: Node) -> void:
 		else:
 			_release_cards_in(child)
 
+## A hover preview that works INSIDE a modal picker. The board's own preview
+## (card_preview_zone) cannot serve here twice over: _open_modal_overlay()
+## deliberately suppresses it, and it is a child of the board, so it would
+## draw underneath the overlay's CanvasLayer anyway. So the overlay carries
+## its own - one card node, filled in and moved as the pointer crosses the
+## grid. Returns it; pass it to _hook_picker_hover() for each entry.
+func _make_picker_preview(overlay: CanvasLayer) -> Card:
+	var preview: Card = CardScene.instantiate()
+	preview.scale = Card.SCALE_LARGE
+	preview.visible = false
+	preview.z_index = 200
+	overlay.add_child(preview)
+	preview.input_pickable = false
+	preview.set_process_input(false)
+	_ignore_control_input(preview)
+	return preview
+
+## Shows `preview` beside `wrapper` while the pointer is over it. Placed to
+## the right of the entry when there is room and to its left when there is
+## not, the same way the board's hover preview picks a side, so a card in
+## the last column does not push its preview off screen.
+func _hook_picker_hover(wrapper: Control, data: CardData, preview: Card) -> void:
+	wrapper.mouse_entered.connect(func():
+		if not is_instance_valid(preview):
+			return
+		preview.setup(data)
+		# setup() rebuilds the card's own children, so the filters have to be
+		# put back: a preview that answered the mouse would sit over the
+		# neighbouring entries and flicker as it stole their hover.
+		_ignore_control_input(preview)
+		var vp: Vector2 = get_viewport_rect().size
+		var rect: Rect2 = wrapper.get_global_rect()
+		var size: Vector2 = Card.PIXELS_LARGE
+		var px: float = rect.position.x + rect.size.x + _PREVIEW_PAD
+		if px + size.x > vp.x:
+			px = rect.position.x - size.x - _PREVIEW_PAD
+		var py: float = rect.get_center().y - size.y * 0.5
+		preview.global_position = Vector2(
+			clampf(px, _PREVIEW_PAD, vp.x - size.x - _PREVIEW_PAD),
+			clampf(py, _PREVIEW_PAD, vp.y - size.y - _PREVIEW_PAD))
+		preview.visible = true)
+	wrapper.mouse_exited.connect(func():
+		if is_instance_valid(preview):
+			preview.visible = false)
+
 func _load_keywords() -> void:
 	var file = FileAccess.open("res://data/keywords.json", FileAccess.READ)
 	if not file:
@@ -1934,6 +1983,11 @@ func _pop_new_mana_crystals(max_mana: int) -> void:
 ## is the whole state this needs, and comparing it against the last refresh
 ## is enough to fire exactly once per change.
 var _last_turn_key: Array = []
+## The banner currently on screen, if any. Two banners are never both up:
+## a turn that passes back faster than one banner's life (the AI skipping a
+## turn it can do nothing with, a concede) used to slide the new text across
+## the old one. The new announcement is the true one, so it takes over.
+var _live_turn_banner: Label = null
 const _TURN_BANNER_HOLD := 0.55
 func _announce_turn_change(is_my_turn: bool) -> void:
 	var turn_key: Array = [game_state.turn_number, is_my_turn]
@@ -1950,6 +2004,8 @@ func _announce_turn_change(is_my_turn: bool) -> void:
 	_show_turn_banner(is_my_turn)
 
 func _show_turn_banner(is_my_turn: bool) -> void:
+	if is_instance_valid(_live_turn_banner):
+		_live_turn_banner.queue_free()
 	var vp: Vector2 = get_viewport_rect().size
 	var banner := Label.new()
 	banner.text = "YOUR TURN" if is_my_turn else "OPPONENT'S TURN"
@@ -1969,6 +2025,7 @@ func _show_turn_banner(is_my_turn: bool) -> void:
 	banner.z_as_relative = false
 	banner.z_index = 130
 	add_child(banner)
+	_live_turn_banner = banner
 	# Sits above the centre bar, not across it: at the bar's own height the
 	# banner reads on top of the turn counter and the End Turn button, which
 	# is exactly what the player is looking at when a turn changes hands.
@@ -2551,6 +2608,7 @@ func show_graveyard_picker(options: Array[CardData]) -> CardData:
 	cards_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cards_scroll.add_child(cards_container)
 
+	var preview := _make_picker_preview(overlay)
 	var _selection_made := false
 	var current_row: HBoxContainer = null
 	var cards_in_row := 0
@@ -2577,6 +2635,7 @@ func show_graveyard_picker(options: Array[CardData]) -> CardData:
 		card.set_process_input(false)
 		_ignore_control_input(card)
 		var captured := card_data
+		_hook_picker_hover(wrapper, captured, preview)
 		wrapper.pressed.connect(func():
 			if _selection_made: return
 			_selection_made = true
@@ -2640,6 +2699,7 @@ func _open_graveyard_viewer() -> void:
 		cards_scroll.add_child(cards_container)
 
 		const MAX_PER_ROW := 8
+		var preview := _make_picker_preview(overlay)
 		var current_row: HBoxContainer = null
 		var cards_in_row := 0
 		for card_data in graveyard:
@@ -2659,6 +2719,7 @@ func _open_graveyard_viewer() -> void:
 			wrapper.add_child(card)
 			card.setup(card_data)
 			_ignore_control_input(card)
+			_hook_picker_hover(wrapper, card_data, preview)
 			cards_in_row += 1
 
 	var close_btn := Button.new()

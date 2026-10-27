@@ -17,7 +17,7 @@
 	},
 	{
 		"id": "b_022",
-		"card_name": "Sludge Scout",
+		"card_name": "Sludgewalker Scout",
 		"cost": 1,
 		"color": "BLACK",
 		"card_type": "CREATURE",
@@ -69,7 +69,7 @@
 	},
 	{
 		"id": "b_016",
-		"card_name": "Trash Collector",
+		"card_name": "Rubbleweaver Hauler",
 		"cost": 2,
 		"color": "BLACK",
 		"card_type": "CREATURE",
@@ -105,7 +105,7 @@
 	},
 	{
 		"id": "b_001",
-		"card_name": "Garbage Addict",
+		"card_name": "Scrap Addict",
 		"cost": 3,
 		"color": "BLACK",
 		"card_type": "CREATURE",
@@ -142,7 +142,7 @@
 	},
 	{
 		"id": "b_012",
-		"card_name": "Trash Tallyer",
+		"card_name": "Scrap Pack Tallyer",
 		"cost": 3,
 		"color": "BLACK",
 		"card_type": "CREATURE",
@@ -180,7 +180,7 @@
 	},
 	{
 		"id": "b_002",
-		"card_name": "Lazy Junker",
+		"card_name": "Junkbuster Guardian",
 		"cost": 4,
 		"color": "BLACK",
 		"card_type": "CREATURE",
@@ -235,7 +235,7 @@
 	},
 	{
 		"id": "b_005",
-		"card_name": "Greedy Junkling",
+		"card_name": "Greedy Splinterkin",
 		"cost": 4,
 		"color": "BLACK",
 		"card_type": "CREATURE",
@@ -300,7 +300,8 @@
 		"attack": 0,
 		"health": 7,
 		"abilities": [
-			"guardian"
+			"guardian",
+			"on_play_recon_if_fewer_cards"
 		],
 		"art": "res://assets/black/junkblockade.png",
 		"effect": "",
@@ -365,7 +366,7 @@
 	},
 	{
 		"id": "b_021",
-		"card_name": "Slopscraper",
+		"card_name": "Dust Scraper",
 		"cost": 6,
 		"color": "BLACK",
 		"card_type": "CREATURE",
@@ -383,7 +384,7 @@
 	},
 	{
 		"id": "b_006",
-		"card_name": "Trash Colossus",
+		"card_name": "Creeper Colossus",
 		"cost": 8,
 		"color": "BLACK",
 		"card_type": "CREATURE",

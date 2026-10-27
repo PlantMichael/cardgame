@@ -3,6 +3,15 @@ extends Node
 
 const THINK_DELAY = 0.6
 
+## How long the AI sits on a turn it cannot do anything with (no affordable
+## card, nothing able to attack) before passing it back. Every other turn is
+## paced by the THINK_DELAY in front of each action it takes; a turn with no
+## actions in it had no pacing at all, so it ended in the same frame it began
+## and the board's "OPPONENT'S TURN" banner was still on screen when
+## "YOUR TURN" slid in over it. Longer than one banner's whole life
+## (Board._show_turn_banner: ~1.25s in, hold and out).
+const EMPTY_TURN_PAUSE = 1.5
+
 ## 1 (weakest) - 10 (strongest). Read once per decision in take_turn(); see
 ## MCTSEngine.AI_LEVEL_CONFIG for what each level actually changes.
 var ai_level: int = 5
@@ -21,6 +30,7 @@ var drive_choices: Callable
 ## searches in a row, long enough to read as the game hanging.
 func take_turn(game_state: GameState, board: Board) -> void:
 	var engine := MCTSEngine.new(game_state.opponent.player_id, ai_level)
+	var acted := false
 	for _i in 60:  # safety cap; a real turn never needs anywhere near this many actions
 		if game_state.current_phase == GameState.Phase.GAME_OVER:
 			return
@@ -34,10 +44,13 @@ func take_turn(game_state: GameState, board: Board) -> void:
 		if not is_instance_valid(board):
 			return
 		if action["type"] == "end_turn":
+			if not acted and game_state.current_phase != GameState.Phase.GAME_OVER:
+				await get_tree().create_timer(EMPTY_TURN_PAUSE).timeout
 			return
 		await _apply_action(action, game_state, board)
 		if not is_instance_valid(board):
 			return
+		acted = true
 		# A targeted on-play effect opens a choice that blocks every further
 		# command until it is answered - by whoever owns it.
 		if drive_choices.is_valid():

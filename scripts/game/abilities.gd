@@ -131,6 +131,7 @@ const DEFINITIONS: Dictionary = {
 	RUMMAGE_EQUAL_COST:              { "display": "Equal Rummage",   "color": Color(0.30, 0.15, 0.45) },
 	ON_PLAY_BUFF_ALL_FRIENDLY_HEALTH: { "display": "On Play:",       "color": Color(0.70, 0.25, 0.45) },
 	ON_PLAY_VOIDTOUCH_IF_RUMMAGED:    { "display": "On Play:",       "color": Color(0.45, 0.10, 0.65) },
+	ON_PLAY_RECON_IF_FEWER_CARDS:     { "display": "On Play:",       "color": Color(0.20, 0.55, 0.75) },
 	FEAST_ATTENDANT:                  { "display": "Feast",          "color": Color(0.70, 0.25, 0.45) },
 	ON_PLAY_DEVOUR_ALL:               { "display": "On Play:",       "color": Color(0.55, 0.10, 0.20) },
 	ON_FRIENDLY_DEATH_REINFORCE:      { "display": "Rally",          "color": Color(0.15, 0.55, 0.25) },
@@ -185,6 +186,7 @@ const DEATHRATTLE_RUMMAGE_CREATURE   = "deathrattle_rummage_creature"
 const RUMMAGE_EQUAL_COST             = "rummage_equal_cost"
 const ON_PLAY_BUFF_ALL_FRIENDLY_HEALTH  = "on_play_buff_all_friendly_health"
 const ON_PLAY_VOIDTOUCH_IF_RUMMAGED     = "on_play_voidtouch_if_rummaged"
+const ON_PLAY_RECON_IF_FEWER_CARDS      = "on_play_recon_if_fewer_cards"
 const FEAST_ATTENDANT                   = "feast_attendant"
 const ON_PLAY_DEVOUR_ALL                = "on_play_devour_all"
 const DEATHRATTLE_DAMAGE_ALL_EXCEPT_MECH = "deathrattle_damage_all_except_mech"
@@ -420,6 +422,15 @@ func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 				var drawn = owner.draw_card()
 				if drawn != null and owner.player_id == gs.player.player_id:
 					gs.pending_drawn_cards.append(drawn)
+			ON_PLAY_RECON_IF_FEWER_CARDS:
+				# Junk Blockade: the hand is compared AFTER this card left it,
+				# which is what "less cards in your hand than your opponent"
+				# means once it is on the board.
+				var rival: PlayerState = gs.opponent if owner == gs.player else gs.player
+				if owner.get_hand_size() < rival.get_hand_size():
+					var pulled = owner.draw_card()
+					if pulled != null and owner.player_id == gs.player.player_id:
+						gs.pending_drawn_cards.append(pulled)
 			RUMMAGE:
 				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": minion.data.cost, "type_filter": ""})
 			RUMMAGE_AND_PLAY:

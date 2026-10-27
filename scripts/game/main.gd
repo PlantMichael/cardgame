@@ -104,6 +104,9 @@ func _ready() -> void:
 	if "--legendary-anim" in OS.get_cmdline_user_args():
 		_run_legendary_anim_cli()
 		return
+	if "--picker-test" in OS.get_cmdline_user_args():
+		_run_picker_test_cli()
+		return
 	if "--campaign-test" in OS.get_cmdline_user_args():
 		_run_campaign_test_cli()
 		return
@@ -352,6 +355,76 @@ func _run_live_ai_test_cli() -> void:
 			return
 	print("RESULT: INCONCLUSIVE - loop ended without a clear stall or game over")
 	get_tree().quit()
+
+## Dev-only visual check for the modal card pickers (Board.show_graveyard_picker
+## and _open_graveyard_viewer): stands up a real Board, opens the rummage
+## retrieval picker on a handful of cards and hovers its first entry, so the
+## picker's card size and the hover preview that goes with it can be looked at
+## without first playing a rummage in a real match.
+##   godot --path <project> -- --picker-test
+## Run WITHOUT --headless (there is nothing to look at otherwise); pair it with
+## --write-movie <dir>/frame.png to capture it.
+func _run_picker_test_cli() -> void:
+	var board := BoardScene.instantiate()
+	add_child(board)
+	board.auto_confirm_mulligan = true
+	var pd := DeckManager.build_random_faction_deck(CardData.CardColor.BLACK)
+	var od := DeckManager.build_random_faction_deck(CardData.CardColor.GREEN)
+	GameManagerAutoload.start_local_game(board, pd, od, 1, false)
+	# Same settle time the legendary hook uses - the coinflip and mulligan
+	# have to clear before the battlefield is actually on screen.
+	await get_tree().create_timer(5.0).timeout
+
+	var options: Array[CardData] = []
+	for id in ["b_022", "b_016", "b_001", "b_012", "b_010", "b_019", "b_017", "gen_015"]:
+		var def := CardDatabase.get_card(id)
+		if def != null:
+			options.append(def)
+	# Deliberately NOT awaited: the picker runs until something answers
+	# rummage_card_selected, which this hook does itself further down.
+	board.show_graveyard_picker(options)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	# The entries are the Buttons the picker reserved a card's worth of space
+	# for; hovering one is what raises the preview beside it.
+	var hovered := false
+	for node in board.find_children("*", "Button", true, false):
+		if (node as Button).custom_minimum_size == Board.PICKER_WRAPPER_SIZE:
+			(node as Button).mouse_entered.emit()
+			hovered = true
+			break
+	await get_tree().create_timer(3.0).timeout
+	board.rummage_card_selected.emit(null)  # the same answer the Skip button gives
+	await get_tree().create_timer(1.0).timeout
+
+	# The graveyard viewer is the same grid built by different code, so it is
+	# worth seeing too. Opened through its own button rather than by calling
+	# the handler, so the hook exercises the path a player takes.
+	for card_data in options:
+		GameManagerAutoload.game_state.player.graveyard.append(card_data)
+	var opened := false
+	for node in board.find_children("*", "Button", true, false):
+		if (node as Button).text == "Graveyard":
+			(node as Button).pressed.emit()
+			opened = true
+			break
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var hovered_grave := false
+	for node in board.find_children("*", "Control", true, false):
+		if node is Button:
+			continue
+		if (node as Control).custom_minimum_size == Board.PICKER_WRAPPER_SIZE:
+			(node as Control).mouse_entered.emit()
+			hovered_grave = true
+			break
+	await get_tree().create_timer(3.0).timeout
+
+	var ok := hovered and opened and hovered_grave
+	print("RESULT: %s - picker hover preview (rummage %s, graveyard opened %s, hovered %s)" % [
+		"PASS" if ok else "FAIL", hovered, opened, hovered_grave])
+	get_tree().quit(0 if ok else 1)
 
 ## Dev-only visual check for the one-off legendary landing animations in
 ## legendary_animations.gd (StinkPile's sludge splash, Qu3tzalcoatl's

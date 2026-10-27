@@ -25,15 +25,21 @@ const QUETZALCOATL_ID := "o_016"
 ## frames so the timing this plays to stays next to the art it belongs to),
 ## not invented here. The two geometry constants are measured off the frames
 ## themselves: the art is a ring of sludge around a card-shaped hole, and in
-## frame 06 - the fully-spread hold frame - that hole runs x 124-193,
-## y 115-223 inside the 314x314 frame. Its centre sits noticeably below the
+## frame 06 - the fully-spread hold frame - that hole runs x 248-386,
+## y 230-446 inside the 628x628 frame. Its centre sits noticeably below the
 ## frame's own, which is why _spawn_sludge() cannot simply centre the sprite
 ## on the card.
 const SLUDGE_FRAME_DIR := "res://assets/effects/sludge/"
 const SLUDGE_FRAME_COUNT := 16
-const SLUDGE_FRAME_SIZE := Vector2(314, 314)
-const SLUDGE_HOLE_SIZE := Vector2(69, 108)
-const SLUDGE_HOLE_CENTER := Vector2(158.5, 169.0)
+## The frames on disk are a 2x supersample (Lanczos, mild unsharp) of the
+## authored 314x314 art in assets/legendary-sludge-splash-hold-retract.zip.
+## At the size the ring is drawn - a board card is 205px tall against a 108px
+## hole, times the canvas stretch - the authored frames were magnified past
+## 1.7x and looked soft; from 628px the GPU is minifying instead. There is no
+## higher-resolution source, so this is as sharp as the art gets.
+const SLUDGE_FRAME_SIZE := Vector2(628, 628)
+const SLUDGE_HOLE_SIZE := Vector2(138, 216)
+const SLUDGE_HOLE_CENTER := Vector2(317.0, 338.0)
 ## Pulls the ring in past a perfect fit so sludge laps over the card's edges
 ## instead of ringing it with a visible gap.
 const SLUDGE_OVERLAP := 0.92
@@ -227,6 +233,11 @@ static func _spawn_sludge(card: Card, board: Node2D, target_scale: Vector2) -> v
 	for sprite in [far, near]:
 		sprite.centered = true
 		sprite.texture = frames[0]
+		# The project draws canvas textures with mipmaps by default, which is
+		# right for card art sitting at a fixed size and wrong here: these
+		# frames are resampled every frame as the ring scales, and a mip level
+		# chosen for the smaller splash frames softens the spread ones.
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		sludge.add_child(sprite)
 	near.modulate.a = 0.0
 
@@ -247,7 +258,7 @@ static func _spawn_sludge(card: Card, board: Node2D, target_scale: Vector2) -> v
 	tween.tween_callback(sludge.queue_free)
 
 ## Loaded on first use and cached for the rest of the run rather than
-## preloaded: these are sixteen 314x314 textures that only matter when one
+## preloaded: these are sixteen 628x628 textures that only matter when one
 ## specific 9-mana legendary hits the board, and preloading would pay for
 ## them in every headless run (--core-tests, --parity-test) and every
 ## session that never draws him.

@@ -343,6 +343,37 @@ static func _test_crypt_hunger() -> void:
 	_eq("a max-health buff is fully reverted (max)", delos.max_health, printed_max)
 	_eq("a max-health buff is fully reverted (current)", delos.current_health, printed_max)
 
+## Junk Blockade (b_010): "If you have less cards in your hand than your
+## opponent, Recon." Its card text promised this with nothing behind it - the
+## card shipped carrying only Guardian - so the condition is checked here in
+## all three directions. The hands are compared AFTER the card has left the
+## player's own, which is where it is by the time an on-play effect fires.
+static func _test_conditional_recon(card_id: String) -> void:
+	print("[junk blockade]")
+	var def := CardDatabase.get_card("b_010")
+	if def == null:
+		_check("Junk Blockade (b_010) exists in the catalog", false)
+		return
+	_check("Junk Blockade carries the conditional recon ability",
+		Abilities.ON_PLAY_RECON_IF_FEWER_CARDS in def.abilities)
+
+	# hand sizes -> whether a card should be drawn
+	for case in [[0, 1, true], [1, 1, false], [2, 1, false]]:
+		var gs := _fresh_match(card_id)
+		gs.player.hand.clear()
+		gs.opponent.hand.clear()
+		for _i in int(case[0]):
+			gs.player.draw_card()
+		for _i in int(case[1]):
+			gs.opponent.draw_card()
+		var blockade := Minion.new(def.new_instance(gs.player.mint_card_uid()), "a")
+		gs.player.place_minion(blockade)
+		var before: int = gs.player.hand.size()
+		Abilities.fire_on_play(blockade, gs.player, gs)
+		var drew: bool = gs.player.hand.size() == before + 1
+		_check("hand %d vs %d: %s" % [case[0], case[1], "draws" if case[2] else "draws nothing"],
+			drew == bool(case[2]), "hand went %d -> %d" % [before, gs.player.hand.size()])
+
 ## Handoff item 09 / scenario 9: silencing an aura source withdraws what that
 ## source granted, and only that.
 static func _test_aura_withdrawn_on_silence() -> void:
@@ -1979,6 +2010,7 @@ static func run() -> int:
 	_test_fingerprint_distinguishes(card_id)
 	_test_randomness_isolation(card_id)
 	_test_crypt_hunger()
+	_test_conditional_recon(card_id)
 	_test_aura_withdrawn_on_silence()
 	_test_pending_resolution(card_id)
 	_test_simultaneous_deaths(card_id)
