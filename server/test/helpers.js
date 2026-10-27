@@ -20,6 +20,19 @@ function haveDatabase() {
   return !!process.env.DATABASE_URL;
 }
 
+// Whether DATABASE_URL may be written to and truncated: a local database, or
+// one whose name says it is scratch. Anything else is assumed to be real data,
+// and the DB-backed tests skip instead of destroying it.
+function disposableDatabase(url = process.env.DATABASE_URL) {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    const local = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(u.hostname);
+    const name = decodeURIComponent(u.pathname.replace(/^\//, '')).toLowerCase();
+    return local || /test|tmp|scratch|disposable/.test(name);
+  } catch { return false; }
+}
+
 // Starts the Godot match host on a free localhost port and resolves once it
 // accepts connections. Returns { port, secret, proc, log(), stop() }.
 async function startMatchHost() {
@@ -129,4 +142,4 @@ async function hostSession() {
   };
 }
 
-module.exports = { PROJECT_DIR, godotBin, haveDatabase, startMatchHost, HostClient, buildDeck, hostSession };
+module.exports = { PROJECT_DIR, godotBin, haveDatabase, disposableDatabase, startMatchHost, HostClient, buildDeck, hostSession };

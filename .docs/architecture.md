@@ -151,6 +151,8 @@ server/
 ├── relay.js                     (the WebSocket server clients talk to: accounts, lobbies,
 │                                 matchmaking, currency/shop, legacy ranked reporting)
 ├── ladder.js                    (nextRankState/nextElo — the ladder math both ranked paths share)
+├── schema_legacy.js             (players/sessions/decks/owned_cards/ranked_settlements DDL,
+│                                 run by relay.js at boot and by the DB-backed tests)
 ├── Dockerfile                   (relay + pinned Godot match host in one image)
 ├── authoritative/               (server-run ranked matches; inert unless RANKED_AUTHORITATIVE=1)
 │   ├── relay_wire.js            (flag, env knobs, per-socket frame budget, pairing, routing)
@@ -162,7 +164,9 @@ server/
 │   ├── memory_store.js          (the same store interface in memory, for tests)
 │   └── settle.js                (idempotent ladder settlement from the server's own result)
 ├── tools/matches.js             (maintainer CLI: status / history / replay / audit)
-└── test/                        (node --test; load.js is a separate manual load test)
+└── test/                        (node --test; pg_store.test.js needs a disposable DATABASE_URL.
+                                 load.js and e2e_ranked.js are standalone manual runs:
+                                 a load test and a two-client end-to-end match)
 ```
 
 ```

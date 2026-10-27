@@ -43,9 +43,21 @@ Expect all of these to pass:
 - **Version**: a mismatched `rules_version` returns `update_required` and never
   queues.
 
-Manual: run two clients against a local relay with `RANKED_AUTHORITATIVE=1`, play
-a full ranked match including a mulligan, a challenge, a rummage and a transform
-choice. Everything behaves as in today's ranked.
+Scripted stand-in for the manual run (needs a disposable `DATABASE_URL`):
+
+```bash
+cd server && node test/e2e_ranked.js --turns=80
+```
+
+It starts a real relay with the flag on and drives two websocket clients from
+registration to settlement — pairing, mulligan, a drop/rejoin, game over, the
+action log and facts in Postgres, one settlement per player, and a concede. It
+proves the *server*, not the client.
+
+Manual (still to do): run two **Godot** clients against a local relay with
+`RANKED_AUTHORITATIVE=1`, play a full ranked match including a mulligan, a
+challenge, a rummage and a transform choice. Everything behaves as in today's
+ranked.
 
 ## Phase C — clocks, reconnect, persistence
 

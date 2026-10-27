@@ -278,3 +278,44 @@ Two measurement traps, both now avoided in the script and worth remembering:
 - On Windows, `Godot_*_console.exe` is a shim that runs the engine as a child
   process: sampling the spawned pid alone reports ~7 MB and no CPU. The sampler
   sums the pid and its direct children.
+
+## 14. The end-to-end run with a real relay and a real Postgres (T050/T062 groundwork)
+
+`server/test/e2e_ranked.js` plays server-run matches through a real
+`node relay.js` with `RANKED_AUTHORITATIVE=1`, a real Godot host and a real
+Postgres, with two websocket clients. 30/30 checks pass: registration, a stale
+`rules_version` refused, pairing on shipped starter decks, hidden hands,
+mulligan, a full match to game over with a socket drop and rejoin partway, the
+action log and facts in the database, one settlement per player, a client's own
+`report_ranked_result` refused, and a second match ended by conceding.
+
+Nothing on the server had to change for it. Postgres was exercised for the
+first time here and by `test/pg_store.test.js`: `PgStore` and `PgSettleRepo`
+passed on the first run against Postgres 14.24, including the settlement race
+(two transactions settling the same match award once, the loser of the race
+replaying the stored outcome).
+
+Two traps a *client* falls into, neither of them a server fault, both worth
+knowing for any future client:
+
+- **The ack and the view are separate frames.** `match_ack` is sent to the
+  actor and `match_view` to both seats, as two messages. A client that decides
+  its next action the moment the ack resolves is reading the board as it was
+  *before* its own move. The first scripted run spent 94 refusals on
+  `not this player's turn` doing exactly that; the script now waits for the
+  view whose `seq` is past the one it acted on. `remote_match_client.gd` is not
+  affected — it renders and acts from views, never from acks.
+- **A pending choice is shown only to the seat that owes it, and while it is
+  open the *other* seat's every action is refused.** A client loop that only
+  lets the active player act therefore deadlocks when an ability asks the
+  inactive seat something: the second run stalled with 229
+  `a pending choice must be answered first` refusals. The script now offers
+  both seats the chance to answer before either takes a turn.
+  `remote_match_client.gd` already calls `_maybe_prompt_choice()` on every view
+  and gates only on `choice.player_id == _my_id`, not on whose turn it is, so
+  the real client handles this correctly.
+
+Also worth recording: a stale `match_view` left sitting in a client's queue
+made a rejoin look as though the server had handed back `seq` 1 for a match
+already at `seq` 4. A view is state, not a notification — it must replace what
+the client knows, never queue behind older ones.

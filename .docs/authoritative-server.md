@@ -31,12 +31,15 @@ rules allow". The relay is its only client.
 | `server/authoritative/host_process.js` | supervises the Godot host: spawn, secret, `hello`, `request(op, payload)` with `rid` correlation, 5 s pings, restart after 3 misses |
 | `server/authoritative/protocol.js` | validation of every client match message: 8 KB frame cap, strict field allow-lists, 20 actions/s per seat, 30 frames/s per socket, generic refusal reasons |
 | `server/authoritative/decks.js` | loads `data/cards/*.json` and `data/starters.json`; `validateDeck` mirrors `DeckManager`'s size/copy/faction rules |
-| `server/authoritative/schema.js` | the DDL (`CREATE TABLE IF NOT EXISTS`) and `PgStore` |
+| `server/authoritative/schema.js` | the match DDL (`CREATE TABLE IF NOT EXISTS`) and `PgStore` |
+| `server/schema_legacy.js` | the account/ladder DDL (`players`, `sessions`, `decks`, `owned_cards`, `ranked_settlements`), which `relay.js` runs at boot. It lives here because `relay.js` cannot be required without starting a server, so a test had no way to create the schema it tests against except by re-typing it |
 | `server/authoritative/memory_store.js` | the same store interface in memory, for tests and a database-less dev relay |
 | `server/authoritative/settle.js` | idempotent ladder settlement from the **server's** result, using `server/ladder.js` |
 | `server/ladder.js` | `nextRankState`/`nextElo`, extracted verbatim from `relay.js` so both paths share one ladder math |
 | `server/tools/matches.js` | maintainer CLI (`status`, `history`, `replay`, `audit`); reads `DATABASE_URL`, no network endpoint, every call writes an audit row |
 | `server/test/load.js` | the load test (not part of `npm test`): N matches at once through one host, p95 accepted-action latency |
+| `server/test/e2e_ranked.js` | the end-to-end run (not part of `npm test`): a real relay, two websocket clients, a real Postgres, from registration to settlement |
+| `server/test/pg_store.test.js` | `PgStore`/`PgSettleRepo` against a real Postgres; skipped unless `DATABASE_URL` is set and looks disposable |
 
 ## Client-side files
 
@@ -107,6 +110,31 @@ rules allow". The relay is its only client.
 The flag only affects **new** pairings. Turning it off leaves live server-run
 matches running to their end; turning it on does not disturb peer-hosted matches
 already in progress.
+
+### Running the whole thing locally
+
+The DB-backed tests and the end-to-end script need a **disposable** Postgres;
+they truncate `players`, `decks` and the `ranked_*` tables, and refuse to run
+against a URL that does not look disposable (local host, or a database name
+containing test/tmp/scratch).
+
+```bash
+docker run -d --name cardgame-pg -e POSTGRES_PASSWORD=pg -p 5432:5432 postgres:16
+export DATABASE_URL=postgres://postgres:pg@127.0.0.1:5432/postgres
+export GODOT_BIN=/path/to/godot
+cd server && npm test                 # 53/53 with the database, 42/42 without
+node test/e2e_ranked.js --turns=80    # two scripted clients, start to settlement
+```
+
+Any local cluster works — the runs recorded above used a Debian-packaged
+Postgres 14 inside WSL, reached from Windows on `127.0.0.1:5432`, because
+Docker Desktop would not start on that machine. Both schemas are created on
+demand: the account/ladder tables from `server/schema_legacy.js` (the same
+statements `relay.js` runs at boot) and the match tables from
+`server/authoritative/schema.js`.
+
+`e2e_ranked.js` starts its own relay on port 8099 and kills the process tree
+when it is done; nothing is left listening.
 
 ### Deploy procedure
 
@@ -185,10 +213,25 @@ Accepted, with reasons:
 
 Verified locally (Windows, Godot 4.7.2, Node 24):
 
-- `cd server && GODOT_BIN=<godot> npm test` — 39/39: host IPC protocol, a
+- `cd server && GODOT_BIN=<godot> npm test` — 42/42: host IPC protocol, a
   per-frame hidden-information sweep, 216 cheating cases, manager flows
   (clocks, reconnect, forfeits, restart-replay), settlement idempotency, relay
-  glue, the stats hand-off.
+  glue, frame budgets, the stats hand-off. With `DATABASE_URL` also set it is
+  **53/53**: the 11 extra are `test/pg_store.test.js`, which runs `PgStore` and
+  `PgSettleRepo` against a real Postgres (14.24) — row round-trips with the
+  types `resume()` expects, the `(match_id, seq)` key, `setStatus` COALESCE,
+  `loadDeck`, and settlement awarding once under a retry and under two
+  transactions racing. They skip when `DATABASE_URL` is unset, and refuse to
+  run unless it looks disposable (local, or a name containing test/tmp/scratch).
+- `GODOT_BIN=<godot> DATABASE_URL=<disposable> node server/test/e2e_ranked.js`
+  — **30/30 checks**: a real `node relay.js` with the flag on, two websocket
+  clients that register, queue with shipped starter decks, mulligan, play a
+  full match to game over with a socket drop and rejoin in the middle, then a
+  second match ended by conceding. It asserts against the database as it goes:
+  the match row before either client joins, the action log numbered without a
+  gap with the last hash equal to the final hash, the facts for spec 002, one
+  settlement row per player, the winner's stored outcome equal to what their
+  client was shown, and `report_ranked_result` refused for a server-run match.
 - `godot --headless --path . -- --core-tests` — 703 checks, and
   `-- --parity-test` — 1000 matches replay identically.
 - `GODOT_BIN=<godot> node server/test/load.js --matches=100` — see
@@ -203,12 +246,16 @@ Verified locally (Windows, Godot 4.7.2, Node 24):
 
 Not verified:
 
-- **No two-client manual run.** Mulligan, choice prompts, reconnect, the
-  game-over/rank display and the concede button have never been exercised
-  against a live relay by real clients (spec tasks T050, T057, T062, T076).
-- **Postgres.** `PgStore` and `PgSettleRepo` have only been run against the
-  in-memory store; the column lists were matched to the legacy path by reading
-  it.
+- **The Godot client has still never played a server-run match.** The
+  *protocol* has, through `server/test/e2e_ranked.js`, but
+  `remote_match_client.gd`, the mulligan dialog, `board.prompt_choice`, the
+  game-over/rank display and the concede button have not been driven by a
+  person against a live relay (spec tasks T050, T057, T062, T076). The scripted
+  run also never produced a challenge or a transform choice specifically: its
+  bots answer whatever choice comes up with that choice's own default.
+- **Postgres is a local 14.24 cluster, not the deployed one.** The deployed
+  database already holds the legacy tables, so the first run with the flag on
+  creates the `ranked_*` tables against existing data for the first time.
 - A client whose 10 s search timeout falls back to an AI opponent at the moment
   the server pairs it leaves the paired opponent waiting for the grace forfeit.
 - Fatigue damage is not announced by the thin client (the host clears the
