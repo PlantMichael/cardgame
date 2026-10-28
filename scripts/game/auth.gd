@@ -3,6 +3,10 @@ extends Node
 const SAVE_DIR := "user://"
 const SESSION_FILE := "session.json"
 const LS_KEY := "cardgame_session"
+const PENDING_FILE := "pending_ranked.json"
+const PENDING_LS_KEY := "cardgame_pending_ranked"
+## How long a sent ranked report may go unanswered before it is sent again.
+const REPORT_RETRY_MSEC := 6000
 
 signal login_result(success: bool, message: String)
 signal register_result(success: bool, message: String)
@@ -44,10 +48,28 @@ var selected_pfp: String = ""
 
 var _saved_token: String = ""
 
+## Ranked results the server has not acknowledged yet, oldest first. A report
+## sent while the socket was down (a relay redeploy, a dropped connection) used
+## to be lost, which both left the game-over screen on "Updating rank..." and
+## never moved the ladder. They are kept - on disk too - and re-sent until the
+## server answers; the server settles each match id once, so a repeat is safe.
+var _pending_ranked: Array = []
+var _report_sent_at_msec: int = -1
+var _retry_timer: Timer
+
 func _ready() -> void:
 	Net.register_result.connect(_on_register_result)
 	Net.login_result.connect(_on_login_result)
 	Net.ranked_result_received.connect(_on_ranked_result_received)
+	Net.ranked_report_acked.connect(_on_ranked_report_acked)
+	Net.ranked_report_failed.connect(_on_ranked_report_failed)
+	Net.connected_to_server.connect(_flush_pending_ranked)
+	_retry_timer = Timer.new()
+	_retry_timer.wait_time = 2.0
+	_retry_timer.timeout.connect(_flush_pending_ranked)
+	add_child(_retry_timer)
+	_retry_timer.start()
+	_load_pending_ranked()
 	Net.save_deck_result.connect(_on_deck_sync_result.bind("save"))
 	Net.delete_deck_result.connect(_on_deck_sync_result.bind("delete"))
 	Net.set_pfp_result.connect(_on_pfp_sync_result)
@@ -80,7 +102,77 @@ func _on_pfp_sync_result(success: bool, message: String, _pfp_id: String) -> voi
 ## server can move this player's matchmaking Elo; omit it for AI matches.
 func report_ranked_result(won: bool, opponent_rating: int = -1, match_id: String = "",
 						  ai_match: Dictionary = {}) -> void:
-	Net.report_ranked_result(token, won, opponent_rating, match_id, ai_match)
+	_pending_ranked.append({
+		"username": username, "won": won, "opponent_rating": opponent_rating,
+		"match_id": match_id, "ai_match": ai_match,
+	})
+	_save_pending_ranked()
+	_flush_pending_ranked()
+
+## Sends the oldest unacknowledged report for the signed-in account, and sends
+## it again if the server has been silent for REPORT_RETRY_MSEC.
+func _flush_pending_ranked() -> void:
+	if _pending_ranked.is_empty() or not is_logged_in or token.is_empty() or not Net.is_open():
+		return
+	var report: Dictionary = _pending_ranked[0]
+	if str(report.get("username", "")) != username:
+		return
+	var now := Time.get_ticks_msec()
+	if _report_sent_at_msec >= 0 and now - _report_sent_at_msec < REPORT_RETRY_MSEC:
+		return
+	if Net.report_ranked_result(token, bool(report["won"]), int(report["opponent_rating"]),
+			str(report["match_id"]), report["ai_match"]):
+		_report_sent_at_msec = now
+
+func _on_ranked_report_acked() -> void:
+	_finish_head_report()
+
+## A refusal that retrying cannot fix is dropped so it cannot block the queue;
+## an expired session or a server hiccup is kept and retried.
+func _on_ranked_report_failed(message: String) -> void:
+	if Net.RETRYABLE_REPORT_FAILURES.has(message):
+		_report_sent_at_msec = -1
+		return
+	push_warning("Ranked result was refused and dropped: %s" % message)
+	_finish_head_report()
+
+func _finish_head_report() -> void:
+	if _pending_ranked.is_empty():
+		return
+	_pending_ranked.remove_at(0)
+	_report_sent_at_msec = -1
+	_save_pending_ranked()
+	_flush_pending_ranked()
+
+func _save_pending_ranked() -> void:
+	var json_str := JSON.stringify(_pending_ranked)
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("localStorage.setItem(%s, %s)" % [JSON.stringify(PENDING_LS_KEY), JSON.stringify(json_str)])
+	else:
+		var file := FileAccess.open(SAVE_DIR + PENDING_FILE, FileAccess.WRITE)
+		if file:
+			file.store_string(json_str)
+			file.close()
+
+func _load_pending_ranked() -> void:
+	var json_str := ""
+	if OS.has_feature("web"):
+		var result = JavaScriptBridge.eval("localStorage.getItem(%s)" % JSON.stringify(PENDING_LS_KEY))
+		if result == null:
+			return
+		json_str = str(result)
+	elif FileAccess.file_exists(SAVE_DIR + PENDING_FILE):
+		var file := FileAccess.open(SAVE_DIR + PENDING_FILE, FileAccess.READ)
+		if file:
+			json_str = file.get_as_text()
+			file.close()
+	if json_str.strip_edges().is_empty():
+		return
+	var parsed = JSON.parse_string(json_str)
+	if parsed is Array:
+		for entry in parsed:
+			if entry is Dictionary and entry.has("won") and entry.has("match_id"):
+				_pending_ranked.append(entry)
 
 func queue_ranked(deck_name: String = "") -> void:
 	Net.queue_ranked(token, deck_name, RulesVersion.RULES_VERSION)

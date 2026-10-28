@@ -1943,6 +1943,42 @@ static func _test_net_match_routing() -> void:
 	Net.ranked_result_received.disconnect(on_settled)
 
 
+## A ranked result reported while the socket is down used to vanish, leaving
+## "Updating rank..." up forever and the ladder unmoved. Auth now keeps each
+## report until the server acknowledges it.
+static func _test_ranked_report_retry() -> void:
+	print("[ranked report retry]")
+	var saved_state := [Auth.is_logged_in, Auth.token, Auth.username]
+	var saved_pending: Array = Auth._pending_ranked.duplicate(true)
+	Auth._pending_ranked.clear()
+	Auth._report_sent_at_msec = -1
+	Auth.is_logged_in = true
+	Auth.token = "t"
+	Auth.username = "tester"
+	Auth.report_ranked_result(true, -1, "m1", {})
+	_eq("a report that could not be sent is kept", Auth._pending_ranked.size(), 1)
+	Net._handle_incoming({"type": "ranked_result_ack", "success": false, "message": "Session expired."})
+	_eq("an expired session keeps it for the next attempt", Auth._pending_ranked.size(), 1)
+	var shown := []
+	var on_shown := func(ok: bool, _p: Dictionary) -> void: shown.append(ok)
+	Net.ranked_result_received.connect(on_shown)
+	Net._handle_incoming({"type": "ranked_result_ack", "success": false, "message": "Session expired."})
+	_eq("and a retryable refusal does not flip the screen to failed", shown.size(), 0)
+	Net._handle_incoming({"type": "ranked_result_ack", "success": false, "message": "Missing match id."})
+	_eq("a refusal retrying cannot fix is dropped", Auth._pending_ranked.size(), 0)
+	_eq("and that one is reported as a failed sync", shown, [false])
+	Auth.report_ranked_result(false, -1, "m2", {})
+	Net._handle_incoming({"type": "ranked_result_ack", "success": true, "rank_bracket": 1})
+	_eq("an acknowledgement clears the report", Auth._pending_ranked.size(), 0)
+	Net.ranked_result_received.disconnect(on_shown)
+	Auth.is_logged_in = saved_state[0]
+	Auth.token = saved_state[1]
+	Auth.username = saved_state[2]
+	Auth._pending_ranked = saved_pending
+	Auth._report_sent_at_msec = -1
+	Auth._save_pending_ranked()
+
+
 ## Controllers hold no rules (Constitution Principle I, spec 003): they send
 ## commands and answers and render what comes back. A controller that calls a
 ## rules mutator is deciding an outcome the server could not then control.
@@ -2072,6 +2108,7 @@ static func run() -> int:
 	_test_family_stratagem_followups(card_id)
 	_test_controller_purity()
 	_test_net_match_routing()
+	_test_ranked_report_retry()
 	_test_match_recorder()
 	_test_player_views(card_id)
 	print("CORE TESTS: %d checks, %d failed" % [_checks, _failures])

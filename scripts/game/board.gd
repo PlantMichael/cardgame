@@ -3451,6 +3451,12 @@ func show_game_over(won: bool, is_ranked: bool = false, old_bracket: int = 0,
 func _connect_ranked_result_display(rank_lbl: Label, won: bool, old_bracket: int,
 								   old_in_legend: bool, old_legend_rating: int,
 								   rank_icons: HBoxContainer = null) -> void:
+	# Auth keeps re-sending the result until the server answers; say so rather
+	# than leaving "Updating rank..." up as if nothing were happening.
+	get_tree().create_timer(8.0).timeout.connect(func():
+		if is_instance_valid(rank_lbl) and rank_lbl.text == "Updating rank...":
+			rank_lbl.text = "Still syncing your rank - retrying..."
+	)
 	Net.ranked_result_received.connect(func(success: bool, _profile: Dictionary):
 		if not is_instance_valid(rank_lbl):
 			return

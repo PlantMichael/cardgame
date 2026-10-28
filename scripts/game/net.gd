@@ -19,6 +19,11 @@ signal register_result(success: bool, message: String, profile: Dictionary)
 signal login_result(success: bool, message: String, profile: Dictionary)
 signal logged_out
 signal ranked_result_received(success: bool, profile: Dictionary)
+## Only the server's reply to a client-sent report_ranked_result (never the
+## server-run-match path, which also feeds ranked_result_received).
+signal ranked_report_acked
+signal ranked_report_failed(message: String)
+const RETRYABLE_REPORT_FAILURES := ["Session expired.", "Server error, try again."]
 signal ranked_match_found(lobby_id: String, role: String, opponent_name: String, opponent_rating: int)
 ## A ranked match the SERVER runs (specs/003-authoritative-ranked-server): there
 ## is no host/guest role, the client only ever talks to the match by id.
@@ -87,7 +92,14 @@ func _handle_incoming(msg: Dictionary) -> void:
 			logged_out.emit()
 		"ranked_result_ack":
 			var success := bool(msg.get("success", false))
-			ranked_result_received.emit(success, _rank_fields_from(msg) if success else {})
+			if success:
+				ranked_report_acked.emit()
+			else:
+				ranked_report_failed.emit(str(msg.get("message", "")))
+			# A refusal Auth will retry is not the final word, so it must not
+			# flip the game-over screen to "Rank sync failed" first.
+			if success or not RETRYABLE_REPORT_FAILURES.has(str(msg.get("message", ""))):
+				ranked_result_received.emit(success, _rank_fields_from(msg) if success else {})
 		"save_deck_result":
 			save_deck_result.emit(bool(msg.get("success", false)), str(msg.get("message", "")), str(msg.get("name", "")))
 		"delete_deck_result":
@@ -163,9 +175,16 @@ func _handle_incoming(msg: Dictionary) -> void:
 			_relay_queue.append(payload)
 			_queue_updated.emit()
 
-func send(obj: Dictionary) -> void:
+## True when the message went out. A closed socket drops it, so callers that
+## must not lose a message keep their own copy until the server answers.
+func send(obj: Dictionary) -> bool:
 	if _ws.get_ready_state() == WebSocketPeer.STATE_OPEN:
 		_ws.send_text(JSON.stringify(obj))
+		return true
+	return false
+
+func is_open() -> bool:
+	return _ws.get_ready_state() == WebSocketPeer.STATE_OPEN
 
 func create_lobby(host_name: String, lobby_name: String = "") -> void:
 	send({"type": "create_lobby", "host_name": host_name, "name": lobby_name if lobby_name != "" else host_name + "'s Lobby"})
@@ -198,14 +217,14 @@ func logout(token: String) -> void:
 ## older servers but is no longer trusted - the server reads the opponent's
 ## rating from its own record of the match.
 func report_ranked_result(token: String, won: bool, opponent_rating: int = -1, match_id: String = "",
-						  ai_match: Dictionary = {}) -> void:
+						  ai_match: Dictionary = {}) -> bool:
 	var msg := {"type": "report_ranked_result", "token": token, "won": won, "match_id": match_id}
 	if opponent_rating >= 0:
 		msg["opponent_rating"] = opponent_rating
 	# Only local ranked AI games supply this optional, unverified summary.
 	if not ai_match.is_empty():
 		msg["ai_match"] = ai_match
-	send(msg)
+	return send(msg)
 
 ## `deck_name` names one of the player's saved (or starter) decks: the server
 ## reads the card list itself and never accepts one from the client.
