@@ -2,7 +2,7 @@
   "name": "cardgame-public-catalog",
   "version": "1.0.0",
   "private": true,
-  "description": "Static, versioned public card catalog: exporter, read-only server, tests. No dependencies.",
+  "description": "Static public card catalog: exporter, read-only server, tests. No dependencies.",
   "type": "module",
   "engines": { "node": ">=20" },
   "scripts": {

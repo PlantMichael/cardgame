@@ -4,7 +4,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
 
-import { buildCandidate, loadReleaseInput, setLatest, writeRelease } from '../src/export.mjs';
+import { buildCandidate, loadReleaseInput, writeCatalog } from '../src/export.mjs';
 import { createCatalogServer } from '../src/server.mjs';
 import {
   releaseInput, tempDir, writeInput, writeSource,
@@ -17,9 +17,9 @@ const pub = path.join(root, 'public');
 let server;
 let port;
 
-function release(version) {
-  writeInput(inputFile, releaseInput({ catalogVersion: version }));
-  writeRelease(pub, buildCandidate(source, loadReleaseInput(inputFile)));
+function publish() {
+  writeInput(inputFile, releaseInput());
+  writeCatalog(pub, buildCandidate(source, loadReleaseInput(inputFile)));
 }
 
 /** Raw request so that '..' and encoded paths reach the server un-normalised. */
@@ -37,28 +37,26 @@ function raw(method, urlPath, headers = {}) {
 
 before(async () => {
   writeSource(source);
-  release('1.0.0');
+  publish();
   // Something private beside the public tree that must never be reachable.
   writeFileSync(path.join(root, 'secret.json'), '{"secret":true}');
-  writeFileSync(path.join(pub, 'data', 'v1', 'notes.txt'), 'not json');
+  writeFileSync(path.join(pub, 'data', 'notes.txt'), 'not json');
   server = createCatalogServer(pub);
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   port = server.address().port;
 });
 after(() => server.close());
 
-test('latest -> linked files are served as JSON with the expected shape', async () => {
-  const latest = await raw('GET', '/data/v1/latest.json');
-  assert.equal(latest.status, 200);
-  assert.equal(latest.headers['content-type'], 'application/json; charset=utf-8');
-  const pointer = JSON.parse(latest.body);
-  for (const url of [pointer.cardsUrl, pointer.keywordsUrl]) {
+test('cards and keywords are served as JSON with the expected shape', async () => {
+  for (const url of ['/data/cards.json', '/data/keywords.json']) {
     const r = await raw('GET', url);
     assert.equal(r.status, 200, url);
-    assert.equal(JSON.parse(r.body).catalogVersion, '1.0.0');
+    assert.equal(r.headers['content-type'], 'application/json; charset=utf-8');
+    const body = JSON.parse(r.body);
+    assert.ok(!('catalogVersion' in body) && !('schemaVersion' in body), `${url} carries no version`);
   }
-  const cards = JSON.parse((await raw('GET', pointer.cardsUrl)).body).cards;
-  assert.equal(cards.length, 4);
+  assert.equal(JSON.parse((await raw('GET', '/data/cards.json')).body).cards.length, 4);
+  for (const old of ['/data/v1/latest.json', '/data/v1/releases/1.0.0/cards.json']) assert.equal((await raw('GET', old)).status, 404, old);
 });
 
 test('no database prerequisite: no DATABASE_URL is set or needed', async () => {
@@ -67,7 +65,7 @@ test('no database prerequisite: no DATABASE_URL is set or needed', async () => {
 });
 
 test('unknown paths are a real 404 JSON, not a fallback page', async () => {
-  for (const p of ['/', '/index.html', '/data/v1/nope.json', '/data/v1/releases/9.9.9/cards.json', '/data/v1/', '/data', '/favicon.ico']) {
+  for (const p of ['/', '/index.html', '/data/nope.json', '/data/', '/data', '/favicon.ico']) {
     const r = await raw('GET', p);
     assert.equal(r.status, 404, p);
     assert.match(r.headers['content-type'], /application\/json/);
@@ -77,9 +75,9 @@ test('unknown paths are a real 404 JSON, not a fallback page', async () => {
 
 test('no traversal, no directory listing, no non-JSON, no dotfiles, no source tree', async () => {
   for (const p of [
-    '/data/v1/../../../secret.json', '/../secret.json', '/data/v1/%2e%2e/%2e%2e/%2e%2e/secret.json',
-    '/data%2fv1%2f..%2f..%2f..%2fsecret.json', '/data/v1/..%5c..%5csecret.json', '/data/v1/latest.json%00.png',
-    '/data/v1/notes.txt', '/.tmp/x.json', '/data/v1/releases/', '/data/v1/releases',
+    '/data/../../secret.json', '/../secret.json', '/data/%2e%2e/%2e%2e/secret.json',
+    '/data%2f..%2f..%2fsecret.json', '/data/..%5c..%5csecret.json', '/data/cards.json%00.png',
+    '/data/notes.txt', '/.tmp/x.json',
   ]) {
     const r = await raw('GET', p);
     assert.equal(r.status, 404, p);
@@ -88,11 +86,11 @@ test('no traversal, no directory listing, no non-JSON, no dotfiles, no source tr
 });
 
 test('CORS: anonymous, any origin, ETag exposed, preflight answered, never credentialed', async () => {
-  const r = await raw('GET', '/data/v1/latest.json', { Origin: 'http://localhost:5173' });
+  const r = await raw('GET', '/data/cards.json', { Origin: 'http://localhost:5173' });
   assert.equal(r.headers['access-control-allow-origin'], '*');
   assert.match(r.headers['access-control-expose-headers'], /ETag/i);
   assert.equal(r.headers['access-control-allow-credentials'], undefined);
-  const pre = await raw('OPTIONS', '/data/v1/latest.json', {
+  const pre = await raw('OPTIONS', '/data/cards.json', {
     Origin: 'http://localhost:5173', 'Access-Control-Request-Method': 'GET', 'Access-Control-Request-Headers': 'if-none-match',
   });
   assert.equal(pre.status, 204);
@@ -103,26 +101,22 @@ test('CORS: anonymous, any origin, ETag exposed, preflight answered, never crede
 });
 
 test('other methods are refused; HEAD matches GET without a body', async () => {
-  assert.equal((await raw('POST', '/data/v1/latest.json')).status, 405);
-  assert.equal((await raw('DELETE', '/data/v1/latest.json')).status, 405);
-  const get = await raw('GET', '/data/v1/latest.json');
-  const head = await raw('HEAD', '/data/v1/latest.json');
+  assert.equal((await raw('POST', '/data/cards.json')).status, 405);
+  assert.equal((await raw('DELETE', '/data/cards.json')).status, 405);
+  const get = await raw('GET', '/data/cards.json');
+  const head = await raw('HEAD', '/data/cards.json');
   assert.equal(head.status, 200);
   assert.equal(head.body, '');
   assert.equal(head.headers.etag, get.headers.etag);
 });
 
-test('cache policy: latest revalidates, release files are immutable, ETag gives 304', async () => {
-  const latest = await raw('GET', '/data/v1/latest.json');
-  assert.equal(latest.headers['cache-control'], 'no-cache');
-  assert.match(latest.headers.etag, /^"[0-9a-f]{32}"$/);
-
-  const url = '/data/v1/releases/1.0.0/cards.json';
-  const cards = await raw('GET', url);
-  assert.equal(cards.headers['cache-control'], 'public, max-age=31536000, immutable');
-  assert.match(cards.headers['content-type'], /charset=utf-8/);
-
-  for (const [p, tag] of [[url, cards.headers.etag], ['/data/v1/latest.json', latest.headers.etag]]) {
+test('cache policy: everything revalidates, ETag gives 304', async () => {
+  for (const p of ['/data/cards.json', '/data/keywords.json']) {
+    const res = await raw('GET', p);
+    assert.equal(res.headers['cache-control'], 'no-cache', p);
+    assert.match(res.headers.etag, /^"[0-9a-f]{32}"$/);
+    assert.match(res.headers['content-type'], /charset=utf-8/);
+    const tag = res.headers.etag;
     const same = await raw('GET', p, { 'If-None-Match': tag });
     assert.equal(same.status, 304, p);
     assert.equal(same.body, '');
@@ -132,21 +126,14 @@ test('cache policy: latest revalidates, release files are immutable, ETag gives 
   }
 });
 
-test('history survives an update: latest selects the new release, the old one is unchanged', async () => {
-  const oldBody = (await raw('GET', '/data/v1/releases/1.0.0/cards.json')).body;
-  const oldTag = (await raw('GET', '/data/v1/latest.json')).headers.etag;
-
-  release('1.1.0');
-  const latest = JSON.parse((await raw('GET', '/data/v1/latest.json')).body);
-  assert.equal(latest.catalogVersion, '1.1.0');
-  assert.equal(JSON.parse((await raw('GET', latest.cardsUrl)).body).catalogVersion, '1.1.0');
-  assert.equal((await raw('GET', '/data/v1/releases/1.0.0/cards.json')).body, oldBody, 'old release retrievable and identical');
-  // A client holding the old latest ETag now gets the new pointer, not a 304.
-  assert.equal((await raw('GET', '/data/v1/latest.json', { 'If-None-Match': oldTag })).status, 200);
-
-  setLatest(pub, '1.0.0');
-  assert.equal(JSON.parse((await raw('GET', '/data/v1/latest.json')).body).catalogVersion, '1.0.0');
-  assert.equal((await raw('GET', '/data/v1/releases/1.1.0/cards.json')).status, 200, 'rollback keeps the newer release available');
+test('an update replaces the data: the old ETag no longer matches', async () => {
+  const oldTag = (await raw('GET', '/data/cards.json')).headers.etag;
+  writeSource(source, { teal: [] });
+  writeInput(inputFile, releaseInput({ cards: [{ id: 'f_001', collectible: true }, { id: 'f_001t', collectible: false }] }));
+  writeCatalog(pub, buildCandidate(source, loadReleaseInput(inputFile)));
+  const res = await raw('GET', '/data/cards.json', { 'If-None-Match': oldTag });
+  assert.equal(res.status, 200);
+  assert.equal(JSON.parse(res.body).cards.length, 2);
 });
 
 test('health fails when the prepared catalog is incomplete', async () => {
@@ -163,17 +150,15 @@ test('health fails when the prepared catalog is incomplete', async () => {
   });
   assert.equal(res.status, 503, 'a bound port alone is not healthy');
 
-  // latest.json present but pointing at a file that is missing.
-  mkdirSync(path.join(empty, 'data', 'v1'), { recursive: true });
-  writeFileSync(path.join(empty, 'data', 'v1', 'latest.json'), JSON.stringify({
-    catalogVersion: 'x', cardsUrl: '/data/v1/releases/x/cards.json', keywordsUrl: '/data/v1/releases/x/keywords.json',
-  }));
+  // cards.json present but keywords.json missing.
+  mkdirSync(path.join(empty, 'data'), { recursive: true });
+  writeFileSync(path.join(empty, 'data', 'cards.json'), '{"cards":[]}');
   const res2 = await new Promise((resolve) => {
     http.get({ host: '127.0.0.1', port: p2, path: '/healthz' }, (r) => {
       r.resume();
       r.on('end', () => resolve(r.statusCode));
     });
   });
-  assert.equal(res2, 503, 'a dangling pointer is unhealthy');
+  assert.equal(res2, 503, 'a half-prepared catalog is unhealthy');
   s2.close();
 });

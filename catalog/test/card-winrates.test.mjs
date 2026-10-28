@@ -8,8 +8,7 @@ import { createCatalogServer } from '../src/server.mjs';
 import { STATS_PATH } from '../src/card-winrates.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
-const latest = JSON.parse(readFileSync(path.join(root, 'data/v1/latest.json')));
-const published = JSON.parse(readFileSync(path.join(root, `.${latest.cardsUrl}`))).cards.filter(c => c.collectible && !c.isToken);
+const published = JSON.parse(readFileSync(path.join(root, 'data/cards.json'))).cards.filter(c => c.collectible && !c.isToken);
 
 test('catalog projects only published counts and isolates bounded upstream failures', async t => {
   let mode = 'ok';

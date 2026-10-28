@@ -2,23 +2,21 @@
 //
 // Reads the six faction card files the game itself loads (see
 // scripts/cards/card_database.gd), the keyword tooltips, and a release-input
-// manifest that EXPLICITLY selects which cards are public. Writes immutable,
-// versioned JSON under <outDir>/data/v1/ plus a small `latest.json` pointer.
+// manifest that EXPLICITLY selects which cards are public. Writes
+// <outDir>/data/cards.json and <outDir>/data/keywords.json. Nothing is
+// versioned: every export simply replaces those two files.
 //
 // Node built-ins only. Deliberately does not touch server/relay.js, Postgres
 // or the Godot export directory.
 //
-//   node src/export.mjs                          export the release named in release-input.json
-//   node src/export.mjs --set-latest <version>   point latest.json at an existing release (rollback)
+//   node src/export.mjs        export the cards selected in release-input.json
 
-import { createHash } from 'node:crypto';
 import {
   existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const SCHEMA_VERSION = 1;
 // The same six files, in the same order, as CardDatabase._load_cards().
 // red.json and data/cards/backup/ exist on disk but are NOT game content.
 export const FACTION_FILES = ['green', 'crimson', 'black', 'orange', 'teal', 'generic'];
@@ -26,20 +24,12 @@ export const FACTION_FILES = ['green', 'crimson', 'black', 'orange', 'teal', 'ge
 const COLORS = ['GREEN', 'CRIMSON', 'BLACK', 'ORANGE', 'TEAL', 'GENERIC'];
 const TYPES = ['CREATURE', 'STRATAGEM', 'LOCATION'];
 const RARITIES = ['COMMON', 'RARE', 'EPIC', 'LEGENDARY'];
-const VERSION_LABEL = /^[0-9A-Za-z][0-9A-Za-z._-]{0,63}$/;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const CATALOG_ROOT = path.resolve(here, '..');
 export const REPO_ROOT = path.resolve(CATALOG_ROOT, '..');
 
 export class ExportError extends Error {}
-
-/** A label is used to build filesystem paths, so it must not be able to leave its directory. */
-export function assertVersionLabel(label, what = 'version') {
-  if (typeof label !== 'string' || !VERSION_LABEL.test(label) || label.includes('..')) {
-    throw new ExportError(`${what} ${JSON.stringify(label)} is not a safe label (letters, digits, '.', '_', '-'; max 64)`);
-  }
-}
 
 function readJson(file, what) {
   let text;
@@ -86,10 +76,6 @@ export function loadSources(sourceDir) {
 
 export function loadReleaseInput(file) {
   const input = readJson(file, 'release input');
-  assertVersionLabel(input.catalogVersion, 'catalogVersion');
-  if (typeof input.gameVersion !== 'string' || input.gameVersion === '') {
-    throw new ExportError('release input: gameVersion must be a non-empty string');
-  }
   if (!Array.isArray(input.cards) || input.cards.length === 0) {
     throw new ExportError('release input: cards must be a non-empty array of { id, collectible }');
   }
@@ -220,25 +206,15 @@ export function buildCandidate(sourceDir, releaseInput) {
   }
   const publishedAbilities = new Set(projected.flatMap((c) => c.abilities));
   const kw = buildKeywords(keywords, aliases, publishedAbilities);
-  const meta = {
-    schemaVersion: SCHEMA_VERSION,
-    catalogVersion: releaseInput.catalogVersion,
-    gameVersion: releaseInput.gameVersion,
-  };
   return {
-    meta,
-    cards: serialize({ ...meta, cards: projected }),
-    keywords: serialize({ ...meta, ...kw }),
+    cards: serialize({ cards: projected }),
+    keywords: serialize({ ...kw }),
     cardCount: projected.length,
     abilitiesWithoutKeyword: Object.entries(kw.abilityKeywords).filter(([, v]) => v === null).map(([k]) => k),
   };
 }
 
 // --- Writing ----------------------------------------------------------------
-
-function sha(buf) {
-  return createHash('sha256').update(buf).digest('hex');
-}
 
 function atomicWrite(file, content, tmpDir) {
   mkdirSync(tmpDir, { recursive: true });
@@ -248,66 +224,25 @@ function atomicWrite(file, content, tmpDir) {
   renameSync(tmp, file);
 }
 
-export function releaseDir(outDir, version) {
-  assertVersionLabel(version);
-  return path.join(outDir, 'data', 'v1', 'releases', version);
-}
-
-export function latestPointer(meta) {
-  return serialize({
-    schemaVersion: meta.schemaVersion,
-    catalogVersion: meta.catalogVersion,
-    gameVersion: meta.gameVersion,
-    cardsUrl: `/data/v1/releases/${meta.catalogVersion}/cards.json`,
-    keywordsUrl: `/data/v1/releases/${meta.catalogVersion}/keywords.json`,
-  });
-}
-
 /**
- * Validates the whole candidate FIRST, then writes. Returns a description of
- * what happened. A published version is write-once: byte-identical is a no-op,
- * different content under the same label fails.
+ * Validates the whole candidate FIRST (buildCandidate), then replaces the two
+ * files. Each lands complete or not at all. Unchanged content is reported as
+ * such and left alone.
  */
-export function writeRelease(outDir, candidate, { updateLatest = true } = {}) {
-  const version = candidate.meta.catalogVersion;
-  const dir = releaseDir(outDir, version);
+export function writeCatalog(outDir, candidate) {
+  const dir = path.join(outDir, 'data');
   const cardsFile = path.join(dir, 'cards.json');
   const keywordsFile = path.join(dir, 'keywords.json');
   const tmpDir = path.join(outDir, '.tmp');
-
-  let status = 'created';
-  if (existsSync(cardsFile) || existsSync(keywordsFile)) {
-    const same = existsSync(cardsFile) && existsSync(keywordsFile)
-      && sha(readFileSync(cardsFile)) === sha(candidate.cards)
-      && sha(readFileSync(keywordsFile)) === sha(candidate.keywords);
-    if (!same) {
-      throw new ExportError(
-        `release ${version} already exists with different content; published versions are immutable - choose a new catalogVersion`,
-      );
-    }
-    status = 'unchanged';
-  } else {
-    // Complete files land before anything points at them.
+  const same = existsSync(cardsFile) && existsSync(keywordsFile)
+    && readFileSync(cardsFile, 'utf8') === candidate.cards
+    && readFileSync(keywordsFile, 'utf8') === candidate.keywords;
+  if (!same) {
     atomicWrite(cardsFile, candidate.cards, tmpDir);
     atomicWrite(keywordsFile, candidate.keywords, tmpDir);
   }
-  if (updateLatest) {
-    atomicWrite(path.join(outDir, 'data', 'v1', 'latest.json'), latestPointer(candidate.meta), tmpDir);
-  }
   rmSync(tmpDir, { recursive: true, force: true });
-  return { status, version, latest: updateLatest };
-}
-
-/** Rollback / roll-forward: repoint latest.json at a release that already exists. */
-export function setLatest(outDir, version) {
-  const cardsFile = path.join(releaseDir(outDir, version), 'cards.json');
-  if (!existsSync(cardsFile) || !existsSync(path.join(path.dirname(cardsFile), 'keywords.json'))) {
-    throw new ExportError(`release ${version} does not exist in ${outDir}`);
-  }
-  const env = readJson(cardsFile, `release ${version}`);
-  atomicWrite(path.join(outDir, 'data', 'v1', 'latest.json'), latestPointer(env), path.join(outDir, '.tmp'));
-  rmSync(path.join(outDir, '.tmp'), { recursive: true, force: true });
-  return { version };
+  return { status: same ? 'unchanged' : 'written' };
 }
 
 // --- CLI -------------------------------------------------------------------
@@ -317,16 +252,12 @@ function parseArgs(argv) {
     sourceDir: path.join(REPO_ROOT, 'data'),
     input: path.join(CATALOG_ROOT, 'release-input.json'),
     outDir: path.join(CATALOG_ROOT, 'public'),
-    setLatest: null,
-    updateLatest: true,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--source') opts.sourceDir = path.resolve(argv[++i]);
     else if (a === '--input') opts.input = path.resolve(argv[++i]);
     else if (a === '--out') opts.outDir = path.resolve(argv[++i]);
-    else if (a === '--set-latest') opts.setLatest = argv[++i];
-    else if (a === '--no-latest') opts.updateLatest = false;
     else throw new ExportError(`unknown argument ${a}`);
   }
   return opts;
@@ -334,14 +265,9 @@ function parseArgs(argv) {
 
 export function main(argv) {
   const opts = parseArgs(argv);
-  if (opts.setLatest) {
-    setLatest(opts.outDir, opts.setLatest);
-    console.log(`latest.json now points at release ${opts.setLatest}`);
-    return;
-  }
   const candidate = buildCandidate(opts.sourceDir, loadReleaseInput(opts.input));
-  const result = writeRelease(opts.outDir, candidate, { updateLatest: opts.updateLatest });
-  console.log(`release ${result.version}: ${result.status}, ${candidate.cardCount} cards${result.latest ? ', latest updated' : ''}`);
+  const result = writeCatalog(opts.outDir, candidate);
+  console.log(`catalog ${result.status}: ${candidate.cardCount} cards`);
   if (candidate.abilitiesWithoutKeyword.length > 0) {
     console.log(`note: ${candidate.abilitiesWithoutKeyword.length} ability keys have no keyword entry (null in abilityKeywords): ${candidate.abilitiesWithoutKeyword.join(', ')}`);
   }

@@ -2,18 +2,17 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-export const STATS_PATH = '/data/v1/stats/card-winrates.json';
+export const STATS_PATH = '/data/stats/card-winrates.json';
 export const DEFAULT_ORIGIN = 'https://cardgame-relay-production.up.railway.app';
 const MAX_BYTES = 1024 * 1024;
 
 export async function cardWinrates(root, resolvePublicFile, { statsOrigin = DEFAULT_ORIGIN, statsTimeoutMs = 5000 } = {}) {
   const origin = new URL(statsOrigin);
   if (!['http:', 'https:'].includes(origin.protocol) || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash) throw new Error('invalid origin');
-  const latest = JSON.parse(readFileSync(path.join(root, 'data/v1/latest.json'), 'utf8'));
-  const file = typeof latest.cardsUrl === 'string' ? resolvePublicFile(root, latest.cardsUrl) : null;
+  const file = resolvePublicFile(root, '/data/cards.json');
   if (!file) throw new Error('invalid catalog');
   const release = JSON.parse(readFileSync(file, 'utf8'));
-  if (!Array.isArray(release.cards) || release.catalogVersion !== latest.catalogVersion) throw new Error('invalid catalog');
+  if (!Array.isArray(release.cards)) throw new Error('invalid catalog');
   const response = await fetch(new URL(STATS_PATH, origin), { redirect: 'error', signal: AbortSignal.timeout(statsTimeoutMs) });
   if (!response.ok || !response.body) { await response.body?.cancel(); throw new Error('unavailable'); }
   const chunks = [];

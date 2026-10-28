@@ -6,7 +6,7 @@ const path = require('node:path');
 const WebSocket = require('ws');
 const { SETTLING_REASONS } = require('./authoritative/settle');
 
-const STATS_PATH = '/data/v1/stats/card-winrates.json';
+const STATS_PATH = '/data/stats/card-winrates.json';
 const PUBLIC_ROOT = path.join(__dirname, '..', 'catalog', 'public');
 const METHODOLOGY = {
   metric: 'starting_deck_inclusion', modes: ['ranked_ai', 'authoritative_pvp'],
@@ -17,13 +17,8 @@ const METHODOLOGY = {
 
 // Publication, rather than private card ingestion, owns this allowlist.
 function publishedCards(root) {
-  const latest = JSON.parse(fs.readFileSync(path.join(root, 'data/v1/latest.json'), 'utf8'));
-  if (typeof latest.cardsUrl !== 'string' || !/^\/data\/v1\/releases\/[a-zA-Z0-9._-]+\/cards\.json$/.test(latest.cardsUrl)) throw new Error('invalid catalog');
-  const file = path.resolve(root, `.${latest.cardsUrl}`);
-  const rel = path.relative(root, file);
-  if (rel.startsWith('..') || path.isAbsolute(rel)) throw new Error('invalid catalog');
-  const release = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (typeof latest.catalogVersion !== 'string' || release.catalogVersion !== latest.catalogVersion || !Array.isArray(release.cards)) throw new Error('invalid catalog');
+  const release = JSON.parse(fs.readFileSync(path.join(root, 'data/cards.json'), 'utf8'));
+  if (!Array.isArray(release.cards)) throw new Error('invalid catalog');
   const ids = release.cards.filter(c => c.collectible === true && c.isToken === false).map(c => c.id);
   if (!ids.length || ids.some(id => typeof id !== 'string') || new Set(ids).size !== ids.length) throw new Error('invalid catalog');
   return { ids };

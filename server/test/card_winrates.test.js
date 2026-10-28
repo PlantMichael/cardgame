@@ -143,7 +143,7 @@ test('published card win rates combine actual starting decks through both HTTP e
   assert.equal(response.headers.get('cache-control'), 'no-store');
   assert.equal(response.text.trim(), '{"error":"card win rates unavailable"}');
   assert.equal((await fetch(catalog + '/healthz')).status, 200);
-  assert.equal((await fetch(catalog + '/data/v1/latest.json')).status, 200);
+  assert.equal((await fetch(catalog + '/data/cards.json')).status, 200);
   await pool.query('ALTER TABLE unavailable_settlements RENAME TO ranked_settlements');
   assert.equal((await get()).status, 200, 'failure not cached');
 

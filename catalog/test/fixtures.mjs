@@ -53,8 +53,6 @@ export function writeSource(dir, overrides = {}) {
 
 export function releaseInput(overrides = {}) {
   return {
-    catalogVersion: '1.0.0',
-    gameVersion: '9.9.9',
     cards: [
       { id: 'f_001', collectible: true },
       { id: 'f_001t', collectible: false },

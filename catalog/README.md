@@ -1,16 +1,15 @@
 # Public card catalog
 
-A versioned, read-only copy of the game's printed card data for deck builders, bots and card browsers, plus a live card win-rate summary. No API key or login. The catalog service needs no database credentials. Printed definitions are generated from the same six faction files the game loads (`data/cards/{green,crimson,black,orange,teal,generic}.json`); the game itself never reads from it.
+A read-only copy of the game's printed card data for deck builders, bots and card browsers, plus a live card win-rate summary. No API key or login. The catalog service needs no database credentials. Printed definitions are generated from the same six faction files the game loads (`data/cards/{green,crimson,black,orange,teal,generic}.json`); the game itself never reads from it.
 
-> Printed catalog origin: `https://cardgame-catalog-production.up.railway.app`. `public/` holds release 0.1.0 (176 cards); releases are write-once. The live win-rate route requires deploying the updated relay AND catalog before it is available there.
+> Printed catalog origin: `https://cardgame-catalog-production.up.railway.app`. `public/` holds the 176 published cards. **Nothing is versioned:** there are no version numbers, release folders or `latest.json`; every export simply replaces `cards.json` and `keywords.json`. The live win-rate route requires deploying the updated relay AND catalog before it is available there.
 
 ## URLs
 
 ```text
-GET /data/v1/latest.json
-GET /data/v1/releases/<catalog-version>/cards.json
-GET /data/v1/releases/<catalog-version>/keywords.json
-GET /data/v1/stats/card-winrates.json
+GET /data/cards.json
+GET /data/keywords.json
+GET /data/stats/card-winrates.json
 GET /healthz                       (operator health check, not part of the data contract)
 ```
 
@@ -18,7 +17,7 @@ There is no server-side filtering and no per-card route. **Download once, index 
 
 ### Live card win rates
 
-Fetch `/data/v1/stats/card-winrates.json` and join `cards[].id` to the printed catalog. Example row and envelope (other cards omitted):
+Fetch `/data/stats/card-winrates.json` and join `cards[].id` to the printed catalog. Example row and envelope (other cards omitted):
 
 ```json
 {
@@ -45,33 +44,15 @@ For Railway's database query box, copy [server/tools/card-winrates.sql](../serve
 
 This is preliminary testing data. The owner explicitly selected the one-game minimum, superseding the earlier 100-game/anti-differencing policy **for this endpoint**. No raw identity, match ID or deck list is returned, but comparing small-sample snapshots can reveal a player's card inclusion and result. Do not describe this as protection against inference.
 
-The relay caches successful aggregates for 60 seconds and shares concurrent refreshes. `generatedAt` is snapshot time, not a match timestamp. Responses use `Cache-Control: no-cache`; failures are generic JSON **503**, `no-store`, never zero-filled or stale success. GET/HEAD/OPTIONS and anonymous CORS are supported. Printed card files and `/healthz` remain available during stats failures. The proposed immutable `/stats/latest.json` releases remain unimplemented; this endpoint does not supply drawn/played rates, tiers, caps or deck archetypes.
+The relay caches successful aggregates for 60 seconds and shares concurrent refreshes. `generatedAt` is snapshot time, not a match timestamp. Responses use `Cache-Control: no-cache`; failures are generic JSON **503**, `no-store`, never zero-filled or stale success. GET/HEAD/OPTIONS and anonymous CORS are supported. Printed card files and `/healthz` remain available during stats failures. Versioned stats releases do not exist; this endpoint does not supply drawn/played rates, tiers, caps or deck archetypes.
 
-Deploy both services from the same catalog release. For the two-seat update, deploy **catalog first, then relay**: the updated catalog requires upstream `methodology.aiSeats: "both"` and returns generic 503 while the relay still uses the old human-only methodology, rather than relabeling incompatible counts. The relay image includes `catalog/public/data/v1/`; it reads the committed publication allowlist and uses its existing database pool. No new database tables or variables are required. The catalog defaults to `https://cardgame-relay-production.up.railway.app`; optionally set **`CARD_WINRATES_ORIGIN`** on the catalog to an HTTP(S) origin for staging/local testing (no path, query, userinfo or fragment). The fetch has a 5-second timeout, 1 MiB response limit, refuses redirects, and validates/projects counts. The stats response carries no version fields. No Godot browser export is needed for this API-only change.
+Deploy BOTH services together. The stats route moved to `/data/stats/card-winrates.json` on the relay as well as the catalog, so the catalog returns a generic 503 until the relay is redeployed too (deploy the relay, then the catalog, or either order and wait for both). The catalog also requires upstream `methodology.aiSeats: "both"`. The relay image includes `catalog/public/data/`; it reads the committed publication allowlist and uses its existing database pool. No new database tables or variables are required. The catalog defaults to `https://cardgame-relay-production.up.railway.app`; optionally set **`CARD_WINRATES_ORIGIN`** on the catalog to an HTTP(S) origin for staging/local testing (no path, query, userinfo or fragment). The fetch has a 5-second timeout, 1 MiB response limit, refuses redirects, and validates/projects counts. The stats response carries no version fields. No Godot browser export is needed for this API-only change.
 
 After deployment, fetch the new route, complete a ranked game using a client with AI-summary recording, then fetch again after 60 seconds and check the affected card counts. Local aggregate verification: from `server`, run `node --test test/card_winrates.test.js test/ranked_ai_record.test.js` with a disposable `DATABASE_URL`; from `catalog`, run `node --test 'test/*.test.mjs'` without `DATABASE_URL`.
 
-URLs in `latest.json` are root-relative: resolve them against the origin you fetched `latest.json` from (`new URL(latest.cardsUrl, origin)`).
-
-### `latest.json`
-
-```json
-{
-  "schemaVersion": 1,
-  "catalogVersion": "0.1.0",
-  "gameVersion": "unreleased",
-  "cardsUrl": "/data/v1/releases/0.1.0/cards.json",
-  "keywordsUrl": "/data/v1/releases/0.1.0/keywords.json"
-}
-```
-
-- `schemaVersion` — the shape of these files. Changes only when the contract changes, not when a card is rebalanced.
-- `catalogVersion` — identifies immutable content. A release is **write-once**: any correction ships as a new version.
-- `gameVersion` — which game release the content describes. Not derived from the git branch.
-
 ### `cards.json`
 
-An envelope (`schemaVersion`, `catalogVersion`, `gameVersion`) plus `cards`, sorted by `id`:
+An object with one key, `cards`, sorted by `id`:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -96,7 +77,7 @@ Not exported, on purpose: art paths, internal effect definitions (`effect`, `eff
 
 ### `keywords.json`
 
-The same envelope plus:
+An object with:
 
 - `keywords` — `{ id, name, description }`, from `data/keywords.json` (the same text the game's tooltips use). `id` is the lower-snake-case name.
 - `abilityKeywords` — for **every ability key that appears in `cards.json`**, the keyword it belongs to, or `null`. A parameterised key resolves through its base: `shielded_1` → `shielded`, `pilot_2_2` → `pilot`, `reinforce_4` → `reinforce`. Three keys are aliased in [`data/keyword_abilities.json`](../data/keyword_abilities.json) because the keyword's printed name differs from the ability key (`combat_immune` → Ethereal, `enemy_damage_amp` → Amplify, `two_slot` → Colossal).
@@ -111,20 +92,19 @@ not published yet.
 ## Local use
 
 ```bash
-curl -s http://localhost:8080/data/v1/latest.json
+curl -s http://localhost:8080/data/cards.json
 node examples/consume.mjs http://localhost:8080
 ```
 
 ```js
-// Browser or Node 18+: fetch latest, resolve, index by id, filter locally.
+// Browser or Node 18+: fetch, index by id, filter locally.
 const origin = 'https://YOUR-CATALOG-DOMAIN';           // placeholder
-const latest = await (await fetch(`${origin}/data/v1/latest.json`)).json();
-const { cards } = await (await fetch(new URL(latest.cardsUrl, origin))).json();
+const { cards } = await (await fetch(`${origin}/data/cards.json`)).json();
 const byId = new Map(cards.map((c) => [c.id, c]));
 const cheapGuardians = cards.filter((c) => c.collectible && c.manaCost <= 3 && c.abilities.includes('guardian'));
 ```
 
-Pin a version by fetching `/data/v1/releases/<catalog-version>/cards.json` directly: its bytes never change. Responses carry `Access-Control-Allow-Origin: *` (no credentials) and expose `ETag`; send `If-None-Match` to get a `304`. `latest.json` is `Cache-Control: no-cache`; release files are `public, max-age=31536000, immutable`.
+Nothing is versioned, so the files change whenever the catalog is re-exported. Responses carry `Access-Control-Allow-Origin: *` (no credentials) and expose `ETag`; send `If-None-Match` to get a `304`. Every file is `Cache-Control: no-cache`, so a client always revalidates and gets a `304` when nothing changed.
 
 Errors: unknown paths return a real `404` JSON body (never a fallback page), other methods `405`. Handle non-2xx explicitly, as `examples/consume.mjs` does.
 
@@ -140,30 +120,22 @@ npm run export           # export release-input.json into ./public
 
 `node --test` and `curl` are the only tools used. The server never starts the Godot game, `server/relay.js`, or Postgres.
 
-## Release process
+## Updating the catalog
 
-1. **Prepare.** Edit `release-input.json`: new `catalogVersion`, the real `gameVersion`, and the explicit `cards` list (`{ "id", "collectible" }` — it selects content; names, stats and text always come from the faction JSON). Include any token/form a selected card references; the export fails rather than pulling in an unreleased card.
-2. **Validate + export.** `npm run export`. The whole candidate is validated before anything is written; any failure (bad JSON, duplicate id, unknown id, invalid field, dangling transform reference, unsafe label) exits nonzero and leaves the existing output untouched. Re-running with identical inputs is a byte-identical no-op; the same version with different content is refused.
-3. **Retain.** `public/` is committed. Previous releases stay in `public/data/v1/releases/` and are served forever, so a stateless rebuild keeps history.
-4. **Review** the diff of `public/` — that is exactly what becomes public.
-5. **Publish** (needs owner approval of target and spend): deploy the `catalog/` directory - see [Deploying to Railway](#deploying-to-railway).
-6. **Switch latest.** The export already points `latest.json` at the new release (`--no-latest` exports without switching). Complete release files are written before `latest.json`.
-7. **Roll back** without rewriting any release: `node src/export.mjs --set-latest <older-version>`.
-
-Publication uses the service's configured deployment branch or an explicit CLI deployment.
+1. **Select.** Edit `release-input.json`: the explicit `cards` list (`{ "id", "collectible" }`) selects which cards are public; names, stats and text always come from the faction JSON. Include any token/form a selected card references; the export fails rather than pulling in an unreleased card.
+2. **Validate + export.** `npm run export`. The whole candidate is validated before anything is written; any failure (bad JSON, duplicate id, unknown id, invalid field, dangling transform reference) exits nonzero and leaves the existing output untouched. Re-running with identical inputs is a byte-identical no-op. A changed export replaces `public/data/cards.json` and `keywords.json`.
+3. **Review** the diff of `public/` - that is exactly what becomes public. `public/` is committed; there is no history of old versions beyond git.
+4. **Publish:** deploy the `catalog/` directory - see [Deploying to Railway](#deploying-to-railway).
 
 ## Deploying to Railway
 
 Everything inside this directory is deploy-ready: no dependencies or database
-credentials, `PORT` honoured, `/healthz` implemented, and release files committed
+credentials, `PORT` honoured, `/healthz` implemented, and the data files committed
 under `public/`. The live stats route uses the default relay origin unless the
 operator sets `CARD_WINRATES_ORIGIN`.
 
-The content is settled (see [Decided](#decided)): release `0.1.0`, 176 cards.
-A release is write-once - whatever is live at `/data/v1/releases/0.1.0/` is
-that content forever - so the thing to check before deploying is the diff of
-`public/`, which is exactly what becomes public. A correction after that is a
-new `catalogVersion`, never a rewrite of this one.
+The published content is whatever is in `public/data/`, so the thing to check
+before deploying is the diff of `public/`, which is exactly what becomes public.
 
 ```bash
 railway login                  # opens a browser; the saved login expires
@@ -179,8 +151,8 @@ railway domain                 # generates the public *.up.railway.app origin
   Settings → Source → Root Directory. A build that fails looking for a start
   command is almost always this.
 - `railway.json` supplies the rest: Nixpacks, `node src/server.mjs`, `/healthz`
-  as the health check (200 only when `latest.json` and the two files it links to
-  all exist, so a bound port with missing data is reported unhealthy), and
+  as the health check (200 only when `cards.json` and `keywords.json` both exist and
+  parse, so a bound port with missing data is reported unhealthy), and
   restart-on-failure. `watchPatterns: ["catalog/**"]` keeps game-only commits
   from rebuilding the catalog; the patterns are read relative to the repository
   root, so drop them if a catalog change ever fails to trigger a deploy.
@@ -190,33 +162,31 @@ railway domain                 # generates the public *.up.railway.app origin
 ### Verifying a deploy
 
 ```bash
-curl -s https://<origin>/healthz                        # {"status":"ok","catalogVersion":"…"}
+curl -s https://<origin>/healthz                        # {"status":"ok"}
 node examples/consume.mjs https://<origin>              # card count, keyword count, a filtered list
-curl -sI https://<origin>/data/v1/latest.json           # ETag, Cache-Control: no-cache, CORS
+curl -sI https://<origin>/data/cards.json               # ETag, Cache-Control: no-cache, CORS
 ```
 
-A release file should come back `Cache-Control: public, max-age=31536000,
-immutable`, and re-requesting either with `If-None-Match` should give `304`.
-All of that passes locally (`npm test`, 24 checks). This task has not rechecked
+Every file should come back `Cache-Control: no-cache`, and re-requesting with
+`If-None-Match` should give `304`. All of that passes locally (`npm test`). This task has not rechecked
 the printed catalog's behavior through Railway's CDN.
 
 Give consumers the origin as `CATALOG_ORIGIN` in
 [`stats-website-spec.md`](stats-website-spec.md). The live
-`/data/v1/stats/card-winrates.json` route requires both updated services;
-unavailable stats return 503. The proposed `/data/v1/stats/latest.json` and
-immutable stats release routes remain unimplemented and return 404. Consumers
+`/data/stats/card-winrates.json` route requires both updated services;
+unavailable stats return 503. Versioned stats release routes do not exist. Consumers
 must distinguish unavailable figures from genuine zero samples.
 
 ## What is verified, and what is not
 
-Verified locally by `npm test` and a live run: projection and exclusions, deterministic bytes, write-once versions, failure preservation, retained history across an update, rollback, real 404s, traversal/dotfile/non-JSON refusal, CORS headers and preflight, `Cache-Control`, `ETag` → `304`, `HEAD`, and `/healthz`.
+Verified locally by `npm test` and a live run: projection and exclusions, deterministic bytes, replacement on change, failure preservation, real 404s, traversal/dotfile/non-JSON refusal, CORS headers and preflight, `Cache-Control`, `ETag` → `304`, `HEAD`, and `/healthz`.
 
-**Remaining operator proof:** the new live route after deploying both services, deployed CORS / content-type / cache / ETag behavior behind Railway's CDN, old-release retention across a real redeploy, and resource usage. The owner reports the printed catalog is deployed at the origin above; this task verifies the new win-rate API locally only. The changed relay Docker COPY boundary was checked with a scratch image using the actual root build context and ignore rules; a full production image rebuild was not run.
+**Remaining operator proof:** the new live route after deploying both services, deployed CORS / content-type / cache / ETag behavior behind Railway's CDN, and resource usage. The owner reports the printed catalog is deployed at the origin above; this task verifies the new win-rate API locally only. The changed relay Docker COPY boundary was checked with a scratch image using the actual root build context and ignore rules; a full production image rebuild was not run.
 
 ## Decided
 
-- **Initial public card selection.** Every card in the six files (176) except three just-implemented, not-yet-balance-tested cards, held back by owner decision: `gen_str_005` Emergency Extraction, `t_str_004` Whiteout, `t_027` Snowdrift Matriarch. They can ship in a later release.
-- **`catalogVersion` 0.1.0 / `gameVersion` 0.1.0.** The game had no version scheme before this; 0.1.0 starts one. The never-published `0.1.0-candidate.1` export was deleted rather than carried forward, so the first thing served is the real release.
+- **Initial public card selection.** Every card in the six files (176) except three just-implemented, not-yet-balance-tested cards, held back by owner decision: `gen_str_005` Emergency Extraction, `t_str_004` Whiteout, `t_027` Snowdrift Matriarch. They can be added to `release-input.json` later.
+- **No versioning.** Owner decision: no version numbers, release folders or `latest.json` for now. A versioning scheme can be reintroduced later if consumers need to pin content.
 
 ## Still open
 

@@ -1,4 +1,4 @@
-// Consumer example: fetch latest -> resolve the catalog URL -> index by ID -> filter locally.
+// Consumer example: fetch cards and keywords -> index by ID -> filter locally.
 // No SDK, no Godot, no API key.
 //
 //   node examples/consume.mjs [origin]            (default: http://localhost:8080)
@@ -13,13 +13,11 @@ async function getJson(url) {
 }
 
 try {
-  // The manifest's URLs are root-relative: resolve them against the origin.
-  const latest = await getJson(`${origin}/data/v1/latest.json`);
-  const catalog = await getJson(new URL(latest.cardsUrl, origin));
-  const keywords = await getJson(new URL(latest.keywordsUrl, origin));
+  const catalog = await getJson(`${origin}/data/cards.json`);
+  const keywords = await getJson(`${origin}/data/keywords.json`);
 
   const byId = new Map(catalog.cards.map((c) => [c.id, c]));
-  console.log(`catalog ${catalog.catalogVersion} (game ${catalog.gameVersion}): ${byId.size} cards, ${keywords.keywords.length} keywords`);
+  console.log(`${byId.size} cards, ${keywords.keywords.length} keywords`);
 
   // Filtering is done locally - the server has no query API.
   const cheapGuardians = catalog.cards.filter(

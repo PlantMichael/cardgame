@@ -1,7 +1,5 @@
 {
-  "_notes": ["Approved first public release: catalogVersion 0.1.0, gameVersion 0.1.0, 176 cards.", "Releases are write-once. Any correction to this content ships as a new catalogVersion; this one is never rewritten.", "Held back from this release by owner decision: gen_str_005 Emergency Extraction, t_str_004 Whiteout, t_027 Snowdrift Matriarch (new, no art, not balance-tested). They can ship in a later release.", "collectible=false marks tokens / transformation forms that are included only because a selected card references them."],
-  "catalogVersion": "0.1.0",
-  "gameVersion": "0.1.0",
+  "_notes": ["The explicit list of cards published in the catalog. Nothing is versioned: re-running the export replaces cards.json and keywords.json.", "Held back from this release by owner decision: gen_str_005 Emergency Extraction, t_str_004 Whiteout, t_027 Snowdrift Matriarch (new, no art, not balance-tested). They can be added to this list later.", "collectible=false marks tokens / transformation forms that are included only because a selected card references them."],
   "cards": [
     { "id": "b_001", "collectible": true },
     { "id": "b_002", "collectible": true },

@@ -5,14 +5,13 @@
 // injects it) on 0.0.0.0.
 
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cardWinrates, STATS_PATH } from './card-winrates.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const IMMUTABLE = 'public, max-age=31536000, immutable';
 const REVALIDATE = 'no-cache';
 
 function etagOf(body) {
@@ -58,21 +57,18 @@ function readIfFile(file) {
   }
 }
 
-/** The prepared catalog is present: latest.json exists and the files it links to do too. */
+/** The prepared catalog is present: cards.json and keywords.json both exist and parse. */
 export function healthStatus(root) {
-  const latest = readIfFile(path.join(root, 'data', 'v1', 'latest.json'));
-  if (!latest) return { ok: false, reason: 'latest.json missing' };
-  let pointer;
-  try {
-    pointer = JSON.parse(latest.toString('utf8'));
-  } catch {
-    return { ok: false, reason: 'latest.json unreadable' };
+  for (const name of ['cards.json', 'keywords.json']) {
+    const body = readIfFile(path.join(root, 'data', name));
+    if (!body) return { ok: false, reason: `${name} missing` };
+    try {
+      JSON.parse(body.toString('utf8'));
+    } catch {
+      return { ok: false, reason: `${name} unreadable` };
+    }
   }
-  for (const key of ['cardsUrl', 'keywordsUrl']) {
-    const file = typeof pointer[key] === 'string' ? resolvePublicFile(root, pointer[key]) : null;
-    if (!file || !existsSync(file)) return { ok: false, reason: `${key} does not resolve to a prepared file` };
-  }
-  return { ok: true, catalogVersion: pointer.catalogVersion };
+  return { ok: true };
 }
 
 export function createCatalogServer(root, options = {}) {
@@ -118,7 +114,7 @@ export function createCatalogServer(root, options = {}) {
     }
     if (pathname === '/healthz') {
       const h = healthStatus(root);
-      json(h.ok ? 200 : 503, h.ok ? { status: 'ok', catalogVersion: h.catalogVersion } : { status: 'unavailable', reason: h.reason });
+      json(h.ok ? 200 : 503, h.ok ? { status: 'ok' } : { status: 'unavailable', reason: h.reason });
       return;
     }
 
@@ -129,13 +125,8 @@ export function createCatalogServer(root, options = {}) {
       return;
     }
     const etag = etagOf(body);
-    // Only files under releases/ are write-once; everything else (latest.json)
-    // must be revalidated so a new release is seen promptly.
-    const isRelease = path.relative(root, file).split(path.sep).includes('releases');
-    const headers = {
-      ETag: etag,
-      'Cache-Control': isRelease ? IMMUTABLE : REVALIDATE,
-    };
+    // Nothing is versioned, so every file is revalidated (ETag -> 304).
+    const headers = { ETag: etag, 'Cache-Control': REVALIDATE };
     if (matches(req.headers['if-none-match'], etag)) {
       send(304, headers);
       return;
@@ -154,7 +145,7 @@ export function main() {
   const server = createCatalogServer(root, { statsOrigin: process.env.CARD_WINRATES_ORIGIN });
   server.listen(port, '0.0.0.0', () => {
     const h = healthStatus(root);
-    console.log(`catalog server on :${port}, serving ${root} (${h.ok ? `latest ${h.catalogVersion}` : `NOT READY: ${h.reason}`})`);
+    console.log(`catalog server on :${port}, serving ${root} (${h.ok ? 'ready' : `NOT READY: ${h.reason}`})`);
   });
 }
 

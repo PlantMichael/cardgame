@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
-  buildCandidate, ExportError, loadReleaseInput, setLatest, writeRelease,
+  buildCandidate, loadReleaseInput, writeCatalog,
 } from '../src/export.mjs';
 import {
   CREATURE, DRAFT, releaseInput, tempDir, writeInput, writeSource,
@@ -92,37 +92,25 @@ test('same inputs produce identical bytes; re-export is a no-op', () => {
   const second = buildCandidate(s.source, loadReleaseInput(s.inputFile));
   assert.equal(first.cards, second.cards);
   assert.equal(first.keywords, second.keywords);
-  assert.equal(writeRelease(s.out, first).status, 'created');
+  assert.equal(writeCatalog(s.out, first).status, 'written');
   const before = snapshot(s.out);
-  assert.equal(writeRelease(s.out, second).status, 'unchanged');
+  assert.equal(writeCatalog(s.out, second).status, 'unchanged');
   assert.deepEqual(snapshot(s.out), before);
+  assert.deepEqual(Object.keys(before).sort(), [path.join('data', 'cards.json'), path.join('data', 'keywords.json')]);
 });
 
-test('a published version is write-once; a new version keeps the old one', () => {
+test('nothing is versioned: no version fields, and a changed export replaces the files', () => {
   const s = setup();
-  writeRelease(s.out, buildCandidate(s.source, loadReleaseInput(s.inputFile)));
-  const beforeV1 = snapshot(path.join(s.out, 'data', 'v1', 'releases', '1.0.0'));
-
-  // Same label, changed content: refused, nothing changes.
+  writeCatalog(s.out, buildCandidate(s.source, loadReleaseInput(s.inputFile)));
+  const cards = JSON.parse(readFileSync(path.join(s.out, 'data', 'cards.json'), 'utf8'));
+  const keywords = JSON.parse(readFileSync(path.join(s.out, 'data', 'keywords.json'), 'utf8'));
+  for (const file of [cards, keywords]) {
+    for (const k of ['schemaVersion', 'catalogVersion', 'gameVersion']) assert.ok(!(k in file), k);
+  }
   writeSource(s.source, { green: [{ ...CREATURE, health: 99 }, JSON.parse(readFileSync(path.join(s.source, 'cards', 'green.json'), 'utf8'))[1]] });
-  const all = snapshot(s.out);
-  assert.throws(() => writeRelease(s.out, buildCandidate(s.source, loadReleaseInput(s.inputFile))), /immutable/);
-  assert.deepEqual(snapshot(s.out), all);
-
-  // New label: emitted next to the old one, latest moves, old is byte-identical.
-  writeInput(s.inputFile, releaseInput({ catalogVersion: '1.1.0' }));
-  writeRelease(s.out, buildCandidate(s.source, loadReleaseInput(s.inputFile)));
-  assert.deepEqual(snapshot(path.join(s.out, 'data', 'v1', 'releases', '1.0.0')), beforeV1);
-  const latest = JSON.parse(readFileSync(path.join(s.out, 'data', 'v1', 'latest.json'), 'utf8'));
-  assert.equal(latest.catalogVersion, '1.1.0');
-  assert.equal(latest.cardsUrl, '/data/v1/releases/1.1.0/cards.json');
-
-  // Rollback repoints latest without rewriting either release.
-  const releasesBefore = snapshot(path.join(s.out, 'data', 'v1', 'releases'));
-  setLatest(s.out, '1.0.0');
-  assert.equal(JSON.parse(readFileSync(path.join(s.out, 'data', 'v1', 'latest.json'), 'utf8')).catalogVersion, '1.0.0');
-  assert.deepEqual(snapshot(path.join(s.out, 'data', 'v1', 'releases')), releasesBefore);
-  assert.throws(() => setLatest(s.out, '9.9.9'), /does not exist/);
+  assert.equal(writeCatalog(s.out, buildCandidate(s.source, loadReleaseInput(s.inputFile))).status, 'written');
+  const after = JSON.parse(readFileSync(path.join(s.out, 'data', 'cards.json'), 'utf8')).cards.find((c) => c.id === 'f_001');
+  assert.equal(after.health, 99);
 });
 
 test('release selection: unselected drafts stay out; nothing is auto-published', () => {
@@ -159,24 +147,12 @@ failureCase('unknown id in the release input', (s) => {
 }, /unknown card id nope/);
 
 failureCase('dangling transformation reference is not repaired', (s) => {
-  writeInput(s.inputFile, releaseInput({ catalogVersion: '2.0.0', cards: [{ id: 'f_001', collectible: true }] }));
+  writeInput(s.inputFile, releaseInput({ cards: [{ id: 'f_001', collectible: true }] }));
 }, /f_001 references f_001t/);
 
 failureCase('invalid required field names the card', (s) => {
   writeSource(s.source, { green: [{ ...CREATURE, rarity: 'MYTHIC' }, JSON.parse('{"id":"f_001t","card_name":"x","cost":1,"color":"GREEN","card_type":"CREATURE","rarity":"COMMON","description":"","attack":1,"health":1}')] });
-  writeInput(s.inputFile, releaseInput({ catalogVersion: '2.0.0' }));
 }, /card f_001: invalid or missing "rarity"/);
-
-failureCase('unsafe version label', (s) => {
-  writeInput(s.inputFile, releaseInput({ catalogVersion: '../escape' }));
-}, /not a safe label/);
-
-test('a safe-label check blocks path escapes from every entry point', () => {
-  const s = setup();
-  for (const bad of ['..', '../x', 'a/b', 'a\\b', '', '.hidden', 'x'.repeat(65)]) {
-    assert.throws(() => setLatest(s.out, bad), ExportError, `label ${JSON.stringify(bad)}`);
-  }
-});
 
 test('exporting never edits the source tree', () => {
   const s = setup();

@@ -32,7 +32,7 @@ COPY data ./data
 COPY assets ./assets
 COPY scenes ./scenes
 COPY server ./server
-COPY catalog/public/data/v1 ./catalog/public/data/v1
+COPY catalog/public/data ./catalog/public/data
 
 # Import once at build time so resource references resolve headlessly.
 RUN ${GODOT_BIN} --headless --path /app --import || true
