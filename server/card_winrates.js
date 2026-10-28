@@ -26,11 +26,11 @@ function publishedCards(root) {
   if (typeof latest.catalogVersion !== 'string' || release.catalogVersion !== latest.catalogVersion || !Array.isArray(release.cards)) throw new Error('invalid catalog');
   const ids = release.cards.filter(c => c.collectible === true && c.isToken === false).map(c => c.id);
   if (!ids.length || ids.some(id => typeof id !== 'string') || new Set(ids).size !== ids.length) throw new Error('invalid catalog');
-  return { catalogVersion: latest.catalogVersion, ids };
+  return { ids };
 }
 
 async function aggregate(pool, root, now) {
-  const { catalogVersion, ids } = publishedCards(root);
+  const { ids } = publishedCards(root);
   const { rows: availability } = await pool.query("SELECT to_regclass('ranked_matches') IS NOT NULL AS available");
   const pvp = availability[0].available ? `UNION ALL
     SELECT s.match_id, s.player_id, 'player' AS side, s.won,
@@ -56,7 +56,7 @@ async function aggregate(pool, root, now) {
   ) SELECT card_id, COUNT(*) AS matches, COUNT(*) FILTER (WHERE won) AS wins
     FROM inclusions GROUP BY card_id`, availability[0].available ? [ids, [...SETTLING_REASONS]] : [ids]);
   const counts = new Map(rows.map(r => [r.card_id, r]));
-  return { schemaVersion: 1, catalogVersion, generatedAt: new Date(now()).toISOString(), methodology: METHODOLOGY,
+  return { generatedAt: new Date(now()).toISOString(), methodology: METHODOLOGY,
     cards: ids.map(id => {
       const matches = Number(counts.get(id)?.matches ?? 0);
       const wins = Number(counts.get(id)?.wins ?? 0);

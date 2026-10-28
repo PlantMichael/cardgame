@@ -22,8 +22,6 @@ Fetch `/data/v1/stats/card-winrates.json` and join `cards[].id` to the printed c
 
 ```json
 {
-  "schemaVersion": 1,
-  "catalogVersion": "0.1.0",
   "generatedAt": "2026-10-27T16:00:00.000Z",
   "methodology": {
     "metric": "starting_deck_inclusion",
@@ -49,7 +47,7 @@ This is preliminary testing data. The owner explicitly selected the one-game min
 
 The relay caches successful aggregates for 60 seconds and shares concurrent refreshes. `generatedAt` is snapshot time, not a match timestamp. Responses use `Cache-Control: no-cache`; failures are generic JSON **503**, `no-store`, never zero-filled or stale success. GET/HEAD/OPTIONS and anonymous CORS are supported. Printed card files and `/healthz` remain available during stats failures. The proposed immutable `/stats/latest.json` releases remain unimplemented; this endpoint does not supply drawn/played rates, tiers, caps or deck archetypes.
 
-Deploy both services from the same catalog release. For the two-seat update, deploy **catalog first, then relay**: the updated catalog requires upstream `methodology.aiSeats: "both"` and returns generic 503 while the relay still uses the old human-only methodology, rather than relabeling incompatible counts. The relay image includes `catalog/public/data/v1/`; it reads the committed publication allowlist and uses its existing database pool. No new database tables or variables are required. The catalog defaults to `https://cardgame-relay-production.up.railway.app`; optionally set **`CARD_WINRATES_ORIGIN`** on the catalog to an HTTP(S) origin for staging/local testing (no path, query, userinfo or fragment). The fetch has a 5-second timeout, 1 MiB response limit, refuses redirects, and validates/projects counts. A mismatched catalog version returns 503 until both deployments agree. No Godot browser export is needed for this API-only change.
+Deploy both services from the same catalog release. For the two-seat update, deploy **catalog first, then relay**: the updated catalog requires upstream `methodology.aiSeats: "both"` and returns generic 503 while the relay still uses the old human-only methodology, rather than relabeling incompatible counts. The relay image includes `catalog/public/data/v1/`; it reads the committed publication allowlist and uses its existing database pool. No new database tables or variables are required. The catalog defaults to `https://cardgame-relay-production.up.railway.app`; optionally set **`CARD_WINRATES_ORIGIN`** on the catalog to an HTTP(S) origin for staging/local testing (no path, query, userinfo or fragment). The fetch has a 5-second timeout, 1 MiB response limit, refuses redirects, and validates/projects counts. The stats response carries no version fields. No Godot browser export is needed for this API-only change.
 
 After deployment, fetch the new route, complete a ranked game using a client with AI-summary recording, then fetch again after 60 seconds and check the affected card counts. Local aggregate verification: from `server`, run `node --test test/card_winrates.test.js test/ranked_ai_record.test.js` with a disposable `DATABASE_URL`; from `catalog`, run `node --test 'test/*.test.mjs'` without `DATABASE_URL`.
 

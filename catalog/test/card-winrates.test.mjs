@@ -22,7 +22,7 @@ test('catalog projects only published counts and isolates bounded upstream failu
     cards.push({ id: 'gen_str_005', matches: 1, wins: 1, losses: 0 });
     if (mode === 'malformed') cards[0].wins = 2;
     if (mode === 'incomplete') cards.pop(), cards.pop();
-    res.end(JSON.stringify({ schemaVersion: 1, catalogVersion: latest.catalogVersion,
+    res.end(JSON.stringify({
       generatedAt: new Date().toISOString(), cards, player_deck: ['private'],
       methodology: { secret: true, ...(mode === 'missingSeats' ? {} : { aiSeats: mode === 'oldSeats' ? 'human_only' : 'both' }) } }));
   });
@@ -41,6 +41,7 @@ test('catalog projects only published counts and isolates bounded upstream failu
   assert.equal(data.cards.length, published.length);
   assert.equal(data.cards[0].winRate, 1, 'rate is recomputed from validated counts');
   assert.equal(data.methodology.aiSeats, 'both');
+  assert.ok(!('schemaVersion' in data) && !('catalogVersion' in data), 'stats carry no version fields');
   for (const privateField of ['player_id', 'player_deck', 'gen_str_005', 'secret']) assert.ok(!text.includes(privateField));
   for (mode of ['status', 'redirect', 'large', 'malformed', 'incomplete', 'timeout', 'oldSeats', 'missingSeats']) {
     const response = await fetch(origin + STATS_PATH);

@@ -24,7 +24,7 @@ export async function cardWinrates(root, resolvePublicFile, { statsOrigin = DEFA
     chunks.push(chunk);
   }
   const data = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-  if (data.schemaVersion !== 1 || data.catalogVersion !== latest.catalogVersion || data.methodology?.aiSeats !== 'both' ||
+  if (data.methodology?.aiSeats !== 'both' ||
       typeof data.generatedAt !== 'string' || !Number.isFinite(Date.parse(data.generatedAt)) ||
       !Array.isArray(data.cards) || data.cards.length > 10000) throw new Error('invalid aggregate');
   const counts = new Map();
@@ -34,7 +34,7 @@ export async function cardWinrates(root, resolvePublicFile, { statsOrigin = DEFA
         row.matches < 0 || row.wins < 0 || row.losses < 0 || row.wins + row.losses !== row.matches) throw new Error('invalid counts');
     counts.set(row.id, row);
   }
-  return { schemaVersion: 1, catalogVersion: latest.catalogVersion, generatedAt: data.generatedAt,
+  return { generatedAt: data.generatedAt,
     methodology: { metric: 'starting_deck_inclusion', modes: ['ranked_ai', 'authoritative_pvp'],
       aiSeats: 'both', copies: 'once_per_player_game', rulesVersions: 'combined',
       minSample: 1, preliminary: true,
