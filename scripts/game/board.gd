@@ -762,8 +762,9 @@ func _input(event: InputEvent) -> void:
 		if event.pressed:
 			if _card_animation_playing or _modal_open or not _slam_animating_zones.is_empty():
 				return
-			# Check hand cards first
-			for wrapper in player_hand_zone.get_children():
+			# Check hand cards first - not while a prompt is open, or a card
+			# gets picked up mid-prompt and can never be legally dropped.
+			for wrapper in ([] if _has_pending_target_prompt() else player_hand_zone.get_children()):
 				if wrapper.get_child_count() == 0:
 					continue
 				var card = wrapper.get_child(0)
@@ -879,8 +880,10 @@ func _input(event: InputEvent) -> void:
 				_on_enemy_hero_clicked()
 				return
 
-			# Clicked empty space — deselect
-			_clear_selections()
+			# Clicked empty space — deselect (but never while a prompt is open:
+			# that would hide its Decline button and strand the match).
+			if not _has_pending_target_prompt():
+				_clear_selections()
 
 		else:
 			_highlight_board_zone(false)
@@ -1587,7 +1590,9 @@ func _refresh_hand() -> void:
 			card.is_in_hand = true
 			card.dropped.connect(_on_card_dropped)
 			card.drag_started.connect(_on_card_drag_started)
-			wrapper.button_down.connect(card.start_drag)
+			wrapper.button_down.connect(func():
+				if not _has_pending_target_prompt():
+					card.start_drag())
 			newly_drawn.append(card)
 		player_hand_zone.move_child(wrapper, i)
 		card.setup(card_data)
@@ -2233,6 +2238,8 @@ func _on_end_turn_pressed() -> void:
 	_drop_stale_choice_mode()
 	if _has_pending_target_prompt():
 		log_action("Resolve the pending choice before ending your turn.")
+		if _choice_mode and not decline_button.visible:
+			show_decline_button()
 		return
 	# Actions still available (yellow button) needs a confirming second
 	# click - see _end_turn_armed - rather than ending the turn on this one.
@@ -2261,7 +2268,10 @@ func _clear_selections() -> void:
 	_highlight_hero(opponent_hero, false)
 	_highlight_mech_targets(false)
 	_piloting_minion = null
-	hide_decline_button()
+	# Prompts this function does not itself end keep their Decline button;
+	# hiding it left the prompt open with no way to answer it.
+	if not (_choice_mode or _null_mode or _buff_friendly_mode or _on_play_pilot_mode or _challenge_mode):
+		hide_decline_button()
 	if _pilot_mode:
 		_pilot_mode = false
 	if _yeti_select_mode:
