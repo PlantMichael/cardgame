@@ -2,6 +2,8 @@
 
 ## What's Working
 
+- Teal card names and rules text use dark inset backplates; teal descriptions use the built-in readable body font while other factions retain Orbitron. The panels follow creature/stratagem description bounds and reset when a card instance changes faction.
+
 - Menu connection waits cancel on success, timeout, or screen exit; auth loading/result and currency callbacks stop with their controls. This fixes a reproduced eight-second timeout calling freed UI after successful connection. The exact hosted Firefox cache-related freeze still requires confirmation after publishing the new Web export.
 
 - Public starting-deck card win-rate API at `/data/stats/card-winrates.json`: counts both human and AI opponent decks in recorded ranked AI games, plus authoritative PvP; includes custom decks and historical saved summaries, with one-game samples and a 60-second relay cache. Two-seat methodology requires deploying catalog first, then relay; hosted operation remains an operator check. Read-only Railway query: `server/tools/card-winrates.sql`. See `catalog/README.md` for limits and contract.
