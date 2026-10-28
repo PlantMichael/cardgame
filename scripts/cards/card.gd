@@ -4,8 +4,6 @@ extends Area2D
 @onready var card_visual: Panel = $CardVisual
 @onready var name_label: Label = $NameLabel
 @onready var description_label: RichTextLabel = $DescriptionLabel
-@onready var name_backdrop: ColorRect = $NameBackdrop
-@onready var description_backdrop: ColorRect = $DescriptionBackdrop
 @onready var attack_label: Label = $AttackLabel
 @onready var health_label: Label = $HealthLabel
 @onready var art_texture: TextureRect = $ArtTexture
@@ -629,16 +627,6 @@ func _apply_color_theme(color: CardData.CardColor) -> void:
 	card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0, 0, 0, 0), border, 2))
 	var frames: Dictionary = STRATAGEM_FRAMES if is_stratagem() else CARD_FRAMES
 	background.texture = frames.get(color, frames[CardData.CardColor.GENERIC])
-	# Bright teal texture washes out thin lettering, especially on small cards.
-	var is_teal := color == CardData.CardColor.TEAL
-	name_backdrop.visible = is_teal
-	description_backdrop.visible = is_teal
-	description_backdrop.position = _description_box.position
-	description_backdrop.size = _description_box.size
-	if is_teal:
-		description_label.add_theme_font_override("normal_font", ThemeDB.fallback_font)
-	else:
-		description_label.add_theme_font_override("normal_font", CARD_FONT)
 
 func is_stratagem() -> bool:
 	return data != null and data.card_type == CardData.CardType.STRATAGEM

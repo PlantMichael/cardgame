@@ -27,24 +27,6 @@ mouse_filter = 2
 expand_mode = 1
 stretch_mode = 6
 
-[node name="NameBackdrop" type="ColorRect" parent="."]
-visible = false
-offset_left = 52.0
-offset_top = 6.0
-offset_right = 188.0
-offset_bottom = 25.0
-mouse_filter = 2
-color = Color(0.015, 0.06, 0.075, 0.96)
-
-[node name="DescriptionBackdrop" type="ColorRect" parent="."]
-visible = false
-offset_left = 36.0
-offset_top = 191.0
-offset_right = 184.0
-offset_bottom = 251.0
-mouse_filter = 2
-color = Color(0.015, 0.06, 0.075, 0.96)
-
 [node name="NameLabel" type="Label" parent="."]
 offset_left = 52.0
 offset_top = 6.0
