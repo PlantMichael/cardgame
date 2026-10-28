@@ -1048,12 +1048,9 @@ func _hide_card_preview() -> void:
 	_keyword_show_pending = false
 	_keyword_current_card = null
 	_clear_keyword_blocks()
-	_hide_scheduled = true
-	await get_tree().create_timer(0.08).timeout
-	if _hide_scheduled:
-		preview_card.modulate = Color(1, 1, 1, 0)
-		preview_card.visible = false
-		_hide_scheduled = false
+	preview_card.modulate = Color(1, 1, 1, 0)
+	preview_card.visible = false
+	_hide_scheduled = false
 
 ## Shared setup for every full-screen modal overlay (graveyard viewer,
 ## rummage/transform picker) - besides the common CanvasLayer(10) plumbing,
