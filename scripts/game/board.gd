@@ -131,6 +131,12 @@ var _hide_scheduled: bool = false
 ## the screen.
 var _modal_open: bool = false
 var _hover_card: Card = null
+## Bumped on every hover change so a delayed show for a card the mouse has
+## already left (or left and re-entered) can tell it is stale.
+var _hover_serial: int = 0
+var _preview_tween: Tween = null
+var _preview_base_pos: Vector2 = Vector2.INF
+var _lifted_hand_card: Card = null
 const HOVER_PREVIEW_DELAY_SEC := 0.25
 var _challenge_mode: bool = false
 var _challenging_minion: Minion = null
@@ -937,16 +943,19 @@ func _update_target_cursor(hovered_card: Card) -> void:
 func _update_hover(mouse_pos: Vector2) -> void:
 	if _modal_open:
 		_hover_card = null
+		_lift_hand_card(null)
 		_hide_card_preview()
 		return
 
 	if _dragging_card:
 		_hover_card = null
+		_lift_hand_card(null)
 		_hide_card_preview()
 		return
 
 	if center_bar.get_global_rect().has_point(mouse_pos):
 		_hover_card = null
+		_lift_hand_card(null)
 		_hide_card_preview()
 		return
 
@@ -984,12 +993,17 @@ func _update_hover(mouse_pos: Vector2) -> void:
 		return # still hovering the same card (or the same empty space) — don't restart the timer
 
 	_hover_card = found_card
+	_hover_serial += 1
+	var serial := _hover_serial
+	_lift_hand_card(found_card if found_in_hand else null)
 	if found_card == null:
 		_hide_card_preview()
 		return
 
-	if found_in_hand:
-		_show_card_preview(found_data, found_minion, found_rect)
+	# Hand cards show at once; moving straight from one card to another also
+	# swaps at once - only a fresh hover on the board waits out the delay.
+	if found_in_hand or preview_card.visible:
+		_show_card_preview(found_data, found_minion, found_rect, found_in_hand)
 		return
 
 	# Field cards: only show the preview if this same card is still hovered after
@@ -1000,7 +1014,7 @@ func _update_hover(mouse_pos: Vector2) -> void:
 	# invoking this callable with a freed capture crashes the web export outright
 	# rather than just erroring like a native/debug run would.
 	get_tree().create_timer(HOVER_PREVIEW_DELAY_SEC).timeout.connect(func():
-		if is_instance_valid(found_card) and is_instance_valid(found_minion) and _hover_card == found_card:
+		if serial == _hover_serial and is_instance_valid(found_card) and is_instance_valid(found_minion) and _hover_card == found_card:
 			_show_card_preview(found_data, found_minion, found_rect)
 	)
 
@@ -1021,7 +1035,7 @@ const _PREVIEW_PAD := 14.0
 ## crop the bottom of the canvas, and a card cut off there is unreadable.
 const _PREVIEW_BOTTOM_MARGIN := 80.0
 
-func _show_card_preview(data: CardData, minion: Minion = null, source_rect: Rect2 = Rect2()) -> void:
+func _show_card_preview(data: CardData, minion: Minion = null, source_rect: Rect2 = Rect2(), from_hand: bool = false) -> void:
 	_hide_scheduled = false
 	if data != _keyword_current_card:
 		_keyword_show_pending = false
@@ -1035,16 +1049,66 @@ func _show_card_preview(data: CardData, minion: Minion = null, source_rect: Rect
 		preview_card.setup(data)
 	if source_rect.size != Vector2.ZERO:
 		var vp: Vector2 = get_viewport_rect().size
-		var px: float = source_rect.position.x + source_rect.size.x + _PREVIEW_PAD
-		if px + _PREVIEW_W > vp.x:
-			px = source_rect.position.x - _PREVIEW_W - _PREVIEW_PAD
-		var py: float = source_rect.get_center().y - _PREVIEW_H * 0.5
-		py = clamp(py, 0.0, vp.y - _PREVIEW_H - _PREVIEW_BOTTOM_MARGIN)
+		var px: float
+		var py: float
+		if from_hand:
+			# Rises out of the hand: centred over the card, bottom edge just
+			# above it, instead of off to one side.
+			px = clampf(source_rect.get_center().x - _PREVIEW_W * 0.5, _PREVIEW_PAD, vp.x - _PREVIEW_W - _PREVIEW_PAD)
+			py = clampf(source_rect.position.y - _PREVIEW_H + HAND_PREVIEW_OVERLAP, 0.0, vp.y - _PREVIEW_H - _PREVIEW_BOTTOM_MARGIN)
+		else:
+			px = source_rect.position.x + source_rect.size.x + _PREVIEW_PAD
+			if px + _PREVIEW_W > vp.x:
+				px = source_rect.position.x - _PREVIEW_W - _PREVIEW_PAD
+			py = source_rect.get_center().y - _PREVIEW_H * 0.5
+			py = clampf(py, 0.0, vp.y - _PREVIEW_H - _PREVIEW_BOTTOM_MARGIN)
 		card_preview_zone.global_position = Vector2(px, py)
+	if not preview_card.visible or preview_card.modulate.a < 0.99:
+		_fade_in_preview()
+
+const HAND_PREVIEW_OVERLAP := 70.0
+const PREVIEW_FADE_SEC := 0.09
+const PREVIEW_SLIDE_PX := 10.0
+const HAND_LIFT_PX := 26.0
+const HAND_LIFT_SEC := 0.1
+
+## Quick fade-and-rise so the preview eases in instead of popping.
+func _fade_in_preview() -> void:
+	if _preview_base_pos == Vector2.INF:
+		_preview_base_pos = preview_card.position
+	if _preview_tween != null and _preview_tween.is_valid():
+		_preview_tween.kill()
 	preview_card.visible = true
-	preview_card.modulate = Color(1, 1, 1, 1)
+	preview_card.modulate = Color(1, 1, 1, 0)
+	preview_card.position = _preview_base_pos + Vector2(0, PREVIEW_SLIDE_PX)
+	_preview_tween = create_tween().set_parallel(true)
+	_preview_tween.tween_property(preview_card, "modulate:a", 1.0, PREVIEW_FADE_SEC)
+	_preview_tween.tween_property(preview_card, "position", _preview_base_pos, PREVIEW_FADE_SEC).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+## Raises the hovered hand card a little (and drops the previous one).
+func _lift_hand_card(card: Card) -> void:
+	if card == _lifted_hand_card:
+		return
+	if is_instance_valid(_lifted_hand_card):
+		_tween_hand_card_y(_lifted_hand_card, 0.0)
+	_lifted_hand_card = card
+	if is_instance_valid(card):
+		_tween_hand_card_y(card, -HAND_LIFT_PX)
+
+func _tween_hand_card_y(card: Card, y: float) -> void:
+	if card.has_meta(&"_lift_tween"):
+		var prev: Tween = card.get_meta(&"_lift_tween")
+		if is_instance_valid(prev):
+			prev.kill()
+	var t := create_tween()
+	card.set_meta(&"_lift_tween", t)
+	t.tween_property(card, "position:y", y, HAND_LIFT_SEC).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 func _hide_card_preview() -> void:
+	if _preview_tween != null and _preview_tween.is_valid():
+		_preview_tween.kill()
+	if _preview_base_pos != Vector2.INF:
+		preview_card.position = _preview_base_pos
 	_keyword_show_pending = false
 	_keyword_current_card = null
 	_clear_keyword_blocks()
@@ -1144,7 +1208,7 @@ func _load_keywords() -> void:
 func _schedule_keyword_blocks(data: CardData) -> void:
 	_keyword_pending_data = data
 	_keyword_show_pending = true
-	await get_tree().create_timer(0.3).timeout
+	await get_tree().create_timer(0.1).timeout
 	if not _keyword_show_pending:
 		return
 	_keyword_show_pending = false
@@ -1264,6 +1328,12 @@ func _highlight_hero(hero: Panel, value: bool) -> void:
 
 func _on_card_drag_started(card: Card) -> void:
 	_dragging_card = true
+	_lift_hand_card(null)
+	if card.has_meta(&"_lift_tween"):
+		var lt: Tween = card.get_meta(&"_lift_tween")
+		if is_instance_valid(lt):
+			lt.kill()
+	card.position.y = 0.0
 	_hide_card_preview()
 	_stop_mana_flash()
 	var available = game_state.player.max_mana - game_state.player.current_mana
