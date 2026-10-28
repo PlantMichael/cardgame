@@ -264,10 +264,13 @@ func _host_drive_choices() -> void:
 func _host_announce_pending_draws() -> void:
 	if game_state.pending_drawn_cards.is_empty() and game_state.pending_fatigue_damage.is_empty():
 		return
-	for card_data in game_state.pending_drawn_cards:
+	# Take the batch and empty the queue before awaiting: a second caller
+	# arriving mid-animation would otherwise replay the same draws.
+	var drawn: Array[CardData] = game_state.pending_drawn_cards.duplicate()
+	game_state.pending_drawn_cards.clear()
+	for card_data in drawn:
 		board.log_action("Drew %s" % card_data.card_name)
 		await board.animate_draw()
-	game_state.pending_drawn_cards.clear()
 	for player_id in game_state.pending_fatigue_damage:
 		var p := game_state._get_player_by_id(player_id)
 		var whose := "You" if player_id == HOST_ID else "Opponent"
@@ -624,10 +627,13 @@ func _guest_respond_to_prompt(prompt: Dictionary) -> void:
 func _guest_announce_pending_draws() -> void:
 	if game_state.pending_drawn_cards.is_empty() and game_state.pending_fatigue_damage.is_empty():
 		return
-	for card_data in game_state.pending_drawn_cards:
+	# Take the batch and empty the queue before awaiting: a second caller
+	# arriving mid-animation would otherwise replay the same draws.
+	var drawn: Array[CardData] = game_state.pending_drawn_cards.duplicate()
+	game_state.pending_drawn_cards.clear()
+	for card_data in drawn:
 		board.log_action("Drew %s" % card_data.card_name)
 		await board.animate_draw()
-	game_state.pending_drawn_cards.clear()
 	for player_id in game_state.pending_fatigue_damage:
 		var p := game_state._get_player_by_id(player_id)
 		var whose := "You" if player_id == GUEST_ID else "Opponent"

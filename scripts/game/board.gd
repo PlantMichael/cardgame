@@ -61,7 +61,9 @@ const _BOARD_WRAPPER_SIZE := Card.PIXELS_BOARD + Vector2(4, 4)
 
 const CURSOR_DEFAULT = preload("res://assets/01.png")
 const CURSOR_TARGET = preload("res://assets/15.png")
+var _cursor_target_friendly: Texture2D = null
 var _using_target_cursor: bool = false
+var _using_friendly_cursor: bool = false
 
 var game_state: GameState
 var selected_attacker: Card = null
@@ -129,7 +131,7 @@ var _hide_scheduled: bool = false
 ## the screen.
 var _modal_open: bool = false
 var _hover_card: Card = null
-const HOVER_PREVIEW_DELAY_SEC := 0.4
+const HOVER_PREVIEW_DELAY_SEC := 0.25
 var _challenge_mode: bool = false
 var _challenging_minion: Minion = null
 var _on_play_damage_mode: bool = false
@@ -459,14 +461,14 @@ func _end_null_mode(target: Minion) -> void:
 ## Highlights exactly the minions the rules core listed as legal for the open
 ## choice, on either board. `option_ids` comes straight from
 ## GameState.pending_choice["options"].
-func start_choice_targeting(option_ids: Array, decline_text: String = "Skip") -> void:
+func start_choice_targeting(option_ids: Array, decline_text: String = "Skip", friendly_choice: bool = false) -> void:
 	_choice_mode = true
 	_choice_option_ids = option_ids.duplicate()
 	for zone in [player_board_zone, opponent_board_zone]:
 		for wrapper in zone.get_children():
 			var card = _get_card_child(wrapper)
 			if card and card.minion and card.minion.instance_id in _choice_option_ids:
-				card.set_targeted(true)
+				card.set_targeted(true, friendly_choice and card.minion.owner_id == game_state.player.player_id)
 	if GameState.hero_option(player_hero.player_id) in _choice_option_ids:
 		_highlight_hero(player_hero, true)
 	if GameState.hero_option(opponent_hero.player_id) in _choice_option_ids:
@@ -490,6 +492,13 @@ const CHOICE_DECLINE_TEXT := {
 	"rummage": "Skip", "null_target": "Cancel", "buff_health_target": "Skip",
 	"tank_buff_target": "Skip", "heal_buff_target": "Skip",
 }
+
+## Choices that help the creature picked, so friendly options show the green
+## target outline instead of the red hostile one.
+const CHOICE_HELPFUL_EFFECTS := [
+	"restore_health", "buff_other_friendly", "pilot_target", "swap_health",
+	"buff_health_target", "tank_buff_target", "heal_buff_target", "pick_challenger",
+]
 
 ## One line telling the player what they are being asked, shown in the log.
 const CHOICE_PROMPT_TEXT := {
@@ -531,7 +540,9 @@ func prompt_choice(choice: Dictionary) -> String:
 		prompt = "Choose the first creature to swap health" if int(choice["step"]) <= 1 else "Choose the second creature to swap health"
 	if not prompt.is_empty():
 		log_action(prompt)
-	start_choice_targeting(options, str(CHOICE_DECLINE_TEXT.get(effect, "Skip")))
+	if _choice_mode:
+		_end_choice_mode("")
+	start_choice_targeting(options, str(CHOICE_DECLINE_TEXT.get(effect, "Skip")), effect in CHOICE_HELPFUL_EFFECTS)
 	var selection: String = await choice_selected
 	return selection
 
@@ -544,7 +555,7 @@ func start_buff_friendly_targeting(exclude: Minion = null, tribe_filter: String 
 		if card and card.minion != exclude:
 			var tribe_ok: bool = tribe_filter.is_empty() or card.minion.data.tribe == tribe_filter
 			if tribe_ok:
-				card.set_targeted(true)
+				card.set_targeted(true, true)
 	show_decline_button("Skip")
 
 func _end_buff_friendly_mode(target: Minion) -> void:
@@ -572,7 +583,7 @@ func _highlight_yeti_targets(value: bool) -> void:
 			continue
 		var card = wrapper.get_child(0)
 		if card is Card and card.minion.has_ability(Abilities.YETI):
-			card.set_targeted(value)
+			card.set_targeted(value, true)
 
 func _has_pilot_ability(minion: Minion) -> bool:
 	for ability in minion.abilities:
@@ -595,7 +606,7 @@ func _highlight_mech_targets(value: bool) -> void:
 			continue
 		var card = wrapper.get_child(0)
 		if card is Card and card.minion != _piloting_minion and card.minion.has_ability(Abilities.MECH) and not card.minion.is_piloted:
-			card.set_targeted(value)
+			card.set_targeted(value, true)
 
 func _on_decline_pressed() -> void:
 	decline_pressed.emit()
@@ -772,7 +783,7 @@ func _input(event: InputEvent) -> void:
 									elif _stratagem_needs_friendly_mech(card.data):
 										_highlight_friendly_mech_targets(true)
 									elif _stratagem_needs_friendly_creature_only(card.data):
-										_highlight_stratagem_minions(player_board_zone, true)
+										_highlight_stratagem_minions(player_board_zone, true, card.data.effect in ["sanguine", "heal", "give_ability", "return_friendly_to_hand"])
 									else:
 										_highlight_stratagem_minions(player_board_zone, true)
 										_highlight_stratagem_minions(opponent_board_zone, true)
@@ -894,15 +905,29 @@ func _highlight_board_zone(value: bool) -> void:
 ## marked as a valid target (attack, challenge, stratagem, or any other
 ## on-play targeting mode - they all flow through Card.set_targeted()),
 ## and back to the default cursor (01.png) otherwise.
+## The red reticle with red and green swapped, built once on first use.
+func _get_friendly_cursor() -> Texture2D:
+	if _cursor_target_friendly == null:
+		var img := CURSOR_TARGET.get_image()
+		img.convert(Image.FORMAT_RGBA8)
+		for y in img.get_height():
+			for x in img.get_width():
+				var c := img.get_pixel(x, y)
+				img.set_pixel(x, y, Color(c.g, c.r, c.b, c.a))
+		_cursor_target_friendly = ImageTexture.create_from_image(img)
+	return _cursor_target_friendly
+
 func _update_target_cursor(hovered_card: Card) -> void:
 	var should_target := hovered_card != null and is_instance_valid(hovered_card) and hovered_card.is_target_highlighted()
-	if should_target == _using_target_cursor:
+	var friendly := should_target and hovered_card.is_target_friendly()
+	if should_target == _using_target_cursor and friendly == _using_friendly_cursor:
 		return
 	_using_target_cursor = should_target
+	_using_friendly_cursor = friendly
 	if should_target:
 		# 15.png is a symmetric reticle - center its hotspot so it aims from
 		# its middle instead of its top-left corner.
-		Input.set_custom_mouse_cursor(CURSOR_TARGET, Input.CURSOR_ARROW, Vector2(16, 16))
+		Input.set_custom_mouse_cursor(_get_friendly_cursor() if friendly else CURSOR_TARGET, Input.CURSOR_ARROW, Vector2(16, 16))
 	else:
 		Input.set_custom_mouse_cursor(CURSOR_DEFAULT, Input.CURSOR_ARROW, Vector2.ZERO)
 
@@ -1216,7 +1241,7 @@ func _highlight_board_minions(zone: HBoxContainer, value: bool) -> void:
 		if card is Card:
 			card.set_targeted(value)
 
-func _highlight_stratagem_minions(zone: HBoxContainer, value: bool) -> void:
+func _highlight_stratagem_minions(zone: HBoxContainer, value: bool, friendly: bool = false) -> void:
 	for wrapper in zone.get_children():
 		if wrapper.get_child_count() == 0:
 			continue
@@ -1224,7 +1249,7 @@ func _highlight_stratagem_minions(zone: HBoxContainer, value: bool) -> void:
 		if card is Card:
 			if value and zone == opponent_board_zone and card.minion.has_ability(Abilities.CLOAKED):
 				continue
-			card.set_targeted(value)
+			card.set_targeted(value, friendly)
 
 func _highlight_hero(hero: Panel, value: bool) -> void:
 	if value:
@@ -1789,6 +1814,7 @@ func _refresh_boards() -> void:
 	_reconcile_board_zone(player_board_zone, game_state.player.board, _BOARD_WRAPPER_SIZE, Card.SCALE_BOARD,
 		func(card: Card, minion: Minion) -> void:
 			card.setup_as_minion(minion)
+			card.attack_outline_allowed = is_my_turn
 			card.set_can_attack(is_my_turn and minion.can_attack())
 			# Locations never attack, so the summoning-sick treatment would
 			# just read as a permanent malfunction on them.
@@ -1805,6 +1831,7 @@ func _refresh_boards() -> void:
 	_reconcile_board_zone(opponent_board_zone, game_state.opponent.board, _BOARD_WRAPPER_SIZE, Card.SCALE_BOARD,
 		func(card: Card, minion: Minion) -> void:
 			card.setup_as_minion(minion)
+			card.attack_outline_allowed = false
 			card.set_can_attack(false)
 			_note_minion_health(card, minion)
 			if minion.is_newly_reinforced:
@@ -2191,9 +2218,19 @@ func _has_pending_target_prompt() -> bool:
 		or _yeti_select_mode or _tank_shot_mode or _on_play_pilot_mode \
 		or _null_mode or _buff_friendly_mode or _choice_mode
 
+## The generic choice prompt outliving the choice it was opened for (answered
+## elsewhere, or withdrawn by the rules core) would leave every click and End
+## Turn refusing with "resolve the pending choice". If the core has nothing
+## pending the mode is just stale: tear it down and release anything awaiting it.
+func _drop_stale_choice_mode() -> void:
+	if not _choice_mode or game_state.has_pending_choice():
+		return
+	_end_choice_mode("")
+
 func _on_end_turn_pressed() -> void:
 	if end_turn_button.disabled:
 		return
+	_drop_stale_choice_mode()
 	if _has_pending_target_prompt():
 		log_action("Resolve the pending choice before ending your turn.")
 		return
@@ -3081,7 +3118,7 @@ func _highlight_friendly_mech_targets(value: bool) -> void:
 			continue
 		var card = wrapper.get_child(0)
 		if card is Card and card.minion.has_ability(Abilities.MECH):
-			card.set_targeted(value)
+			card.set_targeted(value, true)
 
 func _highlight_piloted_mech_targets(value: bool) -> void:
 	for wrapper in player_board_zone.get_children():
@@ -3089,7 +3126,7 @@ func _highlight_piloted_mech_targets(value: bool) -> void:
 			continue
 		var card = wrapper.get_child(0)
 		if card is Card and card.minion.is_piloted:
-			card.set_targeted(value)
+			card.set_targeted(value, true)
 
 func _ignore_control_input(node: Node) -> void:
 	if node is Control:

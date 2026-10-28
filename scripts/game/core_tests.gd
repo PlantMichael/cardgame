@@ -1664,6 +1664,39 @@ static func _test_family_challenge(filler: String) -> void:
 	var r8 := _answer(gs8, foe8.instance_id)
 	_check("and the overwatch challenge resolves", "challenge" in _event_types(r8) and gs8.pending_overwatch_challenges.is_empty())
 
+	# Overwatch on board + a challenge Yeti played against only an Ambush creature:
+	# nothing legal to challenge, so nothing may be left pending.
+	var gs9 := _arena(filler)
+	_put_on_board(gs9, gs9.player.player_id, "t_025").abilities.append(Abilities.ON_YETI_DEATH_CHALLENGE)
+	var hid9 := _put_on_board(gs9, gs9.opponent.player_id, filler)
+	hid9.abilities.append(Abilities.AMBUSH)
+	if ch_id != "":
+		_play(gs9, ch_id)
+		_check("ambush-only enemy leaves nothing pending", not gs9.has_pending_choice())
+
+	# The real Mokotai Overwatch: a friendly Yeti dies while the only enemy is Ambush.
+	var gs10 := _arena(filler)
+	_put_on_board(gs10, gs10.player.player_id, "t_015")
+	var ally10 := _put_on_board(gs10, gs10.player.player_id, "t_025")
+	var dying10 := _put_on_board(gs10, gs10.player.player_id, "t_025")
+	var hid10 := _put_on_board(gs10, gs10.opponent.player_id, filler)
+	hid10.abilities.append(Abilities.AMBUSH)
+	dying10.current_health = 0
+	gs10._remove_dead_minions()
+	gs10.resolve_to_quiescence()
+	_check("overwatch vs Ambush-only enemy leaves nothing pending", not gs10.has_pending_choice())
+
+	# Control: same setup with a normal enemy must open the overwatch pick.
+	var gs11 := _arena(filler)
+	_put_on_board(gs11, gs11.player.player_id, "t_015")
+	_put_on_board(gs11, gs11.player.player_id, "t_025")
+	var dying11 := _put_on_board(gs11, gs11.player.player_id, "t_025")
+	_put_on_board(gs11, gs11.opponent.player_id, filler)
+	dying11.current_health = 0
+	gs11._remove_dead_minions()
+	gs11.resolve_to_quiescence()
+	_check("control: with a normal enemy the overwatch pick opens", gs11.has_pending_choice() and gs11.pending_choice["effect"] == GameState.CHOICE_PICK_CHALLENGER)
+
 static func _test_family_pilot_swap_devour_transform(filler: String) -> void:
 	print("[family: pilot, swap health, devour, transform]")
 	var pilot_id := _card_with(func(d): return d.card_type == CardData.CardType.CREATURE and _has_ab(d, Abilities.ON_PLAY_PILOT_MECH))

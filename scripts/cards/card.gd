@@ -203,9 +203,13 @@ func _apply_text_outlines() -> void:
 	for label in [name_label, description_label, attack_label, health_label, mana_label]:
 		label.add_theme_constant_override("outline_size", TEXT_OUTLINE_SIZE)
 		label.add_theme_color_override("font_outline_color", TEXT_OUTLINE_COLOR)
+	description_label.add_theme_constant_override("outline_size", DESCRIPTION_OUTLINE_SIZE)
 
 ## Wraps any keyword (Guardian, Rush, Rummage, ...) found in a card's
 ## description with the same color used for that keyword's ability badge.
+const KEYWORD_BRIGHTEN := 0.5
+const DESCRIPTION_OUTLINE_SIZE := 5
+
 func _highlight_keywords(description: String) -> String:
 	_ensure_keyword_data()
 	if _keyword_regex == null:
@@ -220,6 +224,9 @@ func _highlight_keywords(description: String) -> String:
 		var end: int = m.get_end()
 		var word: String = m.get_string()
 		var color: Color = _keyword_colors.get(word.to_lower(), Color.WHITE)
+		# The badge colors are dark mid-tones; lifted toward white they stay
+		# recognisable but read clearly on the description panel.
+		color = color.lerp(Color.WHITE, KEYWORD_BRIGHTEN)
 		result += description.substr(last_end, start - last_end)
 		result += "[color=#%s]%s[/color]" % [color.to_html(false), word]
 		last_end = end
@@ -293,7 +300,7 @@ func _fit_description_to_height(plain_text: String, max_font: int) -> void:
 	var font := description_label.get_theme_font("normal_font")
 	var line_spacing := description_label.get_theme_constant("line_separation")
 	var text_height := _description_box.size.y
-	for size in range(max_font, 5, -1):
+	for size in range(max_font, 7, -1):
 		description_label.add_theme_font_size_override("normal_font_size", size)
 		var sz := font.get_multiline_string_size(plain_text, HORIZONTAL_ALIGNMENT_LEFT, _description_box.size.x, size)
 		var fh := font.get_height(size)
@@ -306,7 +313,7 @@ func _fit_description_to_height(plain_text: String, max_font: int) -> void:
 
 func _fit_text() -> void:
 	_fit_label_to_width(name_label, 14, 7)
-	_fit_description_to_height(_description_plain_text, 13)
+	_fit_description_to_height(_description_plain_text, 14)
 
 ## Solid black stand-in for art_texture on cards with no `art` set - without
 ## this, an empty TextureRect draws nothing and the frame's own art window
@@ -350,13 +357,26 @@ func setup(card_data: CardData) -> void:
 func is_target_highlighted() -> bool:
 	return _is_highlighted_as_target
 
-func set_targeted(value: bool) -> void:
+## Only a card on the local player's side of the board may show the gold
+## "can attack" outline; the board turns it off for opposing cards so that
+## clearing a target highlight never lights up enemy creatures.
+var attack_outline_allowed: bool = true
+var _target_is_friendly: bool = false
+
+func is_target_friendly() -> bool:
+	return _is_highlighted_as_target and _target_is_friendly
+
+## `friendly` picks the green "helpful target" outline (piloting a mech,
+## buffing or healing your own creature) over the red hostile one.
+func set_targeted(value: bool, friendly: bool = false) -> void:
 	_is_highlighted_as_target = value
+	_target_is_friendly = value and friendly
 	if value:
-		card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0, 0, 0, 0), Color(0.9, 0.15, 0.15, 1.0), 3))
+		var border := Color(0.2, 0.85, 0.3, 1.0) if friendly else Color(0.9, 0.15, 0.15, 1.0)
+		card_visual.add_theme_stylebox_override("panel", _make_stylebox(Color(0, 0, 0, 0), border, 3))
 	else:
 		# Restore appropriate state
-		if minion and minion.can_attack():
+		if attack_outline_allowed and minion and minion.can_attack():
 			set_can_attack(true)
 		else:
 			_apply_color_theme(data.color)
