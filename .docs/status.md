@@ -2,6 +2,8 @@
 
 ## What's Working
 
+- Green creature cards use the updated frame with dark name, description, and stat boxes; existing white base lettering and keyword highlights are preserved.
+
 - Teal card names and rules text use dark inset backplates; teal descriptions use the built-in readable body font while other factions retain Orbitron. The panels follow creature/stratagem description bounds and reset when a card instance changes faction.
 
 - Menu connection waits cancel on success, timeout, or screen exit; auth loading/result and currency callbacks stop with their controls. This fixes a reproduced eight-second timeout calling freed UI after successful connection. The exact hosted Firefox cache-related freeze still requires confirmation after publishing the new Web export.
