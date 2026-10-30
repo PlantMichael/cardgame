@@ -2540,8 +2540,8 @@ func _show_opponent_select() -> void:
 	vbox.add_theme_constant_override("separation", 14)
 	center.add_child(vbox)
 
-	var selected_ai_level := 5  # Medium by default
-	_add_difficulty_row(vbox, selected_ai_level, func(level: int): selected_ai_level = level)
+	var difficulty := {"level": 5}  # Shared by the selection and start callbacks.
+	_add_difficulty_row(vbox, difficulty.level, func(level: int): difficulty.level = level)
 
 	var diff_gap := Control.new()
 	diff_gap.custom_minimum_size = Vector2(0, 10)
@@ -2587,7 +2587,7 @@ func _show_opponent_select() -> void:
 			var opp_ids: Array[String] = []
 			for c in opp_deck:
 				opp_ids.append(c.id)
-			_start_game(_player_deck_ids, opp_ids, selected_ai_level)
+			_start_game(_player_deck_ids, opp_ids, difficulty.level)
 		)
 		vbox.add_child(btn)
 
@@ -2839,8 +2839,8 @@ func _show_campaign_setup() -> void:
 	vbox.add_theme_constant_override("separation", 14)
 	center.add_child(vbox)
 
-	var selected_ai_level := 5  # Medium by default
-	_add_difficulty_row(vbox, selected_ai_level, func(level: int): selected_ai_level = level)
+	var difficulty := {"level": 5}  # Shared by the selection and start callbacks.
+	_add_difficulty_row(vbox, difficulty.level, func(level: int): difficulty.level = level)
 
 	var diff_gap := Control.new()
 	diff_gap.custom_minimum_size = Vector2(0, 10)
@@ -2858,7 +2858,7 @@ func _show_campaign_setup() -> void:
 
 		var btn := _menu_btn(entry["label"])
 		btn.pressed.connect(func():
-			_begin_campaign_search(entry["size"], selected_ai_level)
+			_begin_campaign_search(entry["size"], difficulty.level)
 		)
 		row.add_child(btn)
 

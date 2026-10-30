@@ -75,7 +75,9 @@ var _pending_child: _MCTSNode = null
 class _MCTSNode:
 	extends RefCounted
 	var state: GameState
-	var parent: _MCTSNode = null
+	# Children own their descendants; a strong backlink would retain every
+	# discarded search branch (and its copied match state) forever.
+	var parent: WeakRef = null
 	var action = null
 	var children: Array[_MCTSNode] = []
 	var untried_actions: Array[Dictionary] = []
@@ -85,7 +87,7 @@ class _MCTSNode:
 
 	func _init(p_state: GameState, p_parent: _MCTSNode, p_action, p_is_terminal: bool) -> void:
 		state = p_state
-		parent = p_parent
+		parent = weakref(p_parent) if p_parent != null else null
 		action = p_action
 		is_terminal = p_is_terminal
 
@@ -167,7 +169,7 @@ func choose_action(game_state: GameState) -> Dictionary:
 		while cursor != null:
 			cursor.visits += 1
 			cursor.value_sum += value
-			cursor = cursor.parent
+			cursor = cursor.parent.get_ref() if cursor.parent != null else null
 
 	var best: _MCTSNode = null
 	for child in _root.children:

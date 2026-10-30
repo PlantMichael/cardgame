@@ -70,6 +70,14 @@ func take_turn(game_state: GameState, board: Board) -> void:
 func _apply_action(action: Dictionary, game_state: GameState, board: Board) -> void:
 	var ai: PlayerState = game_state.opponent
 	match action["type"]:
+		"pilot":
+			await get_tree().create_timer(THINK_DELAY).timeout
+			if not is_instance_valid(board):
+				return
+			var result := game_state.execute(action)
+			if result["ok"]:
+				board.refresh()
+				await EventPresenter.present(result["events"], board, game_state.player.player_id)
 		"play_creature":
 			var card := ai.find_card_in_hand(str(action.get("card_uid", "")))
 			if card == null:

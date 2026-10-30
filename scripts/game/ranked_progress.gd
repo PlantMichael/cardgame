@@ -77,15 +77,11 @@ const LP_LOSS := 20
 const MIN_AI_LEVEL := 1
 const MAX_AI_LEVEL := 10
 
-## Difficulty passed to AIController for the next match, scaled across the
-## whole ladder: level 1 at Orbital III up to level 10 at Cosmic I, then
-## pinned at 10 for all three legend tiers (toughest bots, same as facing
-## the hardest opponents once you've reached Legend in Hearthstone).
-static func get_ai_level(bracket_index: int, in_legend: bool) -> int:
-	if in_legend:
-		return MAX_AI_LEVEL
-	var span := BRACKET_COUNT - 1
-	return clampi(MIN_AI_LEVEL + (bracket_index * (MAX_AI_LEVEL - MIN_AI_LEVEL)) / span, MIN_AI_LEVEL, MAX_AI_LEVEL)
+## Ranked playtests use the strongest policy at every rank, without deliberate
+## random mistakes. Rank progression must not change the test opponent's skill.
+## Keep the call shape shared with the ranked queue and match report.
+static func get_ai_level(_bracket_index: int, _in_legend: bool) -> int:
+	return MAX_AI_LEVEL
 
 ## e.g. "Orbital III", "Cosmic I", or "Superluminal (1240)". Doesn't include
 ## LP — see get_lp_string for the "62 / 100 LP" progress readout.
