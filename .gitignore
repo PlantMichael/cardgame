@@ -7,3 +7,6 @@
 
 # Node
 server/node_modules/
+
+# Composed Vercel website (Godot export source stays in build/)
+/website-dist/

@@ -2,6 +2,8 @@
 
 ## What's Working
 
+- The public `cardgame` website is implemented in `website/`: home and faction introduction, a source-checked rulebook, and a searchable glossary built from `data/keywords.json`. Vercel composes these pages with the existing unmodified Godot export at `/play/`; see `website/README.md` for build, preview and verification. Hosted rollout must be confirmed on the deployment produced by the website commit.
+
 - Creature and stratagem frame assets for all nine colors use dark name and description boxes (plus dark stat boxes on creature frames). Existing white base lettering, keyword highlights, and Orbitron font are shared across factions; the temporary teal backplates and font override have been removed.
 
 - Menu connection waits cancel on success, timeout, or screen exit; auth loading/result and currency callbacks stop with their controls. This fixes a reproduced eight-second timeout calling freed UI after successful connection. The exact hosted Firefox cache-related freeze still requires confirmation after publishing the new Web export.
