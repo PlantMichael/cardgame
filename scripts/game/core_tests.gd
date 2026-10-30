@@ -343,6 +343,16 @@ static func _test_crypt_hunger() -> void:
 	_eq("a max-health buff is fully reverted (max)", delos.max_health, printed_max)
 	_eq("a max-health buff is fully reverted (current)", delos.current_health, printed_max)
 
+static func _test_scout_recon(card_id: String) -> void:
+	print("[sludgewalker scout recon]")
+	var gs := _arena(card_id)
+	gs.player.hand.clear()
+	var deck_size := gs.player.deck.size()
+	var result := _play(gs, "b_022")
+	_check("Scout enters play", result["ok"] and gs.player.board.back().data.id == "b_022")
+	_eq("Scout draws one card on play", gs.player.hand.size(), 1)
+	_eq("Scout takes the card from its deck", gs.player.deck.size(), deck_size - 1)
+
 ## Junk Blockade (b_010): "If you have less cards in your hand than your
 ## opponent, Recon." Its card text promised this with nothing behind it - the
 ## card shipped carrying only Guardian - so the condition is checked here in
@@ -2079,6 +2089,7 @@ static func run() -> int:
 	_test_fingerprint_distinguishes(card_id)
 	_test_randomness_isolation(card_id)
 	_test_crypt_hunger()
+	_test_scout_recon(card_id)
 	_test_conditional_recon(card_id)
 	_test_aura_withdrawn_on_silence()
 	_test_pending_resolution(card_id)

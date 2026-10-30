@@ -442,7 +442,9 @@
       "health": 2,
       "tribe": null,
       "description": "Recon.",
-      "abilities": [],
+      "abilities": [
+        "recon"
+      ],
       "collectible": true,
       "isToken": false,
       "isTransformForm": false,
@@ -2892,8 +2894,8 @@
       "type": "CREATURE",
       "rarity": "EPIC",
       "manaCost": 10,
-      "attack": 15,
-      "health": 15,
+      "attack": 11,
+      "health": 11,
       "tribe": "yeti",
       "description": "Colossal",
       "abilities": [
@@ -3258,8 +3260,8 @@
       "type": "CREATURE",
       "rarity": "RARE",
       "manaCost": 5,
-      "attack": 5,
-      "health": 5,
+      "attack": 3,
+      "health": 3,
       "tribe": "yeti",
       "description": "Challenge. Dualstrike.",
       "abilities": [
