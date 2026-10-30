@@ -1,6 +1,6 @@
 # Public card catalog
 
-A read-only copy of the game's printed card data for deck builders, bots and card browsers, plus a live card win-rate summary. No API key or login. The catalog service needs no database credentials. Printed definitions are generated from the same six faction files the game loads (`data/cards/{green,crimson,black,orange,teal,generic}.json`); the game itself never reads from it.
+A read-only copy of the game's printed card data for deck builders, bots and card browsers, plus live exact-deck matchup and card win-rate summaries. No API key or login. The catalog service needs no database credentials. Printed definitions are generated from the same six faction files the game loads (`data/cards/{green,crimson,black,orange,teal,generic}.json`); the game itself never reads from it.
 
 > Printed catalog origin: `https://cardgame-catalog-production.up.railway.app`. `public/` holds the 176 published cards. **Nothing is versioned:** there are no version numbers, release folders or `latest.json`; every export simply replaces `cards.json` and `keywords.json`. The live win-rate route requires deploying the updated relay AND catalog before it is available there.
 
@@ -10,10 +10,17 @@ A read-only copy of the game's printed card data for deck builders, bots and car
 GET /data/cards.json
 GET /data/keywords.json
 GET /data/stats/card-winrates.json
+GET /data/stats/deck-matchups.json
 GET /healthz                       (operator health check, not part of the data contract)
 ```
 
-There is no server-side filtering and no per-card route. **Download once, index by `id`, filter locally.** `?query=` strings are ignored, not implemented.
+Printed card files have no server-side filtering or per-card route. **Download once, index by `id`, filter locally.** Their query strings are ignored. The deck matchup route validates its filters as described below.
+
+### Live deck matchups
+
+Use `/data/stats/deck-matchups.json?mode=ranked_ai&days=30&rulesVersion=latest&aiVersion=latest&aiLevel=10` for exact starting decks and opponent-specific records. These are the defaults. PvP uses `mode=authoritative_pvp` and rejects AI filters. The API publishes full compositions with stable SHA-256 IDs, separates human and AI roles, and includes samples, Wilson intervals, distinct human tester counts, turn averages and first/second/unknown-first records. Public exact lists and aggregates begin at one sample by owner decision; identities and individual histories remain private, but small-sample inference is possible.
+
+See [the website developer contract](stats-website-spec.md) for fields, joins, mirror counting, filter resolution and examples. Historical missing AI versions stay `unknown`; new clients report AI policy version and first-player metadata. No backfill or schema migration is needed. Deploy relay then catalog, and the updated Web client for future metadata. The proxy uses the existing `CARD_WINRATES_ORIGIN`, a 5-second timeout and a 4 MiB ceiling. The relay bounds reads to 50,000 mode/time source matches and caches successful queries for 60 seconds (64 keys maximum). Bound failures and unavailable data return generic 503, never truncated or zero-filled success. Query errors return 400.
 
 ### Live card win rates
 
@@ -85,9 +92,8 @@ An object with:
 **Known gap:** most ability keys (about 75 at the time of writing, mostly "On Play…" / "On Death…" triggers) have **no keyword entry** and map to `null`. Their readable text lives in the card's `description`. The exporter prints the list on every run; filling it in means adding entries to `data/keywords.json` — it is not scraped from GDScript.
 
 Building something on this API? [`stats-website-spec.md`](stats-website-spec.md)
-is a self-contained brief for a third-party statistics site: both schemas
-written out, the suppression rules, fixtures to develop against, and what is
-not published yet.
+is the current contract for a third-party statistics site, including exact-deck
+joins, cohort selection, sample interpretation, failure behavior and rollout.
 
 ## Local use
 
@@ -173,7 +179,7 @@ the printed catalog's behavior through Railway's CDN.
 
 Give consumers the origin as `CATALOG_ORIGIN` in
 [`stats-website-spec.md`](stats-website-spec.md). The live
-`/data/stats/card-winrates.json` route requires both updated services;
+stats routes require both updated services;
 unavailable stats return 503. Versioned stats release routes do not exist. Consumers
 must distinguish unavailable figures from genuine zero samples.
 

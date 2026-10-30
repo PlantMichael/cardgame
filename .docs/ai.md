@@ -1,5 +1,7 @@
 # AI
 
+`AIController.POLICY_VERSION` versions the ranked AI policy independently of card/rules changes. New ranked-AI summaries snapshot this version and the actual first-player choice, allowing the deck matchup API to separate playtest cohorts. Increment the policy version when future AI behavior changes; historical reports without a version remain unknown rather than being inferred from difficulty.
+
 The opponent AI is a heuristic-guided Monte Carlo Tree Search (MCTS), not a hand-coded priority list. `AIController` (`scripts/game/ai_controller.gd`) still owns turn pacing and Board/animation glue, but its decisions come from `MCTSEngine` (`scripts/game/mcts_ai.gd`), which searches over `HeadlessTurn` (`scripts/game/headless_turn.gd`) — a UI-free, cloneable turn executor built on the same `GameState` used by the real game.
 
 ## Why not classic random-rollout MCTS

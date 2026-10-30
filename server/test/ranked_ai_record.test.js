@@ -7,6 +7,8 @@ const { spawn } = require('node:child_process');
 const net = require('node:net');
 const path = require('node:path');
 const { once } = require('node:events');
+const { mkdtempSync, rmSync } = require('node:fs');
+const os = require('node:os');
 const { Pool } = require('pg');
 const WebSocket = require('ws');
 const { normalizeAIRecord } = require('../ranked_ai_record');
@@ -24,6 +26,13 @@ test('AI summaries bound input and project server-owned provenance', () => {
   assert.deepEqual(record, { ...summary(), mode: 'ranked_ai', source: 'client_reported' });
   input.player_deck.pop();
   assert.equal(record.player_deck.length, 2, 'the accepted lists are snapshots');
+  const tagged = normalizeAIRecord({ ...summary(), ai_version: 1, first_player: 'opponent' }, 'ai_1_2', cards);
+  assert.equal(tagged.ai_version, 1);
+  assert.equal(tagged.first_player, 'opponent');
+  for (const invalid of [{ ai_version: 0 }, { ai_version: '1' }, { ai_version: null },
+    { ai_version: 1000001 }, { first_player: 'host' }, { first_player: null }]) {
+    assert.equal(normalizeAIRecord({ ...summary(), ...invalid }, 'ai_1_2', cards), null);
+  }
   for (const invalid of [null, [], {}, { ...summary(), ai_level: 0 }, { ...summary(), ai_level: 11 },
     { ...summary(), turns: 0 }, { ...summary(), turns: 1.5 }, { ...summary(), turns: 1000001 },
     { ...summary(), rules_version: '1' }, { ...summary(), player_deck: [] },
@@ -180,15 +189,27 @@ test('real relay records AI summaries atomically and preserves legacy settlement
   assert.equal((await request(ws, failure)).success, true, 'a failed transaction can be retried');
 
   if (process.env.GODOT_BIN) {
+    const userData = mkdtempSync(path.join(os.tmpdir(), 'cardgame-ai-producer-'));
     const godot = spawn(process.env.GODOT_BIN, ['--headless', '--path', PROJECT_DIR,
       'res://server/test/fixtures/ranked_ai_client.tscn'], {
-      env: { ...process.env, AI_TEST_URL: url, AI_TEST_TOKEN: report.token }, stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, APPDATA: userData, XDG_DATA_HOME: userData, AI_TEST_URL: url, AI_TEST_TOKEN: report.token }, stdio: ['ignore', 'pipe', 'pipe'],
     });
-    t.after(() => killTree(godot));
     let clientLog = '';
+    const deadline = setTimeout(() => killTree(godot), 45000);
+    t.after(async () => {
+      clearTimeout(deadline);
+      if (godot.exitCode === null && godot.signalCode === null) {
+        const exited = once(godot, 'exit');
+        killTree(godot);
+        await exited;
+      }
+      assert.equal(path.dirname(path.resolve(userData)), path.resolve(os.tmpdir()));
+      rmSync(userData, { recursive: true });
+    });
     godot.stdout.on('data', (data) => { clientLog += data; });
     godot.stderr.on('data', (data) => { clientLog += data; });
     const [code] = await once(godot, 'exit');
+    clearTimeout(deadline);
     assert.equal(code, 0, clientLog);
     const clientRows = (await pool.query(`SELECT won, ai_match FROM ranked_settlements
       WHERE ai_match IS NOT NULL AND match_id NOT IN ('ai_1700000000_42', 'ai_1_4')`)).rows;
@@ -199,6 +220,10 @@ test('real relay records AI summaries atomically and preserves legacy settlement
     assert.equal(clientRows[0].ai_match.ai_level, 1);
     assert.equal(clientRows[0].ai_match.turns, 7);
     assert.ok(Number.isInteger(clientRows[0].ai_match.rules_version) && clientRows[0].ai_match.rules_version > 0);
+    assert.ok(Number.isInteger(clientRows[0].ai_match.ai_version) && clientRows[0].ai_match.ai_version > 0);
+    const observedFirst = clientLog.match(/AI_PRODUCER_FIRST (player|opponent)/)?.[1];
+    assert.ok(observedFirst, clientLog);
+    assert.equal(clientRows[0].ai_match.first_player, observedFirst, 'the actual coinflip survives reporting and persistence');
   } else {
     t.diagnostic('Godot producer test not run: set GODOT_BIN to enable it');
   }

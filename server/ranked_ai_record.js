@@ -14,10 +14,14 @@ function normalizeAIRecord(input, matchId, cardIds) {
     if (!Array.isArray(deck) || deck.length < MIN_DECK_SIZE || deck.length > MAX_DECK_SIZE) return null;
     if (deck.some((id) => typeof id !== 'string' || !cardIds.has(id))) return null;
   }
+  if (input.ai_version !== undefined && !integer(input.ai_version, 1, 1000000)) return null;
+  if (input.first_player !== undefined && !['player', 'opponent'].includes(input.first_player)) return null;
   return {
     mode: 'ranked_ai', source: 'client_reported',
     player_deck: input.player_deck.slice(), opponent_deck: input.opponent_deck.slice(),
     ai_level: input.ai_level, turns: input.turns, rules_version: input.rules_version,
+    ...(input.ai_version === undefined ? {} : { ai_version: input.ai_version }),
+    ...(input.first_player === undefined ? {} : { first_player: input.first_player }),
   };
 }
 

@@ -10,6 +10,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cardWinrates, STATS_PATH } from './card-winrates.mjs';
+import { deckMatchups, deckQuery, DECK_STATS_PATH } from './deck-matchups.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const REVALIDATE = 'no-cache';
@@ -107,6 +108,14 @@ export function createCatalogServer(root, options = {}) {
     }
 
     const pathname = (req.url ?? '/').split('?')[0];
+    if (pathname === DECK_STATS_PATH) {
+      const search = (req.url ?? '').split('?').slice(1).join('?');
+      try { deckQuery(search); }
+      catch { json(400, { error: 'invalid stats query' }); return; }
+      try { json(200, await deckMatchups(root, search, options), { 'Cache-Control': REVALIDATE }); }
+      catch { json(503, { error: 'deck matchup statistics unavailable' }); }
+      return;
+    }
     if (pathname === STATS_PATH) {
       try { json(200, await cardWinrates(root, resolvePublicFile, options), { 'Cache-Control': REVALIDATE }); }
       catch { json(503, { error: 'card win rates unavailable' }); }
