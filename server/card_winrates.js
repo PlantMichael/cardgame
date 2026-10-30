@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const WebSocket = require('ws');
 const { SETTLING_REASONS } = require('./authoritative/settle');
+const { DECK_STATS_PATH, parseQuery, createDeckMatchups } = require('./deck_matchups');
 
 const STATS_PATH = '/data/stats/card-winrates.json';
 const PUBLIC_ROOT = path.join(__dirname, '..', 'catalog', 'public');
@@ -62,6 +63,7 @@ async function aggregate(pool, root, now) {
 
 // HTTP and websocket upgrades use the same listener and existing relay port.
 function createRelayServer({ pool, publicRoot = PUBLIC_ROOT, now = Date.now }) {
+  const deckMatchups = createDeckMatchups({ pool, publicRoot, now });
   let cached, expires = 0, refreshing;
   function snapshot() {
     if (cached && now() < expires) return Promise.resolve(cached);
@@ -71,7 +73,8 @@ function createRelayServer({ pool, publicRoot = PUBLIC_ROOT, now = Date.now }) {
     return refreshing;
   }
   const server = http.createServer(async (req, res) => {
-    if ((req.url ?? '/').split('?')[0] !== STATS_PATH) {
+    const pathname = (req.url ?? '/').split('?')[0];
+    if (pathname !== STATS_PATH && pathname !== DECK_STATS_PATH) {
       res.writeHead(426, { 'Content-Length': 16, 'Content-Type': 'text/plain' });
       res.end('Upgrade Required'); return;
     }
@@ -87,6 +90,14 @@ function createRelayServer({ pool, publicRoot = PUBLIC_ROOT, now = Date.now }) {
     }
     if (!['GET', 'HEAD'].includes(req.method)) {
       send(405, { error: 'method not allowed' }, { Allow: 'GET, HEAD, OPTIONS' }); return;
+    }
+    if (pathname === DECK_STATS_PATH) {
+      let query;
+      try { query = parseQuery((req.url ?? '').split('?').slice(1).join('?')); }
+      catch { send(400, { error: 'invalid stats query' }); return; }
+      try { send(200, await deckMatchups(query), { 'Cache-Control': 'no-cache' }); }
+      catch { send(503, { error: 'deck matchup statistics unavailable' }); }
+      return;
     }
     try { send(200, await snapshot(), { 'Cache-Control': 'no-cache' }); }
     catch { send(503, { error: 'card win rates unavailable' }); }

@@ -2,6 +2,8 @@ class_name AIController
 extends Node
 
 const THINK_DELAY = 0.6
+## Increment when AI policy/search changes, independently of card/rules versions.
+const POLICY_VERSION := 1
 
 ## How long the AI sits on a turn it cannot do anything with (no affordable
 ## card, nothing able to attack) before passing it back. Every other turn is
