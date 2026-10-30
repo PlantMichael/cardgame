@@ -46,7 +46,7 @@ function home(featured) {
   <section class="wrap learn-section"><div class="section-heading"><div><span class="eyebrow">GET YOUR BEARINGS</span><h2>Your first game starts here.</h2></div></div><div class="learning-grid">
   <a class="learn-tile" href="/rulebook/"><span class="tile-number">01 / THE BASICS</span><h3>Learn the rules.</h3><p>From your opening hand to your final attack. A practical guide to the battlefield.</p><span class="text-link">Open the rulebook ${arrow}</span></a>
   <a class="learn-tile" href="/glossary/"><span class="tile-number">02 / THE DETAILS</span><h3>Know your keywords.</h3><p>Guardian? Rummage? Pilot? Look up the abilities printed on your cards.</p><span class="text-link">Browse the glossary ${arrow}</span></a></div></section>
-  <section class="wrap final-cta"><span class="eyebrow">ENOUGH READING?</span><h2>There’s a move with<br>your name on it.</h2>${button('Enter the game', '/play/')}<p>Desktop browser recommended for the battlefield.</p></section>`, 'Play cardgame in your browser. Discover five factions, learn the rules, and look up every printed keyword.');
+  <section class="wrap final-cta"><span class="eyebrow">ENOUGH READING?</span><h2>There’s a move with<br>your name on it.</h2>${button('Enter the game', '/play/')}<p>Use a desktop browser with JavaScript and WebGL 2 enabled. Open the hosted game over HTTPS.</p></section>`, 'Play cardgame in your browser. Discover five factions, learn the rules, and look up every printed keyword.');
 }
 
 const chapters = [
