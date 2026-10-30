@@ -9,4 +9,6 @@ extends RefCounted
 ## behavior, or to data/cards/*.json costs/stats/abilities/effects, increments this.
 ## 2: Junk Blockade (b_010) gained on_play_recon_if_fewer_cards - its card
 ##    text promised a conditional Recon that nothing implemented.
-const RULES_VERSION := 2
+## 3: Sludgewalker Scout gains Recon; Ancient Abominable becomes 11/11
+##    and Gate Yeti becomes 3/3.
+const RULES_VERSION := 3
