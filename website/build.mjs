@@ -6,6 +6,9 @@ import { renderPages } from './pages.mjs';
 export const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const outputRoot = path.join(projectRoot, 'website-dist');
 export const featuredIds = ['g_002', 'cr_002', 't_010'];
+const cardAssetNames = ['card-green.png', 'card-crimson.png', 'card-teal.png',
+  'greenmana.png', 'crimsonmana.png', 'tealmana.png', 'common-grey.png',
+  'tribe-creature.png', 'tribe-yeti.png', 'tribe-reinforce.png'];
 
 // Compose the website around the existing export. Never modify or regenerate it.
 export function buildSite(destination = outputRoot) {
@@ -30,12 +33,15 @@ export function buildSite(destination = outputRoot) {
     mkdirSync(path.dirname(path.join(destination, name)), { recursive: true });
     writeFileSync(path.join(destination, name), html);
   }
-  for (const name of ['style.css', 'app.js', 'mark.svg']) cpSync(path.join(projectRoot, 'website', name), path.join(destination, name));
+  for (const name of ['style.css', 'app.js']) cpSync(path.join(projectRoot, 'website', name), path.join(destination, name));
+  cpSync(path.join(projectRoot, 'assets/cardgame/Ranks/cardgame-logo.png'), path.join(destination, 'media/logo.png'));
+  cpSync(path.join(projectRoot, 'assets/fonts/Orbitron.ttf'), path.join(destination, 'media/Orbitron.ttf'));
+  for (const name of cardAssetNames) cpSync(path.join(projectRoot, 'assets/card_assets', name), path.join(destination, 'media', name));
   for (const card of featured) cpSync(card.source, path.join(destination, card.image.slice(1)));
   cpSync(path.join(projectRoot, 'assets/wallapepr.png'), path.join(destination, 'media/world.png'));
   for (const name of readdirSync(gameRoot)) {
     if (!/^index\.[\w.-]+$/.test(name) || name.endsWith('.import')) continue;
-    cpSync(path.join(gameRoot, name), path.join(destination, 'play', name));
+    cpSync(path.join(gameRoot, name), path.join(destination, 'play', name === 'index.html' ? 'game.html' : name));
     // Existing cached bootstrap pages can still fetch the original runtime URLs.
     if (name !== 'index.html') cpSync(path.join(gameRoot, name), path.join(destination, name));
   }

@@ -5,24 +5,30 @@ const button = (label, href, secondary = false) => `<a class="button${secondary 
 
 function shell(title, active, content, description) {
   const nav = [['Home', '/'], ['Rulebook', '/rulebook/'], ['Glossary', '/glossary/']];
+  const playing = active === 'Play';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${title === 'Home' ? 'cardgame — Pick a faction. Make your move.' : `${title} — cardgame`}</title>
   <meta name="description" content="${escapeHtml(description)}"><meta name="theme-color" content="#101914">
-  <link rel="icon" href="/mark.svg" type="image/svg+xml"><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
-  <body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="wrap header-inner">
-  <a class="brand" href="/" aria-label="cardgame home"><img src="/mark.svg" width="30" height="34" alt="">cardgame<span class="brand-period">.</span></a>
-  <nav aria-label="Main navigation">${nav.map(([label, href]) => `<a href="${href}" ${active === label ? 'aria-current="page"' : ''}>${label}</a>`).join('')}</nav>
-  <a class="nav-play" href="/play/">Play now <span aria-hidden="true">↗</span></a></div></header>
+  <link rel="icon" href="/media/logo.png" type="image/png"><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+  <body${playing ? ' class="play-page"' : ''}><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="wrap header-inner">
+  <a class="brand" href="/" aria-label="cardgame home"><img src="/media/logo.png" width="42" height="42" alt="">cardgame<span class="brand-period">.</span></a>
+  <nav aria-label="Main navigation">${nav.map(([label, href]) => `<a href="${href}" ${active === label ? 'aria-current="page"' : ''}${playing && label !== 'Home' ? ' target="_blank" rel="noopener" aria-label="' + label + ' (opens in a new tab)"' : ''}>${label}</a>`).join('')}</nav>
+  <a class="nav-play" href="${playing ? '#game' : '/play/'}"${playing ? ' aria-current="page"' : ''}>${playing ? 'Playing' : 'Play now'} <span aria-hidden="true">↗</span></a></div></header>
   <main id="main">${content}</main>
-  <footer class="site-footer wrap"><a class="brand small" href="/">cardgame<span class="brand-period">.</span></a><p>Five factions. One battlefield.</p>
-  <nav aria-label="Footer navigation"><a href="/rulebook/">Learn to play</a><a href="/glossary/">Keywords</a><a href="/play/">Enter the game ↗</a></nav><span class="footer-note">An evolving playtest. Cards and rules may change.</span></footer></body></html>`;
+  ${playing ? '' : `<footer class="site-footer wrap"><a class="brand small" href="/">cardgame<span class="brand-period">.</span></a><p>Five factions. One battlefield.</p>
+  <nav aria-label="Footer navigation"><a href="/rulebook/">Learn to play</a><a href="/glossary/">Keywords</a><a href="/play/">Enter the game ↗</a></nav><span class="footer-note">An evolving playtest. Cards and rules may change.</span></footer>`}</body></html>`;
 }
 
 function cardMarkup(card, extra = '') {
   return `<article class="game-card ${card.color.toLowerCase()} ${extra}" aria-label="${escapeHtml(card.card_name)} card">
-  <span class="mana" aria-label="Mana cost ${card.cost}">${card.cost}</span><img class="card-art" src="${card.image}" width="1232" height="928" alt="">
-  <div class="card-name">${escapeHtml(card.card_name)}</div><div class="card-type">${escapeHtml(card.card_type.toLowerCase())} · ${escapeHtml(card.color.toLowerCase())}</div>
-  <p class="card-text">${escapeHtml(card.description)}</p><div class="card-stats"><span aria-label="Attack ${card.attack}">⚔ ${card.attack}</span><span aria-label="Health ${card.health}">♥ ${card.health}</span></div></article>`;
+  <img class="card-frame" src="/media/card-${card.color.toLowerCase()}.png" alt="">
+  <img class="card-art" src="${card.image}" width="1232" height="928" alt="">
+  <div class="mana" aria-label="Mana cost ${card.cost}"><img src="/media/${card.color.toLowerCase()}mana.png" alt=""><span>${card.cost}</span></div>
+  <div class="card-name">${escapeHtml(card.card_name)}</div>
+  <img class="card-rarity" src="/media/common-grey.png" alt="Common">
+  <div class="card-symbols"><img src="/media/tribe-creature.png" alt="Creature">${card.tribe === 'yeti' ? '<img src="/media/tribe-yeti.png" alt="Yeti">' : ''}</div>
+  ${card.abilities?.includes('reinforce') ? '<img class="card-reinforce" src="/media/tribe-reinforce.png" alt="Reinforce">' : ''}
+  <p class="card-text">${escapeHtml(card.description)}</p><div class="card-stats"><span aria-label="Attack ${card.attack}">${card.attack}</span><span aria-label="Health ${card.health}">${card.health}</span></div></article>`;
 }
 
 const factions = [
@@ -64,7 +70,7 @@ function rulebook(featured) {
   return shell('Rulebook', 'Rulebook', `<section class="wrap page-heading"><span class="eyebrow">THE FIELD GUIDE / 01</span><h1>Learn the <em>game.</em></h1><p>Your opening hand. Your next attack. Everything you need to find your feet on the battlefield.</p></section>
   <div class="wrap book-layout"><aside class="book-nav"><span class="eyebrow">IN THIS GUIDE</span><nav aria-label="Rulebook chapters">${chapters.map(([id, number, title]) => `<a href="#${id}"><span>${number}</span>${title}</a>`).join('')}</nav><a class="text-link" href="/glossary/">Need a definition? ${arrow}</a></aside>
   <div class="book-content"><section class="quick-start"><span class="eyebrow">BEFORE YOUR FIRST MATCH</span><h2>The short version.</h2><p>Spend mana to play cards. Use your creatures to control the board. Bring the opposing hero from 30 health to zero.</p><div class="quick-facts"><span>30 health</span><span>7 board slots</span><span>10 mana cap</span></div></section>
-  ${chapters.map(([id, number, title, body], i) => `<section class="chapter" id="${id}"><span class="chapter-number">${number}</span><h2>${title}</h2>${body}${i === 3 ? `<figure class="card-example">${cardMarkup(featured[0])}<figcaption><h3>Reading a creature card</h3><p>The number at the top is its mana cost. At the bottom, the sword is attack and the heart is health. Text in the middle describes its abilities.</p><p>Cocky Commando costs 2 mana and starts at 2 attack and 1 health. <a href="/glossary/#reinforce">Reinforce</a> gives it another chance on the battlefield.</p></figcaption></figure>` : ''}</section>`).join('')}
+  ${chapters.map(([id, number, title, body], i) => `<section class="chapter" id="${id}"><span class="chapter-number">${number}</span><h2>${title}</h2>${body}${i === 3 ? `<figure class="card-example">${cardMarkup(featured[0])}<figcaption><h3>Reading a creature card</h3><p>The number at the top is its mana cost. At the bottom, the left value is attack and the right value is health. Text in the middle describes its abilities.</p><p>Cocky Commando costs 2 mana and starts at 2 attack and 1 health. <a href="/glossary/#reinforce">Reinforce</a> gives it another chance on the battlefield.</p></figcaption></figure>` : ''}</section>`).join('')}
   <div class="book-end"><h2>Ready to try it?</h2><p>The best next step is a match.</p>${button('Play cardgame', '/play/')}</div></div></div>`, 'Learn cardgame: opening hands, turns, mana, combat, board limits, deckbuilding and card abilities.');
 }
 
@@ -79,5 +85,6 @@ function glossary(keywords) {
 }
 
 export function renderPages({ featured, keywords }) {
-  return { 'index.html': home(featured), 'rulebook/index.html': rulebook(featured), 'glossary/index.html': glossary(keywords) };
+  return { 'index.html': home(featured), 'rulebook/index.html': rulebook(featured), 'glossary/index.html': glossary(keywords),
+    'play/index.html': shell('Play', 'Play', '<iframe id="game" class="game-window" title="cardgame game window" src="/play/game.html" allow="fullscreen" allowfullscreen></iframe>', 'Play cardgame with the site navigation available above the game.') };
 }

@@ -7,6 +7,7 @@
   [hidden] { display: none !important; }
 }
 @layer base {
+  @font-face { font-family: CardOrbitron; src: url('/media/Orbitron.ttf') format('truetype'); font-display: swap; }
   :root { color-scheme: dark; --ink: #101914; --panel: #18221b; --line: #354237; --paper: #f1eddf; --muted: #b3bdad; --gold: #d6bd81; --green: #9fb981; }
   html { scroll-behavior: smooth; scroll-padding-top: 110px; }
   body { background: var(--ink); color: var(--paper); font: 16px/1.7 'Segoe UI', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
@@ -31,6 +32,7 @@
   .site-header { position: relative; z-index: 10; border-bottom: 1px solid var(--line); background: #101914; }
   .header-inner { min-height: 88px; display: flex; align-items: center; gap: 35px; }
   .brand { display: inline-flex; align-items: center; gap: 12px; font-size: 31px; line-height: 1; letter-spacing: -.8px; text-decoration: none; font-weight: bold; }
+  .brand > img { width: 42px; height: 42px; object-fit: contain; }
   .brand-period { color: var(--gold); margin-left: -12px; }
   .header-inner nav { display: flex; justify-content: center; gap: 35px; margin-left: auto; }
   .header-inner nav a { text-decoration: none; color: var(--muted); font-size: 14px; padding: 14px 0; position: relative; }
@@ -55,16 +57,22 @@
   .load-note { font-size: 11px; margin-top: 17px; color: #a6b09f; }
   .hero-cards { position: relative; height: 440px; min-width: 0; }
   .hero-cards::before { position: absolute; content: ''; inset: 20px -20px; border: 1px solid #d6bd8114; border-radius: 50%; transform: rotate(-24deg); }
-  .game-card { --frame: #58734e; background: #20291e; border: 1px solid #8c9e6d; border-radius: 13px; padding: 9px; width: 235px; min-height: 337px; position: relative; box-shadow: 0 20px 38px #0007, inset 0 0 0 4px #10191488; color: var(--paper); }
-  .game-card.crimson { --frame: #6c3443; background: #302025; border-color: #87505b; }
-  .game-card.teal { --frame: #417782; background: #1b2c2e; border-color: #63949a; }
-  .mana { position: absolute; z-index: 1; top: -15px; left: -13px; border-radius: 50% 50% 50% 15%; transform: rotate(-6deg); background: #172b30; border: 2px solid #a6c8c6; color: #f4f5e9; font: 26px Georgia, serif; width: 44px; height: 48px; display: grid; place-items: center; box-shadow: 0 3px 10px #0008; }
-  .card-art { width: 100%; aspect-ratio: 1.32; object-fit: cover; border-radius: 8px 8px 0 0; border: 1px solid #d6bd8136; }
-  .card-name { background: var(--frame); border: 1px solid #d6bd8155; padding: 7px 1px; margin: -2px -5px 0; text-align: center; font-size: 17px; position: relative; color: #fff8e7; }
-  .card-type { text-transform: uppercase; text-align: center; font-size: 8px; letter-spacing: 1.4px; margin-top: 8px; color: #c7cfbc; }
-  .card-text { color: #dddcca; font-size: 12px; text-align: center; padding: 13px 7px 8px; min-height: 59px; line-height: 1.5; }
-  .card-stats { display: flex; justify-content: space-between; font: bold 18px Georgia, serif; color: #f0dc98; padding: 2px 9px; }
-  .card-stats span:last-child { color: #e7aaa1; }
+  /* Card.tscn's 220×320 layout, using the same textures and Orbitron font. */
+  .game-card { --card-width: 235px; width: var(--card-width); aspect-ratio: 220/320; position: relative; filter: drop-shadow(0 16px 18px #0008); color: white; }
+  .game-card .card-frame { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .game-card .card-art { position: absolute; left: 11.364%; top: 12.813%; width: 77.273%; height: 31.563%; object-fit: cover; }
+  .game-card .mana { position: absolute; left: .455%; top: .313%; width: 21.818%; height: 15%; display: grid; place-items: center; font: calc(var(--card-width) * .09091) CardOrbitron, sans-serif; color: white; }
+  .game-card .mana img { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .game-card .mana span { position: relative; text-shadow: 0 1px 2px black; }
+  .game-card .card-name { position: absolute; left: 23.636%; top: 1.875%; width: 61.818%; height: 5.938%; display: flex; align-items: center; justify-content: center; font: calc(var(--card-width) * .05909)/1.2 CardOrbitron, sans-serif; white-space: nowrap; color: white; text-shadow: 0 1px 2px black; }
+  .game-card .card-rarity { position: absolute; left: 11.818%; top: 49.063%; width: 12.273%; height: 7.188%; object-fit: contain; }
+  .game-card .card-symbols { position: absolute; left: 26.818%; top: 50%; height: 5.625%; display: flex; gap: calc(var(--card-width) * .01364); }
+  .game-card .card-symbols img { height: 100%; width: auto; }
+  .game-card .card-reinforce { position: absolute; left: 80%; top: 50.313%; width: 7.273%; height: 5%; object-fit: contain; }
+  .game-card .card-text { position: absolute; left: 16.364%; top: 59.688%; width: 67.273%; height: 18.75%; display: flex; align-items: center; justify-content: center; text-align: center; font: calc(var(--card-width) * .05)/1.25 CardOrbitron, sans-serif; color: white; }
+  .game-card .card-stats { position: absolute; inset: 0; font: calc(var(--card-width) * .10455)/1 CardOrbitron, sans-serif; pointer-events: none; }
+  .game-card .card-stats span { position: absolute; top: 81.563%; left: 16.364%; width: 26.364%; height: 11.875%; display: grid; place-items: center; }
+  .game-card .card-stats span:last-child { left: 57.273%; width: 25.909%; }
   .hero-cards .game-card { position: absolute; left: 50%; top: 45px; transition: transform .25s; }
   .hero-cards .front-card { transform: translate(-53%, 20px) rotate(-6deg); z-index: 3; }
   .hero-cards .back-left { transform: translate(-109%, -3px) rotate(-20deg) scale(.86); z-index: 1; }
@@ -137,7 +145,7 @@
   .type-list h3 { font-size: 24px; margin-block: 7px 10px; }
   .type-label { color: var(--gold); font-size: 10px; letter-spacing: 1.8px; }
   .card-example { background: #18241a; border: 1px solid var(--line); padding: 32px; margin-top: 38px; display: flex; align-items: center; gap: 35px; }
-  .card-example .game-card { flex-shrink: 0; width: 210px; min-height: 0; }
+  .card-example .game-card { --card-width: 210px; flex-shrink: 0; }
   .card-example figcaption h3 { margin-bottom: 15px; font-size: 24px; }
   .card-example figcaption p { font-size: 13px; }
   .limits { display: grid; gap: 25px; }
@@ -170,6 +178,10 @@
   .empty-search { padding: 65px 20px; text-align: center; border: 1px solid var(--line); }
   .empty-search p { margin: 20px 0; }
   .glossary-bottom { display: flex; justify-content: space-between; gap: 30px; border-top: 1px solid var(--line); margin-top: 45px; padding-top: 25px; font-size: 13px; }
+  .play-page { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+  .play-page .site-header { flex-shrink: 0; }
+  .play-page main { flex: 1; min-height: 0; display: flex; }
+  .game-window { display: block; width: 100%; height: 100%; min-height: 0; border: 0; background: black; }
 }
 @layer responsive {
   @media (max-width: 1100px) {
@@ -188,7 +200,7 @@
     .wrap { width: calc(100% - 40px); }
     .header-inner { min-height: 78px; gap: 12px; flex-wrap: wrap; padding-top: 20px; }
     .brand { font-size: 28px; }
-    .brand img { width: 24px; height: 29px; }
+    .brand img { width: 36px; height: 36px; }
     .nav-play { margin-left: auto; padding: 8px 14px; font-size: 12px; }
     .nav-play span { margin-left: 10px; }
     .header-inner nav { order: 3; flex-basis: 100%; margin: 3px 0 0; justify-content: start; gap: 28px; }

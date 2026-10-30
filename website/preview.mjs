@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { outputRoot } from './build.mjs';
 
 const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-  '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.wasm': 'application/wasm', '.pck': 'application/octet-stream' };
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.ttf': 'font/ttf', '.wasm': 'application/wasm', '.pck': 'application/octet-stream' };
 
 // Same directory-index URLs as the static Vercel output, without a framework/dev dependency.
 export function previewServer(root = outputRoot) {

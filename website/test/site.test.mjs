@@ -23,7 +23,8 @@ test('built public pages, canonical keywords and unchanged Godot runtime work ov
   });
   const origin = `http://127.0.0.1:${server.address().port}`;
   const pages = [];
-  for (const route of ['/', '/rulebook/', '/glossary/']) {
+  const routes = ['/', '/rulebook/', '/glossary/', '/play/'];
+  for (const route of routes) {
     const response = await fetch(origin + route);
     assert.equal(response.status, 200, route);
     assert.match(response.headers.get('content-type'), /text\/html/);
@@ -38,7 +39,7 @@ test('built public pages, canonical keywords and unchanged Godot runtime work ov
   // Resolve actual links/images/scripts from every rendered page, including fragment targets.
   for (const html of pages) {
     for (const [, target] of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
-      const url = new URL(target, origin + ['/','/rulebook/','/glossary/'][pages.indexOf(html)]);
+      const url = new URL(target, origin + routes[pages.indexOf(html)]);
       const response = await fetch(url, { method: 'HEAD' });
       assert.equal(response.status, 200, target);
       if (url.hash) {
@@ -49,17 +50,30 @@ test('built public pages, canonical keywords and unchanged Godot runtime work ov
   }
   const redirect = await fetch(origin + '/play', { redirect: 'manual' });
   assert.equal(redirect.status, 308); assert.equal(redirect.headers.get('location'), '/play/');
-  const play = await fetch(origin + '/play/');
+  assert.ok(pages[3].includes('src="/play/game.html"'), 'Play embeds the existing game below the navigation');
+  assert.ok(pages[3].includes('Glossary (opens in a new tab)'), 'lookup navigation does not unload the game');
+  const play = await fetch(origin + '/play/game.html');
   assert.equal(await play.text(), readFileSync(path.join(projectRoot, 'build/index.html'), 'utf8'));
   for (let i = 0; i < runtime.length; i++) {
     const name = runtime[i];
-    assert.equal(hash(path.join(destination, 'play', name)), before[i], `copied runtime: ${name}`);
+    const copiedName = name === 'index.html' ? 'game.html' : name;
+    assert.equal(hash(path.join(destination, 'play', copiedName)), before[i], `copied runtime: ${name}`);
     assert.equal(hash(path.join(projectRoot, 'build', name)), before[i], `source unchanged: ${name}`);
-    const response = await fetch(origin + '/play/' + name, { method: 'HEAD' });
+    const response = await fetch(origin + '/play/' + copiedName, { method: 'HEAD' });
     assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-cache');
     if (name.endsWith('.wasm')) assert.equal(response.headers.get('content-type'), 'application/wasm');
   }
   assert.equal((await fetch(origin + '/index.wasm', { method: 'HEAD' })).status, 200, 'original runtime URLs survive');
+  for (const [source, published] of [
+    ['assets/cardgame/Ranks/cardgame-logo.png', 'logo.png'],
+    ['assets/card_assets/card-green.png', 'card-green.png'],
+    ['assets/card_assets/greenmana.png', 'greenmana.png'],
+    ['assets/fonts/Orbitron.ttf', 'Orbitron.ttf'],
+  ]) {
+    const response = await fetch(origin + '/media/' + published);
+    assert.equal(response.status, 200);
+    assert.equal(createHash('sha256').update(Buffer.from(await response.arrayBuffer())).digest('hex'), hash(path.join(projectRoot, source)), `original game asset: ${source}`);
+  }
   assert.equal((await fetch(origin + '/not-a-page/')).status, 404);
   assert.equal((await fetch(origin + '/%2ehidden')).status, 404);
   assert.equal((await fetch(origin + '/', { method: 'POST' })).status, 405);

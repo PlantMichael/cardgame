@@ -2,7 +2,7 @@
 
 ## What's Working
 
-- The public `cardgame` website is implemented in `website/`: home and faction introduction, a source-checked rulebook, and a searchable glossary built from `data/keywords.json`. Vercel composes these pages with the existing unmodified Godot export at `/play/`; see `website/README.md` for build, preview and verification. Hosted rollout must be confirmed on the deployment produced by the website commit.
+- The public `cardgame` website is implemented in `website/`: home and faction introduction, a source-checked rulebook, and a searchable glossary built from `data/keywords.json`. `/play/` keeps the site header above a same-origin frame running the unchanged Godot export; learning links open separately. The site uses the supplied logo and original in-game card frames, illustrations, symbols and font. See `website/README.md` for build, preview and verification. Hosted rollout must be confirmed on each website deployment.
 
 - Creature and stratagem frame assets for all nine colors use dark name and description boxes (plus dark stat boxes on creature frames). Existing white base lettering, keyword highlights, and Orbitron font are shared across factions; the temporary teal backplates and font override have been removed.
 
