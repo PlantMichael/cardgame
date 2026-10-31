@@ -42,6 +42,31 @@ async function decksOf(playerId) {
   return result.rows.map(r => ({ name: r.name, faction_idx: r.faction_idx, card_ids: r.card_ids }));
 }
 
+// The account the site shows: visible ladder state (never the hidden
+// matchmaking rating), balances and link status. No credential material.
+async function accountSnapshotByToken(token) {
+  if (typeof token !== 'string' || token === '') return null;
+  const result = await pool.query(
+    `SELECT p.id, p.username, p.pfp_id, p.wins, p.losses,
+            p.rank_bracket, p.rank_in_legend, p.rank_legend_rating, p.rank_lp, p.ranked_win_streak,
+            p.ranked_wins, p.ranked_losses, p.currency, p.dust,
+            (p.google_sub IS NOT NULL) AS google_linked, (p.password_hash IS NOT NULL) AS has_password
+     FROM sessions s JOIN players p ON p.id = s.player_id WHERE s.token = $1`,
+    [token]
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    player_id: row.id, username: row.username, pfp_id: row.pfp_id,
+    wins: row.wins, losses: row.losses,
+    rank_bracket: row.rank_bracket, rank_in_legend: row.rank_in_legend,
+    rank_legend_rating: row.rank_legend_rating, rank_lp: row.rank_lp,
+    ranked_win_streak: row.ranked_win_streak, ranked_wins: row.ranked_wins, ranked_losses: row.ranked_losses,
+    currency: row.currency, dust: row.dust,
+    google_linked: row.google_linked, has_password: row.has_password,
+  };
+}
+
 async function ownedCardsOf(playerId) {
   const result = await pool.query(
     'SELECT card_id, quantity FROM owned_cards WHERE player_id = $1 ORDER BY card_id',
@@ -184,6 +209,8 @@ function hashPassword(password, salt) {
 }
 
 function verifyPassword(password, salt, expectedHash) {
+  // A Google-only player has no password credentials: nothing can match.
+  if (typeof salt !== 'string' || typeof expectedHash !== 'string' || typeof password !== 'string') return false;
   const hash = Buffer.from(hashPassword(password, salt), 'hex');
   const expected = Buffer.from(expectedHash, 'hex');
   return hash.length === expected.length && crypto.timingSafeEqual(hash, expected);
@@ -507,7 +534,7 @@ async function main() {
             const result = await pool.query(
               `SELECT p.id, p.username, p.wins, p.losses, p.rating,
                       p.rank_bracket, p.rank_in_legend, p.rank_legend_rating, p.rank_lp, p.ranked_win_streak,
-                      p.ranked_wins, p.ranked_losses
+                      p.ranked_wins, p.ranked_losses, p.pfp_id
                FROM sessions s JOIN players p ON p.id = s.player_id WHERE s.token = $1`,
               [token]
             );
@@ -521,6 +548,27 @@ async function main() {
           } catch (err) {
             console.error('resume_session error', err);
             sendTo(ws, { type: 'login_result', success: false, message: 'Server error, try again.' });
+          }
+          break;
+        }
+
+        // Everything the website banner and profile page show, from server
+        // truth, in one reply. `request_id` is echoed so the site can ignore a
+        // reply that arrives after a logout or an account change. An unknown
+        // or expired token is `unauthorized`; any other failure is not, so the
+        // site can retry instead of signing the player out.
+        case 'get_account_snapshot': {
+          const requestId = typeof msg.request_id === 'string' ? msg.request_id.slice(0, 64) : '';
+          try {
+            const snapshot = await accountSnapshotByToken(msg.token);
+            if (!snapshot) {
+              sendTo(ws, { type: 'account_snapshot_result', request_id: requestId, success: false, unauthorized: true, message: 'Session expired.' });
+              return;
+            }
+            sendTo(ws, { type: 'account_snapshot_result', request_id: requestId, success: true, account: snapshot });
+          } catch (err) {
+            console.error('get_account_snapshot error', err);
+            sendTo(ws, { type: 'account_snapshot_result', request_id: requestId, success: false, unauthorized: false, message: 'Server error, try again.' });
           }
           break;
         }
