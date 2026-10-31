@@ -23,7 +23,7 @@ test('built public pages, canonical keywords and unchanged Godot runtime work ov
   });
   const origin = `http://127.0.0.1:${server.address().port}`;
   const pages = [];
-  const routes = ['/', '/rulebook/', '/glossary/', '/play/'];
+  const routes = ['/', '/rulebook/', '/glossary/', '/play/', '/account/'];
   for (const route of routes) {
     const response = await fetch(origin + route);
     assert.equal(response.status, 200, route);
@@ -50,7 +50,21 @@ test('built public pages, canonical keywords and unchanged Godot runtime work ov
   }
   const redirect = await fetch(origin + '/play', { redirect: 'manual' });
   assert.equal(redirect.status, 308); assert.equal(redirect.headers.get('location'), '/play/');
-  assert.ok(pages[3].includes('src="/play/game.html"'), 'Play embeds the existing game below the navigation');
+  assert.ok(pages[3].includes('data-game-src="/play/game.html"'), 'Play mounts the existing game below the navigation once signed in');
+  assert.ok(!pages[3].includes('<iframe'), 'the game is mounted by the page after the account is established');
+  for (const html of pages) {
+    assert.match(html, /<meta name="cg-relay" content="wss:\/\/[^"]+">/, 'every page knows the relay');
+    assert.ok(html.includes('data-account-slot'), 'the banner has an account slot');
+    assert.ok(html.includes('src="/account.js"'));
+  }
+  assert.ok(pages[4].includes('data-profile'), 'profile page');
+  assert.ok(!pages[3].includes('type="password"') && !pages[3].includes('Log out</'), 'no login form or logout control is baked into the page');
+  const portraits = JSON.parse(pages[3].match(/data-portraits>([^<]*)</)[1]);
+  assert.ok(portraits.length > 0);
+  for (const id of portraits) assert.equal((await fetch(`${origin}/media/pfps/${id}`)).status, 200, id);
+  for (const icon of ['ranks/01-orbital.png', 'ranks/10-universal.png', 'icons/glimmer.png', 'icons/cyllats.png']) {
+    assert.equal((await fetch(`${origin}/media/${icon}`)).status, 200, icon);
+  }
   assert.ok(pages[3].includes('Glossary (opens in a new tab)'), 'lookup navigation does not unload the game');
   const play = await fetch(origin + '/play/game.html');
   assert.equal(await play.text(), readFileSync(path.join(projectRoot, 'build/index.html'), 'utf8'));

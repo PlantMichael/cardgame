@@ -3,17 +3,21 @@ const slug = value => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^
 const arrow = '<span aria-hidden="true">↗</span>';
 const button = (label, href, secondary = false) => `<a class="button${secondary ? ' secondary' : ''}" href="${href}">${label} ${arrow}</a>`;
 
+// Set by renderPages: where the relay is and which portraits the game offers.
+let siteConfig = { relayUrl: '', portraits: [] };
+
 function shell(title, active, content, description) {
   const nav = [['Home', '/'], ['Rulebook', '/rulebook/'], ['Glossary', '/glossary/']];
   const playing = active === 'Play';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${title === 'Home' ? 'cardgame — Pick a faction. Make your move.' : `${title} — cardgame`}</title>
   <meta name="description" content="${escapeHtml(description)}"><meta name="theme-color" content="#101914">
-  <link rel="icon" href="/media/logo.png" type="image/png"><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+  <link rel="icon" href="/media/logo.png" type="image/png"><meta name="cg-relay" content="${escapeHtml(siteConfig.relayUrl)}"><link rel="stylesheet" href="/style.css"><script type="application/json" data-portraits>${JSON.stringify(siteConfig.portraits).replace(/</g, '\u003c')}</script><script src="/app.js" defer></script><script src="/account.js" defer></script></head>
   <body${playing ? ' class="play-page"' : ''}><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="wrap header-inner">
   <a class="brand" href="/" aria-label="cardgame home"><img src="/media/logo.png" width="42" height="42" alt="">cardgame<span class="brand-period">.</span></a>
   <nav aria-label="Main navigation">${nav.map(([label, href]) => `<a href="${href}" ${active === label ? 'aria-current="page"' : ''}${playing && label !== 'Home' ? ' target="_blank" rel="noopener" aria-label="' + label + ' (opens in a new tab)"' : ''}>${label}</a>`).join('')}</nav>
-  <a class="nav-play" href="${playing ? '#game' : '/play/'}"${playing ? ' aria-current="page"' : ''}>${playing ? 'Playing' : 'Play now'} <span aria-hidden="true">↗</span></a></div></header>
+  <div class="account-slot" data-account-slot aria-live="polite"><noscript><a class="account-link" href="/play/">Log in</a></noscript></div>
+  <a class="nav-play" href="${playing ? '#play-area' : '/play/'}"${playing ? ' aria-current="page"' : ''}>${playing ? 'Playing' : 'Play now'} <span aria-hidden="true">↗</span></a></div></header>
   <main id="main">${content}</main>
   ${playing ? '' : `<footer class="site-footer wrap"><a class="brand small" href="/">cardgame<span class="brand-period">.</span></a><p>Five factions. One battlefield.</p>
   <nav aria-label="Footer navigation"><a href="/rulebook/">Learn to play</a><a href="/glossary/">Keywords</a><a href="/play/">Enter the game ↗</a></nav><span class="footer-note">An evolving playtest. Cards and rules may change.</span></footer>`}</body></html>`;
@@ -84,7 +88,9 @@ function glossary(keywords) {
   <div class="glossary-bottom"><p>New to the battlefield? Start with the basics.</p><a class="text-link" href="/rulebook/">Read the rulebook ${arrow}</a></div></section>`, 'Search cardgame keyword definitions, including Guardian, Reinforce, Rummage, Pilot, Challenge, and Colossal.');
 }
 
-export function renderPages({ featured, keywords }) {
+export function renderPages({ featured, keywords, relayUrl = '', portraits = [] }) {
+  siteConfig = { relayUrl, portraits };
   return { 'index.html': home(featured), 'rulebook/index.html': rulebook(featured), 'glossary/index.html': glossary(keywords),
-    'play/index.html': shell('Play', 'Play', '<iframe id="game" class="game-window" title="cardgame game window" src="/play/game.html" allow="fullscreen" allowfullscreen></iframe>', 'Play cardgame with the site navigation available above the game.') };
+    'play/index.html': shell('Play', 'Play', '<div id="play-area" class="game-mount" data-game-mount data-game-src="/play/game.html"><div class="game-message"><noscript><p>cardgame needs JavaScript to log you in and run the game.</p></noscript></div></div>', 'Play cardgame with the site navigation available above the game.'),
+    'account/index.html': shell('Account', 'Account', '<section class="wrap profile-page" data-profile><p class="profile-message"><noscript>Your profile needs JavaScript. </noscript>Loading your account…</p></section>', 'Your cardgame account: rank, balances, profile picture and sign-in methods.') };
 }
