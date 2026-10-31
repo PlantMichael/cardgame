@@ -124,6 +124,13 @@ test('relay: account snapshot, resume keeps the portrait, Google-only rows refus
     ws.send(JSON.stringify(message));
   });
 
+  // Without GOOGLE_CLIENT_ID and SITE_ORIGINS the relay says so and password access is untouched.
+  const config = await ask({ type: 'google_config' }, 'google_config_result');
+  assert.deepEqual(config, { type: 'google_config_result', available: false });
+  const challenge = await ask({ type: 'google_challenge', purpose: 'signin' }, 'google_challenge_result');
+  assert.equal(challenge.success, false);
+  assert.equal(challenge.code, 'unavailable');
+
   // A Google-only player cannot be signed into with any password, including empty.
   for (const password of ['', 'anything', 'x'.repeat(200)]) {
     const refused = await ask({ type: 'login', username: 'g_only', password }, 'login_result');

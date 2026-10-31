@@ -6,6 +6,7 @@ const path = require('path');
 const { initLegacySchema } = require('./schema_legacy');
 const { normalizeAIRecord } = require('./ranked_ai_record');
 const { createRelayServer } = require('./card_winrates');
+const { createGoogleAuthFromEnv } = require('./google_auth');
 const PORT = process.env.PORT || 8080;
 
 // Railway injects DATABASE_URL automatically once a Postgres plugin is
@@ -181,6 +182,8 @@ const { nextRankState, nextElo } = require('./ladder');
 // Off unless RANKED_AUTHORITATIVE=1; null means ranked works exactly as before.
 const { Authoritative, isEnabled: authoritativeEnabled } = require('./authoritative/relay_wire');
 let auth = null;
+// Google sign-in for the website (see google_auth.js); null until main() builds it.
+let google = null;
 
 // --- Auth helpers ---------------------------------------------------------
 
@@ -433,8 +436,14 @@ async function main() {
   }
 
   const { server, wss } = createRelayServer({ pool });
+  google = createGoogleAuthFromEnv({
+    pool, sendTo, makeToken, usernameRe: USERNAME_RE, profileOf, decksOf, accountSnapshotByToken,
+  });
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
+    // The browser page that opened this socket. Native clients send no Origin;
+    // only the website's exact configured origins may use Google messages.
+    ws.siteOrigin = typeof req.headers.origin === 'string' ? req.headers.origin : '';
     ws.isAlive = true;
     ws.on('pong', () => { ws.isAlive = true; });
 
@@ -466,6 +475,11 @@ async function main() {
         } catch (err) {
           console.error('match message error', err);
         }
+        return;
+      }
+
+      if (google && google.handles(msg.type)) {
+        await google.handle(ws, msg);
         return;
       }
 
@@ -1098,6 +1112,7 @@ async function main() {
 }
 
 function _handleDisconnect(ws) {
+  if (google) google.onClose(ws);
   rankedQueue.delete(ws);
   if (auth) auth.onClose(ws);
   campaignQueue.delete(ws);
