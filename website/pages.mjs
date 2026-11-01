@@ -4,15 +4,15 @@ const arrow = '<span aria-hidden="true">↗</span>';
 const button = (label, href, secondary = false) => `<a class="button${secondary ? ' secondary' : ''}" href="${href}"><span>${label}</span></a>`;
 
 // Set by renderPages: where the relay is and which portraits the game offers.
-let siteConfig = { relayUrl: '', portraits: [] };
+let siteConfig = { relayUrl: '', portraits: [], catalogOrigin: '' };
 
 function shell(title, active, content, description) {
-  const nav = [['Home', '/'], ['Rulebook', '/rulebook/'], ['Glossary', '/glossary/']];
+  const nav = [['Home', '/'], ['Rulebook', '/rulebook/'], ['Glossary', '/glossary/'], ['Stats', '/stats/']];
   const playing = active === 'Play';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${title === 'Home' ? 'cardgame — Space-age card battles in your browser' : `${title} — cardgame`}</title>
   <meta name="description" content="${escapeHtml(description)}"><meta name="theme-color" content="#060814">
-  <link rel="icon" href="/media/logo.png" type="image/png"><meta name="cg-relay" content="${escapeHtml(siteConfig.relayUrl)}"><link rel="stylesheet" href="/style.css"><script type="application/json" data-portraits>${JSON.stringify(siteConfig.portraits).replace(/</g, '\\u003c')}</script><script src="/app.js" defer></script><script src="/account.js" defer></script></head>
+  <link rel="icon" href="/media/logo.png" type="image/png"><meta name="cg-relay" content="${escapeHtml(siteConfig.relayUrl)}"><link rel="stylesheet" href="/style.css"><script type="application/json" data-portraits>${JSON.stringify(siteConfig.portraits).replace(/</g, '\\u003c')}</script><script src="/app.js" defer></script><script src="/account.js" defer></script>${active === 'Stats' ? `<meta name="cg-catalog" content="${escapeHtml(siteConfig.catalogOrigin)}"><script type="module" src="/stats.js"></script>` : ''}</head>
   <body${playing ? ' class="play-page"' : ''}><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="wrap header-inner">
   <a class="brand" href="/" aria-label="cardgame home"><img src="/media/logo.png" width="40" height="40" alt=""><span class="brand-word">CARD<b>GAME</b></span></a>
   <nav aria-label="Main navigation">${nav.map(([label, href]) => `<a href="${href}" ${active === label ? 'aria-current="page"' : ''}${playing && label !== 'Home' ? ' target="_blank" rel="noopener" aria-label="' + label + ' (opens in a new tab)"' : ''}>${label}</a>`).join('')}</nav>
@@ -89,9 +89,10 @@ function glossary(keywords) {
   <div class="glossary-bottom"><p>New to the battlefield? Start with the basics.</p><a class="text-link" href="/rulebook/">Read the rulebook ${arrow}</a></div></section>`, 'Search cardgame keyword definitions, including Guardian, Reinforce, Rummage, Pilot, Challenge, and Colossal.');
 }
 
-export function renderPages({ featured, keywords, relayUrl = '', portraits = [], cardCount = 0 }) {
-  siteConfig = { relayUrl, portraits };
+export function renderPages({ featured, keywords, relayUrl = '', portraits = [], cardCount = 0, catalogOrigin = '' }) {
+  siteConfig = { relayUrl, portraits, catalogOrigin };
   return { 'index.html': home(featured, cardCount), 'rulebook/index.html': rulebook(featured), 'glossary/index.html': glossary(keywords),
     'play/index.html': shell('Play', 'Play', '<div id="play-area" class="game-mount" data-game-mount data-game-src="/play/game.html"><div class="game-message"><noscript><p>cardgame needs JavaScript to log you in and run the game.</p></noscript></div></div>', 'Play cardgame with the site navigation available above the game.'),
+    'stats/index.html': shell('Stats', 'Stats', '<div class="wrap stats-page" data-stats-app><p class="state"><noscript>The statistics pages need JavaScript. </noscript>Loading…</p></div>', 'Exact-deck results from cardgame playtests: win rates, opponents and matchups, with sample sizes.'),
     'account/index.html': shell('Account', 'Account', '<section class="wrap profile-page" data-profile><p class="profile-message"><noscript>Your profile needs JavaScript. </noscript>Loading your account…</p></section>', 'Your cardgame account: rank, balances, profile picture and sign-in methods.') };
 }

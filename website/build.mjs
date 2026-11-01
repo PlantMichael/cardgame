@@ -2,6 +2,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { renderPages } from './pages.mjs';
+import { buildFixtureSnapshot } from './tools/stats-fixture.mjs';
 
 export const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const outputRoot = path.join(projectRoot, 'website-dist');
@@ -12,8 +13,9 @@ const cardAssetNames = ['card-green.png', 'card-crimson.png', 'card-teal.png',
 
 // Compose the website around the existing export. Never modify or regenerate it.
 export const defaultRelayUrl = 'wss://cardgame-relay-production.up.railway.app';
+export const defaultCatalogOrigin = 'https://cardgame-catalog-production.up.railway.app';
 
-export function buildSite(destination = outputRoot, { relayUrl = process.env.CARDGAME_RELAY_URL || defaultRelayUrl } = {}) {
+export function buildSite(destination = outputRoot, { relayUrl = process.env.CARDGAME_RELAY_URL || defaultRelayUrl, catalogOrigin = process.env.CARDGAME_CATALOG_ORIGIN || defaultCatalogOrigin } = {}) {
   const allCards = ['green', 'crimson', 'black', 'orange', 'teal', 'generic']
     .flatMap(f => JSON.parse(readFileSync(path.join(projectRoot, `data/cards/${f}.json`), 'utf8')));
   const featured = featuredIds.map(id => {
@@ -27,7 +29,7 @@ export function buildSite(destination = outputRoot, { relayUrl = process.env.CAR
   // Portraits the game offers (small copies; see website/tools/make-thumbs.py). The id is the filename the game stores.
   const portraits = readdirSync(path.join(projectRoot, 'website/assets/pfps')).filter(n => n.endsWith('.png')).sort();
   const cardCount = JSON.parse(readFileSync(path.join(projectRoot, 'catalog/public/data/cards.json'), 'utf8')).cards.filter(c => c.collectible).length;
-  const pages = renderPages({ featured, keywords, relayUrl, portraits, cardCount });
+  const pages = renderPages({ featured, keywords, relayUrl, portraits, cardCount, catalogOrigin });
   const gameRoot = path.join(projectRoot, 'build');
   for (const name of ['index.html', 'index.js', 'index.wasm', 'index.pck']) {
     if (!existsSync(path.join(gameRoot, name))) throw new Error(`Export the Web game first: missing build/${name}`);
@@ -41,7 +43,12 @@ export function buildSite(destination = outputRoot, { relayUrl = process.env.CAR
   // The site output is not Godot content: keep the editor from importing the copies.
   writeFileSync(path.join(destination, '.gdignore'), '');
   for (const folder of ['ranks', 'pfps', 'icons', 'art']) cpSync(path.join(projectRoot, 'website/assets', folder), path.join(destination, 'media', folder), { recursive: true });
-  for (const name of ['style.css', 'app.js', 'account.js']) cpSync(path.join(projectRoot, 'website', name), path.join(destination, name));
+  // Layout preview for /stats/?demo=1: synthetic results, labelled as such on screen.
+  const printed = JSON.parse(readFileSync(path.join(projectRoot, 'catalog/public/data/cards.json'), 'utf8'));
+  const { _keys, ...demoSnapshot } = buildFixtureSnapshot(printed);
+  writeFileSync(path.join(destination, 'media/stats-demo.json'), JSON.stringify(demoSnapshot));
+  writeFileSync(path.join(destination, 'media/stats-demo-cards.json'), JSON.stringify(printed));
+  for (const name of ['style.css', 'app.js', 'account.js', 'stats.js', 'stats-core.mjs']) cpSync(path.join(projectRoot, 'website', name), path.join(destination, name));
   cpSync(path.join(projectRoot, 'assets/cardgame/Ranks/cardgame-logo.png'), path.join(destination, 'media/logo.png'));
   cpSync(path.join(projectRoot, 'assets/fonts/Orbitron.ttf'), path.join(destination, 'media/Orbitron.ttf'));
   for (const name of cardAssetNames) cpSync(path.join(projectRoot, 'assets/card_assets', name), path.join(destination, 'media', name));
