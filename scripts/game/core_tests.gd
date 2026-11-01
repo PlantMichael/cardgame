@@ -1994,6 +1994,42 @@ static func _test_hand_identity() -> void:
 	var loose_again := CardData.new()
 	_check("a card with no uid falls back to the object itself", Board.hand_key(loose) == Board.hand_key(loose) and Board.hand_key(loose) != Board.hand_key(loose_again))
 
+## A played card that never lands must not stay on the table. Uses a real Board
+## node (no match) and stand-in Card nodes.
+static func _test_stray_ghost_cleanup() -> void:
+	print("[stray ghosts]")
+	# Not added to the tree (this runs during startup): the two zones the code
+	# keys on are stood in by plain containers.
+	var board: Board = load("res://scenes/game/Board.tscn").instantiate()
+	board.player_board_zone = HBoxContainer.new()
+	board.opponent_board_zone = HBoxContainer.new()
+	var card_scene: PackedScene = load("res://scenes/cards/Card.tscn")
+
+	var ghost: Card = card_scene.instantiate()
+	board.add_child(ghost)
+	ghost.set_meta(&"slam_ghost", true)
+	board._active_player_ghost = ghost
+	board._card_animation_playing = true
+	board._pending_slam_ghost_by_zone[board.player_board_zone] = ghost
+	board.release_unclaimed_ghost()
+	_check("an unclaimed player ghost is released", ghost.is_queued_for_deletion() and board._pending_slam_ghost_by_zone.is_empty())
+	_check("and the player gets their input back", not board._card_animation_playing and board._active_player_ghost == null)
+
+	var orphan: Card = card_scene.instantiate()
+	board.add_child(orphan)
+	orphan.set_meta(&"slam_ghost", true)
+	board._slam_animating_zones[board.player_board_zone] = true
+	_eq("a landing in progress is never swept", board.sweep_stray_ghosts(), 0)
+	board._slam_animating_zones.clear()
+	_eq("an orphaned ghost is swept once nothing is animating", board.sweep_stray_ghosts(), 1)
+	_check("the swept ghost is freed", orphan.is_queued_for_deletion())
+
+	var plain: Card = card_scene.instantiate()
+	board.add_child(plain)
+	_eq("an ordinary card is never swept", board.sweep_stray_ghosts(), 0)
+	for node in [board.player_board_zone, board.opponent_board_zone, ghost, orphan, plain, board]:
+		node.free()
+
 static func _test_ranked_report_retry() -> void:
 	print("[ranked report retry]")
 	var saved_state := [Auth.is_logged_in, Auth.token, Auth.username]
@@ -2170,6 +2206,7 @@ static func run() -> int:
 	_test_net_match_routing()
 	_test_ranked_report_retry()
 	_test_hand_identity()
+	_test_stray_ghost_cleanup()
 	_test_match_recorder()
 	_test_player_views(card_id)
 	print("CORE TESTS: %d checks, %d failed" % [_checks, _failures])

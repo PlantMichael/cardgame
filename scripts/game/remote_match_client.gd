@@ -89,9 +89,9 @@ func _send_join() -> void:
 ## One command in flight at a time: the board waits for the server's answer
 ## instead of guessing the outcome, so what is on screen is always what the
 ## server has accepted.
-func _send_command(cmd: Dictionary) -> void:
+func _send_command(cmd: Dictionary) -> bool:
 	if _awaiting_ack or _game_over_shown or _reconnecting:
-		return
+		return false
 	_client_seq += 1
 	_awaiting_ack = true
 	_ack_token += 1
@@ -103,16 +103,23 @@ func _send_command(cmd: Dictionary) -> void:
 			_awaiting_ack = false
 			if is_instance_valid(board):
 				board.refresh()
+				board.release_unclaimed_ghost()
 	)
+	return true
 
 func _my_turn() -> bool:
 	return game_state != null and game_state.active_player_id == _my_id and game_state.mulligan_pending.is_empty()
 
 func _on_play_card(card_data: CardData, at_index: int) -> void:
 	if card_data == null or not _my_turn():
+		board.release_unclaimed_ghost()
 		board.refresh()
 		return
-	_send_command({"type": "play_creature", "card_uid": card_data.uid, "at_index": at_index})
+	# The dropped card is already flying toward the board; if the command cannot go
+	# out, take it back instead of leaving it on the table.
+	if not _send_command({"type": "play_creature", "card_uid": card_data.uid, "at_index": at_index}):
+		board.release_unclaimed_ghost()
+		board.refresh()
 
 func _on_play_stratagem(card_data: CardData, target_minion: Minion, target_player_id: String) -> void:
 	if card_data == null or not _my_turn():
@@ -194,6 +201,7 @@ func _pump() -> void:
 func _on_error(msg: Dictionary) -> void:
 	_awaiting_ack = false
 	_refused = true
+	board.release_unclaimed_ghost()
 	# The server's reasons are deliberately coarse. Whatever it was, put the board
 	# back to what the server last said rather than what was attempted.
 	if str(msg.get("reason", "")) == "unknown_match":
@@ -220,11 +228,26 @@ func _on_view(msg: Dictionary) -> void:
 		board.opponent_hero.player_id = _opp_id
 
 	# Attack/challenge animations need the creatures where they stood BEFORE
-	# the action resolved, so they play against the old board.
+	# the action resolved, so they play against the old board. A play by the
+	# opponent is revealed and its stand-in card queued now, so the creature flies
+	# in from their hand when the board is rebuilt just below.
 	if not first:
 		for e in events:
-			if str(e.get("type", "")) == "attack":
-				await _present_attack(e)
+			match str(e.get("type", "")):
+				"attack":
+					await _present_attack(e)
+				"challenge":
+					if board.find_card_node(str(e.get("challenger", ""))) != null and board.find_card_node(str(e.get("target", ""))) != null:
+						e["animated"] = true
+						await board.animate_creature_challenge(str(e.get("challenger", "")), str(e.get("owner", "")), str(e.get("target", "")))
+				"play":
+					if str(e.get("owner", "")) != _my_id:
+						var played := CardDatabase.get_card(str(e.get("card_id", "")))
+						if played != null:
+							e["announced"] = true
+							await board.announce_card(played)
+							if played.occupies_board():
+								board.play_opponent_card_with_slam(played)
 
 	var was_my_turn := game_state != null and _my_turn()
 	game_state = GameState.from_net_dict(msg["view"], _my_id)
@@ -233,6 +256,12 @@ func _on_view(msg: Dictionary) -> void:
 	else:
 		board.game_state = game_state
 		board.refresh()
+		# A card the player dropped that the new board did not claim is cleared.
+		board.release_unclaimed_ghost()
+		# Let every card that just landed finish before the rest of the events
+		# play, the way a local game does.
+		await board.await_slam_landed(board.player_board_zone)
+		await board.await_slam_landed(board.opponent_board_zone)
 
 	if first:
 		_have_view = true
@@ -245,6 +274,7 @@ func _on_view(msg: Dictionary) -> void:
 		_announce_turn_change(was_my_turn)
 
 	_refresh_status()
+	board.sweep_stray_ghosts()
 	if game_state.current_phase == GameState.Phase.GAME_OVER:
 		_awaiting_ack = false
 		_settled.emit()
@@ -273,7 +303,7 @@ func _present_events(events: Array) -> void:
 				if card != null:
 					var mine := str(e.get("owner", "")) == _my_id
 					board.log_action(("You played %s" if mine else "Opponent played %s") % card.card_name)
-					if not mine:
+					if not mine and not bool(e.get("announced", false)):
 						await board.announce_card(card)
 			"attack":
 				var mine := str(e.get("owner", "")) == _my_id

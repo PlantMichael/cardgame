@@ -1470,6 +1470,7 @@ func _board_insert_index_for_x(zone: HBoxContainer, x: float) -> int:
 ## exactly where it's flying to once the real card exists.
 func _play_card_with_slam(card: Card, card_data_to_play: CardData, at_index: int) -> void:
 	_card_animation_playing = true
+	card.set_meta(&"slam_ghost", true)
 	_active_player_ghost = card
 	_pending_slam_ghost_by_zone[player_board_zone] = card
 	call_deferred("_release_hand_slot_and_emit_play", card, card_data_to_play, at_index)
@@ -1500,8 +1501,15 @@ func _release_hand_slot_and_emit_play(card: Card, card_data_to_play: CardData, a
 ## zone slot, not by CardData identity, so it's fine if the played creature's
 ## own .data later changes (an on-play transform) before that happens.
 func play_opponent_card_with_slam(card_data: CardData) -> void:
+	# A second request for the same zone (a play whose card never landed) must not
+	# orphan the first ghost.
+	if _pending_slam_ghost_by_zone.has(opponent_board_zone):
+		var stale: Card = _pending_slam_ghost_by_zone[opponent_board_zone]
+		if is_instance_valid(stale):
+			stale.queue_free()
 	var ghost := CardScene.instantiate()
 	add_child(ghost)
+	ghost.set_meta(&"slam_ghost", true)
 	ghost.setup(card_data)
 	ghost.scale = Vector2.ZERO
 	ghost.global_position = opponent_hand_zone.get_global_rect().get_center()
@@ -1540,11 +1548,51 @@ func await_slam_landed(zone: Container) -> void:
 	while _slam_animating_zones.get(zone, false):
 		await get_tree().process_frame
 
-func _run_slam_landing(ghost: Card, real_card: Card, wrapper: Control, target_scale: Vector2, zone: Container) -> void:
-	if is_instance_valid(zone):
-		await zone.sort_children
-	else:
+## Waits for `zone` to finish its next layout pass, but never longer than
+## `max_sec`: a layout that does not re-sort (a second refresh landed in the same
+## frame) used to leave the flying card waiting forever.
+func _await_zone_sorted(zone: Container, max_sec: float = 0.5) -> void:
+	if not is_instance_valid(zone):
 		await get_tree().process_frame
+		return
+	var state := {"done": false}
+	zone.sort_children.connect(func(): state["done"] = true, CONNECT_ONE_SHOT)
+	var deadline := Time.get_ticks_msec() + int(max_sec * 1000.0)
+	while not state["done"] and Time.get_ticks_msec() < deadline:
+		await get_tree().process_frame
+
+## The player's flying card was never claimed by a board card (the server
+## refused the play, answered with no new creature, or the send never happened):
+## remove it and give the player their turn back. A card that did land is not
+## touched. Safe to call at any time.
+func release_unclaimed_ghost() -> void:
+	var ghost: Card = _pending_slam_ghost_by_zone.get(player_board_zone)
+	if ghost == null:
+		return
+	_pending_slam_ghost_by_zone.erase(player_board_zone)
+	if is_instance_valid(ghost):
+		ghost.queue_free()
+	if ghost == _active_player_ghost:
+		_active_player_ghost = null
+	_card_animation_playing = false
+	if game_state != null:
+		refresh()
+
+## Frees any flying stand-in card that nothing is animating or waiting for. A
+## leftover one is a full copy of a played card stuck on the table; this is the
+## backstop for every way one could be orphaned. Call when no landing is running.
+func sweep_stray_ghosts() -> int:
+	if not _slam_animating_zones.is_empty() or not _pending_slam_ghost_by_zone.is_empty():
+		return 0
+	var freed := 0
+	for child in get_children():
+		if child is Card and child.has_meta(&"slam_ghost") and child != _active_player_ghost and not child.is_queued_for_deletion():
+			child.queue_free()
+			freed += 1
+	return freed
+
+func _run_slam_landing(ghost: Card, real_card: Card, wrapper: Control, target_scale: Vector2, zone: Container) -> void:
+	await _await_zone_sorted(zone)
 	if not is_instance_valid(ghost):
 		return
 	if not is_instance_valid(real_card) or not is_instance_valid(wrapper):
@@ -1605,6 +1653,13 @@ func _finish_play_stratagem(card: Card, card_data_to_play: CardData, target_mini
 	action_play_stratagem.emit(card_data_to_play, target_minion, target_player_id)
 # --- Refresh ---
 
+## What makes a hand card "the same card" between refreshes. A match played over
+## the network rebuilds the whole state from every server view, which creates new
+## CardData objects each time; keying by object made every hand card look newly
+## drawn after every action and replayed the draw animation. The uid is stable.
+static func hand_key(card_data: CardData) -> Variant:
+	return card_data.uid if not card_data.uid.is_empty() else card_data
+
 ## Reconciles player_hand_zone against game_state.player.hand instead of
 ## destroying and recreating every hand card on every refresh() - refresh()
 ## fires on nearly every action anywhere in a turn, including the AI's, so a
@@ -1615,13 +1670,6 @@ func _finish_play_stratagem(card: Card, card_data_to_play: CardData, target_mini
 ## identity is a stable per-copy key across refreshes. Opponent's face-down
 ## hand backs are cheap single-panel sprites and stay a simple full rebuild
 ## below.
-## What makes a hand card "the same card" between refreshes. A match played over
-## the network rebuilds the whole state from every server view, which creates new
-## CardData objects each time; keying by object made every hand card look newly
-## drawn after every action and replayed the draw animation. The uid is stable.
-static func hand_key(card_data: CardData) -> Variant:
-	return card_data.uid if not card_data.uid.is_empty() else card_data
-
 func _refresh_hand() -> void:
 	var hand: Array[CardData] = game_state.player.hand
 

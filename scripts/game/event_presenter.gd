@@ -62,4 +62,8 @@ static func _present_challenge(e: Dictionary, board: Board, local_id: String) ->
 	board.log_action("%s %s challenged %s" % [
 		_owner_word(owner_id, local_id), str(e.get("challenger_name", "")),
 		_target_phrase({"target_name": e.get("target_name", ""), "target_owner": e.get("target_owner", "")}, local_id)])
+	# A controller that already played this one against the board it needed (before
+	# a refresh removed a creature) marks the event so it is not played twice.
+	if bool(e.get("animated", false)):
+		return
 	await board.animate_creature_challenge(str(e.get("challenger", "")), owner_id, str(e.get("target", "")))
