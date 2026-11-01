@@ -2004,6 +2004,16 @@ static func _test_ranked_report_retry() -> void:
 	Net._handle_incoming({"type": "ranked_result_ack", "success": true, "rank_bracket": 1})
 	_eq("an acknowledgement clears the report", Auth._pending_ranked.size(), 0)
 	Net.ranked_result_received.disconnect(on_shown)
+	# A report kept for another account must not block this account's result.
+	Auth._pending_ranked.clear()
+	Auth._inflight_match_id = ""
+	Auth._pending_ranked.append({"username": "someone_else", "won": true, "opponent_rating": -1, "match_id": "ai_old", "ai_match": {}})
+	Auth.report_ranked_result(true, -1, "ai_mine", {})
+	_eq("this account's own report is the one picked", str(Auth._next_report_for_account().get("match_id", "")), "ai_mine")
+	Auth._inflight_match_id = "ai_mine"
+	Net._handle_incoming({"type": "ranked_result_ack", "success": true, "rank_bracket": 1})
+	_eq("its acknowledgement removes only that report", Auth._pending_ranked.size(), 1)
+	_eq("and the other account's report is kept for that account", str(Auth._pending_ranked[0].get("match_id", "")), "ai_old")
 	Auth.is_logged_in = saved_state[0]
 	Auth.token = saved_state[1]
 	Auth.username = saved_state[2]

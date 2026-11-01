@@ -47,6 +47,14 @@ signal _queue_updated
 func connect_to_relay() -> void:
 	_ws.connect_to_url(_relay_url())
 
+## A relay redeploy or a dropped connection closes the socket and nothing else
+## reopens it while a match is running. Callers that must get a message out
+## (a ranked result) ask for the socket back; a socket that is already open or
+## opening is left alone.
+func reconnect_if_closed() -> void:
+	if _ws.get_ready_state() == WebSocketPeer.STATE_CLOSED:
+		connect_to_relay()
+
 ## The browser game uses the relay the website page says to (its cg-relay meta
 ## tag, the same one the page itself talks to), so a test or staging site and its
 ## embedded game always share a relay. Anything else falls back to the constant.
