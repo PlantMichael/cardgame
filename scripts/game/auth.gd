@@ -62,6 +62,8 @@ var _saved_token: String = ""
 ## server answers; the server settles each match id once, so a repeat is safe.
 var _pending_ranked: Array = []
 var _report_sent_at_msec: int = -1
+## match_id of the report currently waiting for the server's answer.
+var _inflight_match_id: String = ""
 var _retry_timer: Timer
 
 func _ready() -> void:
@@ -120,20 +122,34 @@ func report_ranked_result(won: bool, opponent_rating: int = -1, match_id: String
 	_save_pending_ranked()
 	_flush_pending_ranked()
 
+## The oldest unacknowledged report belonging to the signed-in account. A report
+## kept for a different account must not hold up this account's results.
+func _next_report_for_account() -> Dictionary:
+	for report in _pending_ranked:
+		if str(report.get("username", "")) == username:
+			return report
+	return {}
+
 ## Sends the oldest unacknowledged report for the signed-in account, and sends
-## it again if the server has been silent for REPORT_RETRY_MSEC.
+## it again if the server has been silent for REPORT_RETRY_MSEC. If the socket
+## is closed (a relay redeploy, a dropped connection) it is reopened first: the
+## session token is stored on the server, so the report needs no new login.
 func _flush_pending_ranked() -> void:
-	if _pending_ranked.is_empty() or not is_logged_in or token.is_empty() or not Net.is_open():
+	if _pending_ranked.is_empty() or not is_logged_in or token.is_empty():
 		return
-	var report: Dictionary = _pending_ranked[0]
-	if str(report.get("username", "")) != username:
+	if not Net.is_open():
+		Net.reconnect_if_closed()
+		return
+	var report := _next_report_for_account()
+	if report.is_empty():
 		return
 	var now := Time.get_ticks_msec()
-	if _report_sent_at_msec >= 0 and now - _report_sent_at_msec < REPORT_RETRY_MSEC:
+	if _report_sent_at_msec >= 0 and _inflight_match_id == str(report["match_id"]) and now - _report_sent_at_msec < REPORT_RETRY_MSEC:
 		return
 	if Net.report_ranked_result(token, bool(report["won"]), int(report["opponent_rating"]),
 			str(report["match_id"]), report["ai_match"]):
 		_report_sent_at_msec = now
+		_inflight_match_id = str(report["match_id"])
 
 func _on_ranked_report_acked() -> void:
 	_finish_head_report()
@@ -148,9 +164,18 @@ func _on_ranked_report_failed(message: String) -> void:
 	_finish_head_report()
 
 func _finish_head_report() -> void:
-	if _pending_ranked.is_empty():
+	# The answered report is the one that was sent; fall back to the account's
+	# oldest if the server answers something this session did not send.
+	var done := -1
+	for i in _pending_ranked.size():
+		var entry: Dictionary = _pending_ranked[i]
+		if str(entry.get("username", "")) == username and (_inflight_match_id.is_empty() or str(entry.get("match_id", "")) == _inflight_match_id):
+			done = i
+			break
+	if done < 0:
 		return
-	_pending_ranked.remove_at(0)
+	_pending_ranked.remove_at(done)
+	_inflight_match_id = ""
 	_report_sent_at_msec = -1
 	_save_pending_ranked()
 	_flush_pending_ranked()
