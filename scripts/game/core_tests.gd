@@ -1979,6 +1979,21 @@ static func _test_net_match_routing() -> void:
 ## A ranked result reported while the socket is down used to vanish, leaving
 ## "Updating rank..." up forever and the ladder unmoved. Auth now keeps each
 ## report until the server acknowledges it.
+## A card in hand keeps its identity when the state is rebuilt from a server view.
+static func _test_hand_identity() -> void:
+	print("[hand identity]")
+	var a := CardData.new()
+	a.uid = "u1"
+	var a_again := CardData.new()
+	a_again.uid = "u1"
+	var b := CardData.new()
+	b.uid = "u2"
+	_check("a rebuilt copy of the same card has the same key", Board.hand_key(a) == Board.hand_key(a_again))
+	_check("a different card has a different key", Board.hand_key(a) != Board.hand_key(b))
+	var loose := CardData.new()
+	var loose_again := CardData.new()
+	_check("a card with no uid falls back to the object itself", Board.hand_key(loose) == Board.hand_key(loose) and Board.hand_key(loose) != Board.hand_key(loose_again))
+
 static func _test_ranked_report_retry() -> void:
 	print("[ranked report retry]")
 	var saved_state := [Auth.is_logged_in, Auth.token, Auth.username]
@@ -2154,6 +2169,7 @@ static func run() -> int:
 	_test_controller_purity()
 	_test_net_match_routing()
 	_test_ranked_report_retry()
+	_test_hand_identity()
 	_test_match_recorder()
 	_test_player_views(card_id)
 	print("CORE TESTS: %d checks, %d failed" % [_checks, _failures])

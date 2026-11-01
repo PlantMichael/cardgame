@@ -1615,6 +1615,13 @@ func _finish_play_stratagem(card: Card, card_data_to_play: CardData, target_mini
 ## identity is a stable per-copy key across refreshes. Opponent's face-down
 ## hand backs are cheap single-panel sprites and stay a simple full rebuild
 ## below.
+## What makes a hand card "the same card" between refreshes. A match played over
+## the network rebuilds the whole state from every server view, which creates new
+## CardData objects each time; keying by object made every hand card look newly
+## drawn after every action and replayed the draw animation. The uid is stable.
+static func hand_key(card_data: CardData) -> Variant:
+	return card_data.uid if not card_data.uid.is_empty() else card_data
+
 func _refresh_hand() -> void:
 	var hand: Array[CardData] = game_state.player.hand
 
@@ -1636,13 +1643,13 @@ func _refresh_hand() -> void:
 	for wrapper in player_hand_zone.get_children():
 		var existing_card := _get_card_child(wrapper)
 		if existing_card:
-			existing[existing_card.data] = wrapper
+			existing[hand_key(existing_card.data)] = wrapper
 
 	var kept: Dictionary = {}
 	var newly_drawn: Array[Card] = []
 	for i in hand.size():
 		var card_data: CardData = hand[i]
-		var wrapper = existing.get(card_data)
+		var wrapper = existing.get(hand_key(card_data))
 		var card: Card
 		if wrapper:
 			card = _get_card_child(wrapper)
@@ -1664,11 +1671,11 @@ func _refresh_hand() -> void:
 		player_hand_zone.move_child(wrapper, i)
 		card.setup(card_data)
 		card.set_playable(game_state.player.can_play_card(card_data))
-		kept[card_data] = true
+		kept[hand_key(card_data)] = true
 
-	for card_data in existing:
-		if not kept.has(card_data):
-			var wrapper = existing[card_data]
+	for key in existing:
+		if not kept.has(key):
+			var wrapper = existing[key]
 			wrapper.hide()
 			wrapper.queue_free()
 			player_hand_zone.remove_child(wrapper)
