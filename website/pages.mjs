@@ -1,3 +1,4 @@
+import { TIERS, SUB_RANKS, LEGEND_TIERS, LP, LEGEND_STEP, DIVISION_COUNT, MATCH_SEARCH_SECONDS, REWARDS, exampleClimb } from './ranked-data.mjs';
 export const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const slug = value => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const arrow = '<span aria-hidden="true">↗</span>';
@@ -7,7 +8,7 @@ const button = (label, href, secondary = false) => `<a class="button${secondary 
 let siteConfig = { relayUrl: '', portraits: [], catalogOrigin: '' };
 
 function shell(title, active, content, description) {
-  const nav = [['Home', '/'], ['Rulebook', '/rulebook/'], ['Glossary', '/glossary/'], ['Stats', '/stats/']];
+  const nav = [['Home', '/'], ['Rulebook', '/rulebook/'], ['Ranked', '/ranked/'], ['Glossary', '/glossary/'], ['Stats', '/stats/']];
   const playing = active === 'Play';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${title === 'Home' ? 'cardgame — Space-age card battles in your browser' : `${title} — cardgame`}</title>
@@ -89,10 +90,36 @@ function glossary(keywords) {
   <div class="glossary-bottom"><p>New to the battlefield? Start with the basics.</p><a class="text-link" href="/rulebook/">Read the rulebook ${arrow}</a></div></section>`, 'Search cardgame keyword definitions, including Guardian, Reinforce, Rummage, Pilot, Challenge, and Colossal.');
 }
 
+
+function ranked() {
+  const climb = exampleClimb(3);
+  const tierRow = (tier, index) => `<li class="ladder-tier" style="--tier:${tier.color}" data-tier="${index}"><img src="/media/ranks/${tier.icon}.png" width="72" height="72" alt="">
+  <div class="tier-body"><h3>${tier.name}</h3><ol class="divisions" aria-label="${tier.name} divisions, highest first">${[...SUB_RANKS].reverse().map((sub) => {
+    const division = index * SUB_RANKS.length + SUB_RANKS.indexOf(sub);
+    return `<li data-division="${division}"><span class="division-name">${tier.name} ${sub}</span><span class="division-no">Division ${division + 1} of ${DIVISION_COUNT}</span></li>`;
+  }).join('')}</ol></div></li>`;
+  const legendRow = (tier, index) => `<li class="ladder-tier legend" style="--tier:${tier.color}" data-legend="${index}"><img src="/media/ranks/${tier.icon}.png" width="72" height="72" alt="">
+  <div class="tier-body"><h3>${tier.name}</h3><p class="band">${tier.to === null ? `Rating ${tier.from.toLocaleString('en')} and up` : `Rating ${tier.from.toLocaleString('en')}–${tier.to.toLocaleString('en')}`}</p></div></li>`;
+  return shell('Ranked', 'Ranked', `<section class="wrap page-heading"><span class="eyebrow">THE LADDER</span><h1>Climb the <em>ladder.</em></h1><p>Every ranked game moves you up or down a ladder of ${DIVISION_COUNT} divisions and three Legend bands. Here is exactly how it works, and every rung.</p></section>
+  <section class="wrap ranked-how" aria-labelledby="how-heading"><h2 id="how-heading" class="sr-only">How ranked works</h2><div class="how-grid">
+  <article class="how-card"><span class="how-no">01</span><h3>Play a ranked game</h3><p>Hit Ranked and the game searches for a human of similar skill for up to ${MATCH_SEARCH_SECONDS} seconds. If nobody is found you play a bot instead, so every search ends in a match. Bots always play at full strength, whatever your rank.</p></article>
+  <article class="how-card"><span class="how-no">02</span><h3>Earn Ladder Points</h3><p>A win is worth <strong>+${LP.win} LP</strong>. From your <strong>${LP.winStreakFrom}rd win in a row</strong>, every win is worth <strong>+${LP.winStreak} LP</strong> until you lose. A loss costs <strong>${LP.loss} LP</strong>.</p></article>
+  <article class="how-card"><span class="how-no">03</span><h3>Move up a division</h3><p>Each division holds <strong>${LP.perDivision} LP</strong>. Fill the bar and you move up, keeping any extra points. <strong>Losses never knock you down a division</strong>: your LP just stops at zero.</p></article>
+  <article class="how-card"><span class="how-no">04</span><h3>Reach Legend</h3><p>Win from Cosmic I and you enter Legend. There are no divisions there: your Legend rating goes <strong>up ${LEGEND_STEP}</strong> for a win and <strong>down ${LEGEND_STEP}</strong> for a loss, and Universal has no ceiling.</p></article></div>
+  <div class="ranked-notes"><div class="example" aria-label="Example"><h3>Example: a first division</h3><p>You start at 0 LP in Orbital III and win three games in a row.</p><ol>${climb.steps.map((s) => `<li>Win ${s.win}: +${s.gain} LP → <strong>${s.total} LP</strong></li>`).join('')}</ol><p>${climb.promoted ? `That passes ${LP.perDivision}, so you move up to Orbital II with <strong>${climb.carried} LP</strong> already banked.` : ''}</p></div>
+  <div class="example"><h3>What else to know</h3><ul><li>Rank rewards: <strong>${REWARDS.rankUpCyllats} Cyllats</strong> each time you reach a new division.</li><li>Bot games count for your rank. The hidden rating used to pair you with other players is only changed by games against humans.</li><li>Falling out of Legend takes a loss while your Legend rating is under ${LEGEND_STEP}: you drop back to Cosmic I.</li><li>Playtest numbers can change as the game is tuned.</li></ul></div></div></section>
+  <section class="wrap ladder-section" aria-labelledby="ladder-heading"><div class="section-top"><h2 id="ladder-heading">The whole ladder</h2><p class="ladder-you" data-ladder-you hidden></p></div>
+  <p class="ladder-intro">Top of the ladder first. Within each tier, <strong>III is the lowest division and I is the highest</strong>. Every division takes ${LP.perDivision} LP to clear.</p>
+  <ol class="ladder" data-ladder aria-label="Every rank, highest first"><li class="ladder-group"><h3 class="group-title">Legend <small>rating, no divisions</small></h3><ol class="ladder-tiers">${[...LEGEND_TIERS].reverse().map((t) => legendRow(t, LEGEND_TIERS.indexOf(t))).join('')}</ol></li>
+  <li class="ladder-group"><h3 class="group-title">Divisions <small>${LP.perDivision} LP each</small></h3><ol class="ladder-tiers">${[...TIERS].reverse().map((t) => tierRow(t, TIERS.indexOf(t))).join('')}</ol></li></ol></section>
+  <section class="final-cta"><div class="hero-art" aria-hidden="true"></div><div class="wrap final-inner"><h2>Your first division starts now.</h2>${button('Play ranked', '/play/')}</div></section>`, 'How cardgame ranked works: ladder points, divisions, the Legend tiers, and every rank from Orbital III to Universal.');
+}
+
 export function renderPages({ featured, keywords, relayUrl = '', portraits = [], cardCount = 0, catalogOrigin = '' }) {
   siteConfig = { relayUrl, portraits, catalogOrigin };
   return { 'index.html': home(featured, cardCount), 'rulebook/index.html': rulebook(featured), 'glossary/index.html': glossary(keywords),
     'play/index.html': shell('Play', 'Play', '<div id="play-area" class="game-mount" data-game-mount data-game-src="/play/game.html"><div class="game-message"><noscript><p>cardgame needs JavaScript to log you in and run the game.</p></noscript></div></div>', 'Play cardgame with the site navigation available above the game.'),
+    'ranked/index.html': ranked(),
     'stats/index.html': shell('Stats', 'Stats', '<div class="wrap stats-page" data-stats-app><p class="state"><noscript>The statistics pages need JavaScript. </noscript>Loading…</p></div>', 'Exact-deck results from cardgame playtests: win rates, opponents and matchups, with sample sizes.'),
     'account/index.html': shell('Account', 'Account', '<section class="wrap profile-page" data-profile><p class="profile-message"><noscript>Your profile needs JavaScript. </noscript>Loading your account…</p></section>', 'Your cardgame account: rank, balances, profile picture and sign-in methods.') };
 }

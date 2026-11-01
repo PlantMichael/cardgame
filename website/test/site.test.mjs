@@ -23,7 +23,7 @@ test('built public pages, canonical keywords and unchanged Godot runtime work ov
   });
   const origin = `http://127.0.0.1:${server.address().port}`;
   const pages = [];
-  const routes = ['/', '/rulebook/', '/glossary/', '/play/', '/account/', '/stats/'];
+  const routes = ['/', '/rulebook/', '/glossary/', '/play/', '/account/', '/stats/', '/ranked/'];
   for (const route of routes) {
     const response = await fetch(origin + route);
     assert.equal(response.status, 200, route);

@@ -117,7 +117,7 @@
   const state = { status: 'loading', token: '', account: null, epoch: 0, notice: '' };
   let seq = 0;
   const listeners = new Set();
-  const emit = () => listeners.forEach((fn) => fn(state));
+  const emit = () => { listeners.forEach((fn) => fn(state)); window.dispatchEvent(new CustomEvent('cardgame:account', { detail: state.account })); };
 
   function setIdentity(token) {
     state.epoch += 1;
@@ -541,5 +541,5 @@
   init();
 
   // Small test/debug surface; carries no secrets.
-  window.cardgameSite = { state: () => ({ status: state.status, username: state.account?.username || null }), refresh };
+  window.cardgameSite = { state: () => ({ status: state.status, username: state.account?.username || null }), account: () => state.account, refresh };
 })();
