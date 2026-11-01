@@ -80,6 +80,25 @@ const LEGACY_DDL = [
     )`,
   // Nullable for old clients and PvP. ALTER also upgrades populated installs.
   'ALTER TABLE ranked_settlements ADD COLUMN IF NOT EXISTS ai_match JSONB',
+  // Site accounts / Google sign-in (additive; safe to rerun, safe on populated
+  // installs). A player may sign in with a password, with one linked Google
+  // identity, or both. The Google `sub` is the identity key: it is unique, and
+  // an e-mail or display name is never used to find or merge a player.
+  // password_hash/salt become nullable so a Google-only player is modelled
+  // honestly instead of with a made-up password; the CHECK below keeps every
+  // row with at least one usable way to sign in, and existing hashes/salts are
+  // untouched.
+  `ALTER TABLE players ADD COLUMN IF NOT EXISTS google_sub TEXT;
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS google_linked_at TIMESTAMPTZ;
+    ALTER TABLE players ALTER COLUMN password_hash DROP NOT NULL;
+    ALTER TABLE players ALTER COLUMN salt DROP NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS players_google_sub_key ON players (google_sub) WHERE google_sub IS NOT NULL;`,
+  `DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'players_has_sign_in' AND conrelid = 'players'::regclass) THEN
+        ALTER TABLE players ADD CONSTRAINT players_has_sign_in
+          CHECK ((password_hash IS NOT NULL AND salt IS NOT NULL) OR google_sub IS NOT NULL);
+      END IF;
+    END $$`,
 ];
 
 async function initLegacySchema(pool) {

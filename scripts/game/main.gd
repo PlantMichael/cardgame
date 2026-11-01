@@ -143,6 +143,8 @@ func _ready() -> void:
 	_create_canvas()
 
 	Net.opponent_left.connect(_on_opponent_left)
+	# Balance changes in the game are only a hint for the site's banner.
+	Economy.balance_changed.connect(Auth.notify_site_account_dirty)
 	if OS.has_feature("editor"):
 		# Skip the login gate when run from the Godot editor (playtesting) —
 		# "editor" is only ever true for an editor-launched debug run, never
@@ -1042,6 +1044,9 @@ var _circle_mask_material: ShaderMaterial = null
 var _default_pfp_texture: ImageTexture = null
 
 func _build_profile_bar() -> void:
+	# In the browser the website's banner shows the account; no second bar here.
+	if Auth.is_embedded():
+		return
 	if is_instance_valid(_profile_bar):
 		_profile_bar.queue_free()
 
@@ -1606,10 +1611,73 @@ func _require_login_then(on_ready: Callable, allow_back: bool = true) -> void:
 	if Auth.is_logged_in:
 		on_ready.call()
 		return
+	if OS.has_feature("web"):
+		# In the browser the website owns sign-in; the game never shows a login form.
+		if Auth.is_embedded():
+			_show_site_session_wait(on_ready)
+		else:
+			_show_open_from_site_screen()
+		return
 	if Auth.has_saved_session():
 		_show_reconnecting_screen(on_ready, allow_back)
 		return
 	_show_auth_screen(false, on_ready, allow_back)
+
+## The browser game runs inside the site's Play page. Waits for the page to hand
+## over the account's session, then resumes it against the relay.
+const SITE_SESSION_WAIT_SEC := 10.0
+
+func _show_site_session_wait(on_ready: Callable) -> void:
+	if Auth.has_saved_session():
+		_show_reconnecting_screen(on_ready, false)
+		return
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_canvas.add_child(center)
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 18)
+	center.add_child(vbox)
+	var lbl := Label.new()
+	lbl.add_theme_font_size_override("font_size", 22)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(lbl)
+	var waiting := {"active": true}
+	_animate_loading_dots(lbl, "Connecting to your account", func() -> bool: return waiting.active)
+	_connect_screen_signal(Auth.site_session_received, func():
+		waiting.active = false
+		_clear_screen()
+		_show_reconnecting_screen(on_ready, false)
+	, center, CONNECT_ONE_SHOT)
+	Auth.request_site_session()
+	await get_tree().create_timer(SITE_SESSION_WAIT_SEC).timeout
+	if waiting.active and is_instance_valid(lbl):
+		waiting.active = false
+		lbl.text = "Couldn't get your account from the website. Reload the page, or sign in again."
+		var retry_btn := _menu_btn("RETRY")
+		retry_btn.pressed.connect(func():
+			_clear_screen()
+			_show_site_session_wait(on_ready)
+		)
+		vbox.add_child(retry_btn)
+
+## A raw game page opened outside the website has no account to use.
+func _show_open_from_site_screen() -> void:
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_canvas.add_child(center)
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 18)
+	center.add_child(vbox)
+	var lbl := Label.new()
+	lbl.text = "Sign in and play from the website."
+	lbl.add_theme_font_size_override("font_size", 22)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(lbl)
+	var go_btn := _menu_btn("GO TO THE WEBSITE")
+	go_btn.pressed.connect(func(): JavaScriptBridge.eval("window.location.assign('/play/')"))
+	vbox.add_child(go_btn)
 
 # Ensures the relay connection is open before running on_ready, connecting first if needed.
 # If the connection doesn't open within CONNECT_TIMEOUT_SEC, on_timeout runs instead (if given).
@@ -1687,8 +1755,22 @@ func _on_resume_session_result(success: bool, _message: String, on_success: Call
 	if success:
 		_mp_name = Auth.username
 		on_success.call()
+	elif Auth.is_embedded():
+		# The page's token no longer works: the page, not the game, signs in again.
+		Auth.report_site_session_invalid()
+		_show_site_session_expired()
 	else:
 		_show_auth_screen(false, on_success, allow_back)
+
+func _show_site_session_expired() -> void:
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_canvas.add_child(center)
+	var lbl := Label.new()
+	lbl.text = "Your session has expired. Sign in again on the website."
+	lbl.add_theme_font_size_override("font_size", 22)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	center.add_child(lbl)
 
 func _show_auth_screen(is_register: bool, on_success: Callable, allow_back: bool = true) -> void:
 	var center := CenterContainer.new()
@@ -1846,16 +1928,17 @@ func _show_lobby_browser() -> void:
 	host_btn.add_theme_font_size_override("font_size", 18)
 	bottom.add_child(host_btn)
 
-	var logout_btn := Button.new()
-	logout_btn.text = "Log Out"
-	logout_btn.custom_minimum_size = Vector2(140, 44)
-	logout_btn.add_theme_font_size_override("font_size", 18)
-	bottom.add_child(logout_btn)
-	logout_btn.pressed.connect(func():
-		Auth.logout()
-		_clear_screen()
-		_show_main_menu()
-	)
+	if not Auth.is_embedded():
+		var logout_btn := Button.new()
+		logout_btn.text = "Log Out"
+		logout_btn.custom_minimum_size = Vector2(140, 44)
+		logout_btn.add_theme_font_size_override("font_size", 18)
+		bottom.add_child(logout_btn)
+		logout_btn.pressed.connect(func():
+			Auth.logout()
+			_clear_screen()
+			_show_main_menu()
+		)
 
 	var _populate_list = func(lobbies_data: Array):
 		for c in list_container.get_children():

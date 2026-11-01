@@ -11,6 +11,13 @@ const REPORT_RETRY_MSEC := 6000
 signal login_result(success: bool, message: String)
 signal register_result(success: bool, message: String)
 signal logged_out
+## The website page handed this embedded game a session token to resume as.
+signal site_session_received
+
+## The browser build inside the website: the page owns sign-in, the session and
+## the profile, so this build neither reads nor writes the saved session.
+const SiteBridgeScript := preload("res://scripts/game/site_bridge.gd")
+var _site_bridge: Node
 
 var token: String = ""
 var username: String = ""
@@ -61,6 +68,10 @@ func _ready() -> void:
 	Net.register_result.connect(_on_register_result)
 	Net.login_result.connect(_on_login_result)
 	Net.ranked_result_received.connect(_on_ranked_result_received)
+	_site_bridge = SiteBridgeScript.new()
+	add_child(_site_bridge)
+	_site_bridge.session_received.connect(_on_site_session)
+	_site_bridge.account_changed.connect(func(pfp_id: String) -> void: selected_pfp = pfp_id)
 	Net.ranked_report_acked.connect(_on_ranked_report_acked)
 	Net.ranked_report_failed.connect(_on_ranked_report_failed)
 	Net.connected_to_server.connect(_flush_pending_ranked)
@@ -189,6 +200,7 @@ func cancel_campaign_queue() -> void:
 func _on_ranked_result_received(success: bool, profile: Dictionary) -> void:
 	if not success:
 		return
+	notify_site_account_dirty()
 	rating = int(profile.get("rating", rating))
 	rank_bracket = int(profile.get("rank_bracket", rank_bracket))
 	rank_in_legend = bool(profile.get("rank_in_legend", rank_in_legend))
@@ -197,6 +209,35 @@ func _on_ranked_result_received(success: bool, profile: Dictionary) -> void:
 	ranked_win_streak = int(profile.get("ranked_win_streak", ranked_win_streak))
 	ranked_wins = int(profile.get("ranked_wins", ranked_wins))
 	ranked_losses = int(profile.get("ranked_losses", ranked_losses))
+
+func is_embedded() -> bool:
+	return _site_bridge != null and _site_bridge.embedded
+
+## Asks the website page for the session again (after a missed first request).
+func request_site_session() -> void:
+	if _site_bridge != null:
+		_site_bridge.announce_ready()
+
+## Tells the page its token no longer works so it can show its own sign-in.
+func report_site_session_invalid() -> void:
+	if _site_bridge != null:
+		_site_bridge.notify_session_invalid()
+
+## Balances or rank changed in the game: the page re-reads them from the server.
+## A hint only; the page never takes values from the game.
+func notify_site_account_dirty() -> void:
+	if _site_bridge != null:
+		_site_bridge.notify_account_dirty()
+
+func _on_site_session(site_token: String) -> void:
+	if site_token.is_empty():
+		return
+	# A different account arriving mid-session is the page's job to handle by
+	# replacing this whole game; never swap identity under a running match.
+	if is_logged_in and site_token != token:
+		return
+	_saved_token = site_token
+	site_session_received.emit()
 
 func has_saved_session() -> bool:
 	return not _saved_token.is_empty()
@@ -247,6 +288,14 @@ func _apply_profile(profile: Dictionary) -> void:
 	_save_session()
 
 func _clear_session() -> void:
+	if is_embedded():
+		# The page owns the stored session; the game only forgets its own copy.
+		token = ""
+		username = ""
+		is_logged_in = false
+		_saved_token = ""
+		custom_decks.clear()
+		return
 	token = ""
 	username = ""
 	wins = 0
@@ -270,6 +319,8 @@ func _clear_session() -> void:
 			DirAccess.remove_absolute(SAVE_DIR + SESSION_FILE)
 
 func _save_session() -> void:
+	if is_embedded():
+		return
 	var data := {"token": token, "username": username}
 	var json_str := JSON.stringify(data)
 	if OS.has_feature("web"):
@@ -283,6 +334,8 @@ func _save_session() -> void:
 			file.close()
 
 func _load_saved_session() -> void:
+	if is_embedded():
+		return
 	var json_str := ""
 	if OS.has_feature("web"):
 		var result = JavaScriptBridge.eval("localStorage.getItem(%s)" % JSON.stringify(LS_KEY))

@@ -45,7 +45,17 @@ signal claim_earn_reward_result(success: bool, message: String, currency: int, d
 signal _queue_updated
 
 func connect_to_relay() -> void:
-	_ws.connect_to_url(RELAY_URL)
+	_ws.connect_to_url(_relay_url())
+
+## The browser game uses the relay the website page says to (its cg-relay meta
+## tag, the same one the page itself talks to), so a test or staging site and its
+## embedded game always share a relay. Anything else falls back to the constant.
+func _relay_url() -> String:
+	if OS.has_feature("web"):
+		var from_page = JavaScriptBridge.eval("(function(){try{var m=window.parent.document.querySelector('meta[name=\"cg-relay\"]');var c=m?m.content:'';return(c.indexOf('ws://')===0||c.indexOf('wss://')===0)?c:''}catch(e){return ''}})()")
+		if from_page != null and str(from_page) != "":
+			return str(from_page)
+	return RELAY_URL
 
 func disconnect_from_relay() -> void:
 	_ws.close()
