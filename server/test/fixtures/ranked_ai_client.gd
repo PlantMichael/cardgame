@@ -12,7 +12,7 @@ func _run() -> void:
 		return
 	Net._ws.connect_to_url(url)
 	await Net.connected_to_server
-	Auth.token = OS.get_environment("AI_TEST_TOKEN")
+	Auth._apply_profile({"token": OS.get_environment("AI_TEST_TOKEN"), "username": "ai_tester"})
 	for ranked in [true, false]:
 		var board := load("res://scenes/game/Board.tscn").instantiate() as Board
 		add_child(board)
@@ -22,7 +22,13 @@ func _run() -> void:
 		for i in 10:
 			human.append(CardDatabase.get_card("g_001"))
 			bot.append(CardDatabase.get_card("cr_002"))
+		var coinflip := {}
+		get_tree().process_frame.connect(func():
+			coinflip["first"] = "player" if board.coinflip_label.text == "Going First" else "opponent",
+			CONNECT_ONE_SHOT)
 		await GameManagerAutoload.start_local_game(board, human, bot, 1, ranked)
+		if ranked:
+			print("AI_PRODUCER_FIRST ", coinflip["first"])
 		var gs := GameManagerAutoload.game_state
 		# Depletion must not replace the starting lists in the submitted report.
 		gs.player.deck.clear()

@@ -17,7 +17,7 @@ extends RefCounted
 ## per playable creature, one per ready stratagem (target pre-resolved via the
 ## shared heuristic pickers so the search doesn't also have to branch on
 ## *which* enemy minion a spell hits), one per legal attacker/target pairing
-## (plus "attack face"), and always `end_turn`.
+## (plus "attack face"), each legal Pilot pairing, and always `end_turn`.
 ##
 ## Actions are plain values addressed by uid/instance_id - never live CardData
 ## or Minion objects. An action produced here is therefore safe to apply to
@@ -76,7 +76,22 @@ static func list_legal_actions(gs: GameState, acting_id: String) -> Array[Dictio
 					"target_instance_id": "", "target_player_id": enemy.player_id,
 				})
 
+	actions.append_array(_pilot_actions(gs, acting))
 	actions.append({"type": "end_turn", "actor": acting_id})
+	return actions
+
+## Use the same command validation as a human pilot action. In particular,
+## an exhausted pilot is still eligible; neither creature can be an enemy.
+static func _pilot_actions(gs: GameState, acting: PlayerState) -> Array[Dictionary]:
+	var actions: Array[Dictionary] = []
+	for pilot in acting.board:
+		if not pilot.abilities.any(func(ab): return Abilities.is_pilot(ab)):
+			continue
+		for mech in acting.board:
+			var action := {"type": "pilot", "actor": acting.player_id,
+				"pilot_instance_id": pilot.instance_id, "target_instance_id": mech.instance_id}
+			if gs.validate(action)["ok"]:
+				actions.append(action)
 	return actions
 
 ## Applies exactly one atomic action produced by list_legal_actions() (or
@@ -136,6 +151,20 @@ static func greedy_pick_action(gs: GameState, acting_id: String) -> Dictionary:
 					"target_instance_id": picked.instance_id if picked != null else "",
 					"target_player_id": pick["player_id"],
 				}
+
+	# Rollouts must use the same Pilot mechanic that the search can select.
+	# Compare actual outcomes so merging a valuable body is not automatic.
+	var best_pilot: Dictionary = {}
+	var best_pilot_score := AIHeuristics.evaluate_state(gs, acting_id)
+	for action in _pilot_actions(gs, acting):
+		var after := gs.duplicate_for_sim()
+		if apply_action(after, action):
+			var score := AIHeuristics.evaluate_state(after, acting_id)
+			if score > best_pilot_score:
+				best_pilot_score = score
+				best_pilot = action
+	if not best_pilot.is_empty():
+		return best_pilot
 
 	var attackers: Array[Minion] = []
 	for m in acting.board:

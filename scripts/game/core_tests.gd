@@ -343,6 +343,16 @@ static func _test_crypt_hunger() -> void:
 	_eq("a max-health buff is fully reverted (max)", delos.max_health, printed_max)
 	_eq("a max-health buff is fully reverted (current)", delos.current_health, printed_max)
 
+static func _test_scout_recon(card_id: String) -> void:
+	print("[sludgewalker scout recon]")
+	var gs := _arena(card_id)
+	gs.player.hand.clear()
+	var deck_size := gs.player.deck.size()
+	var result := _play(gs, "b_022")
+	_check("Scout enters play", result["ok"] and gs.player.board.back().data.id == "b_022")
+	_eq("Scout draws one card on play", gs.player.hand.size(), 1)
+	_eq("Scout takes the card from its deck", gs.player.deck.size(), deck_size - 1)
+
 ## Junk Blockade (b_010): "If you have less cards in your hand than your
 ## opponent, Recon." Its card text promised this with nothing behind it - the
 ## card shipped carrying only Guardian - so the condition is checked here in
@@ -1697,6 +1707,29 @@ static func _test_family_challenge(filler: String) -> void:
 	gs11.resolve_to_quiescence()
 	_check("control: with a normal enemy the overwatch pick opens", gs11.has_pending_choice() and gs11.pending_choice["effect"] == GameState.CHOICE_PICK_CHALLENGER)
 
+static func _test_ai_pilot_actions(filler: String) -> void:
+	print("[AI pilot actions]")
+	var gs := _arena(filler)
+	gs.player.hand.clear()
+	var pilot := _put_on_board(gs, "a", "o_003")
+	var mech := _put_on_board(gs, "a", "o_025")
+	var occupied := _put_on_board(gs, "a", "o_025")
+	occupied.is_piloted = true
+	_put_on_board(gs, "b", "o_025")
+	var actions := HeadlessTurn.list_legal_actions(gs, "a").filter(func(a): return a["type"] == "pilot")
+	_eq("only the friendly unpiloted Mech is offered", actions.size(), 1)
+	if actions.is_empty():
+		return
+	_eq("rollout chooses the beneficial Pilot move", HeadlessTurn.greedy_pick_action(gs, "a"), actions[0])
+	var copy := gs.duplicate_for_sim()
+	_check("Pilot command applies to a simulation copy", HeadlessTurn.apply_action(copy, actions[0]))
+	var merged := copy.find_minion(mech.instance_id)
+	_check("Pilot is consumed and Mech gains +2/+2", copy.find_minion(pilot.instance_id) == null
+		and merged.is_piloted and merged.current_attack == 3 and merged.current_health == 3)
+	_check("planning leaves the live board untouched", pilot in gs.player.board
+		and not mech.is_piloted and mech.current_attack == 1 and mech.current_health == 1)
+	_check("an occupied Mech cannot be piloted again", not HeadlessTurn.list_legal_actions(copy, "a").any(func(a): return a["type"] == "pilot"))
+
 static func _test_family_pilot_swap_devour_transform(filler: String) -> void:
 	print("[family: pilot, swap health, devour, transform]")
 	var pilot_id := _card_with(func(d): return d.card_type == CardData.CardType.CREATURE and _has_ab(d, Abilities.ON_PLAY_PILOT_MECH))
@@ -2079,6 +2112,7 @@ static func run() -> int:
 	_test_fingerprint_distinguishes(card_id)
 	_test_randomness_isolation(card_id)
 	_test_crypt_hunger()
+	_test_scout_recon(card_id)
 	_test_conditional_recon(card_id)
 	_test_aura_withdrawn_on_silence()
 	_test_pending_resolution(card_id)
@@ -2103,6 +2137,7 @@ static func run() -> int:
 	_test_state_hash(card_id)
 	_test_family_on_play_damage(card_id)
 	_test_family_challenge(card_id)
+	_test_ai_pilot_actions(card_id)
 	_test_family_pilot_swap_devour_transform(card_id)
 	_test_family_queues(card_id)
 	_test_family_stratagem_followups(card_id)

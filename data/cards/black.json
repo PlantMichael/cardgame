@@ -26,7 +26,9 @@
 		"description": "Recon.",
 		"attack": 1,
 		"health": 2,
-		"abilities": [],
+		"abilities": [
+			"recon"
+		],
 		"art": "res://assets/black/sludgescout.png",
 		"effect": "",
 		"effect_value": 0

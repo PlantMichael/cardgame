@@ -52,6 +52,7 @@ func start_local_game(board_node: Board, player_deck: Array[CardData], opponent_
 			"player_deck": player_deck.map(func(card: CardData): return card.id),
 			"opponent_deck": opponent_deck.map(func(card: CardData): return card.id),
 			"ai_level": ai_level,
+			"ai_version": AIController.POLICY_VERSION,
 			"rules_version": RulesVersion.RULES_VERSION,
 		}
 	game_state = GameState.new(LOCAL_PLAYER_ID, OPPONENT_PLAYER_ID, player_deck, opponent_deck)
@@ -65,6 +66,8 @@ func start_local_game(board_node: Board, player_deck: Array[CardData], opponent_
 	board.opponent_hero.player_id = OPPONENT_PLAYER_ID
 	board.player_hero.player_id = LOCAL_PLAYER_ID
 	var first_player_id = LOCAL_PLAYER_ID if randf() < 0.5 else OPPONENT_PLAYER_ID
+	if ranked:
+		_ranked_ai_match["first_player"] = "player" if first_player_id == LOCAL_PLAYER_ID else "opponent"
 	game_state.start_game(first_player_id)
 	if grant_catchup_mana:
 		game_state.player.max_mana += 1

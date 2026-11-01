@@ -317,8 +317,8 @@
 		"rarity": "RARE",
 		"tribe": "yeti",
 		"description": "Challenge. Dualstrike.",
-		"attack": 5,
-		"health": 5,
+		"attack": 3,
+		"health": 3,
 		"abilities": [
 			"challenge",
 			"dual_strike"
@@ -447,8 +447,8 @@
 		"rarity": "EPIC",
 		"tribe": "yeti",
 		"description": "Colossal",
-		"attack": 15,
-		"health": 15,
+		"attack": 11,
+		"health": 11,
 		"abilities": [
 			"two_slot"
 		],
