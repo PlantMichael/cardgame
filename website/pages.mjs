@@ -1,7 +1,7 @@
 export const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const slug = value => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const arrow = '<span aria-hidden="true">↗</span>';
-const button = (label, href, secondary = false) => `<a class="button${secondary ? ' secondary' : ''}" href="${href}">${label} ${arrow}</a>`;
+const button = (label, href, secondary = false) => `<a class="button${secondary ? ' secondary' : ''}" href="${href}"><span>${label}</span></a>`;
 
 // Set by renderPages: where the relay is and which portraits the game offers.
 let siteConfig = { relayUrl: '', portraits: [] };
@@ -10,17 +10,17 @@ function shell(title, active, content, description) {
   const nav = [['Home', '/'], ['Rulebook', '/rulebook/'], ['Glossary', '/glossary/']];
   const playing = active === 'Play';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>${title === 'Home' ? 'cardgame — Pick a faction. Make your move.' : `${title} — cardgame`}</title>
-  <meta name="description" content="${escapeHtml(description)}"><meta name="theme-color" content="#101914">
-  <link rel="icon" href="/media/logo.png" type="image/png"><meta name="cg-relay" content="${escapeHtml(siteConfig.relayUrl)}"><link rel="stylesheet" href="/style.css"><script type="application/json" data-portraits>${JSON.stringify(siteConfig.portraits).replace(/</g, '\u003c')}</script><script src="/app.js" defer></script><script src="/account.js" defer></script></head>
+  <title>${title === 'Home' ? 'cardgame — Space-age card battles in your browser' : `${title} — cardgame`}</title>
+  <meta name="description" content="${escapeHtml(description)}"><meta name="theme-color" content="#060814">
+  <link rel="icon" href="/media/logo.png" type="image/png"><meta name="cg-relay" content="${escapeHtml(siteConfig.relayUrl)}"><link rel="stylesheet" href="/style.css"><script type="application/json" data-portraits>${JSON.stringify(siteConfig.portraits).replace(/</g, '\\u003c')}</script><script src="/app.js" defer></script><script src="/account.js" defer></script></head>
   <body${playing ? ' class="play-page"' : ''}><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="wrap header-inner">
-  <a class="brand" href="/" aria-label="cardgame home"><img src="/media/logo.png" width="42" height="42" alt="">cardgame<span class="brand-period">.</span></a>
+  <a class="brand" href="/" aria-label="cardgame home"><img src="/media/logo.png" width="40" height="40" alt=""><span class="brand-word">CARD<b>GAME</b></span></a>
   <nav aria-label="Main navigation">${nav.map(([label, href]) => `<a href="${href}" ${active === label ? 'aria-current="page"' : ''}${playing && label !== 'Home' ? ' target="_blank" rel="noopener" aria-label="' + label + ' (opens in a new tab)"' : ''}>${label}</a>`).join('')}</nav>
   <div class="account-slot" data-account-slot aria-live="polite"><noscript><a class="account-link" href="/play/">Log in</a></noscript></div>
-  <a class="nav-play" href="${playing ? '#play-area' : '/play/'}"${playing ? ' aria-current="page"' : ''}>${playing ? 'Playing' : 'Play now'} <span aria-hidden="true">↗</span></a></div></header>
+  <a class="nav-play" href="${playing ? '#play-area' : '/play/'}"${playing ? ' aria-current="page"' : ''}>${playing ? 'Playing' : 'Play now'}</a></div></header>
   <main id="main">${content}</main>
-  ${playing ? '' : `<footer class="site-footer wrap"><a class="brand small" href="/">cardgame<span class="brand-period">.</span></a><p>Five factions. One battlefield.</p>
-  <nav aria-label="Footer navigation"><a href="/rulebook/">Learn to play</a><a href="/glossary/">Keywords</a><a href="/play/">Enter the game ↗</a></nav><span class="footer-note">An evolving playtest. Cards and rules may change.</span></footer>`}</body></html>`;
+  ${playing ? '' : `<footer class="site-footer"><div class="wrap footer-inner"><a class="brand small" href="/"><img src="/media/logo.png" width="28" height="28" alt=""><span class="brand-word">CARD<b>GAME</b></span></a>
+  <nav aria-label="Footer navigation"><a href="/rulebook/">Learn to play</a><a href="/glossary/">Keywords</a><a href="/play/">Enter the game</a></nav><span class="footer-note">Playtest build. Cards and rules may change.</span></div></footer>`}</body></html>`;
 }
 
 function cardMarkup(card, extra = '') {
@@ -36,27 +36,28 @@ function cardMarkup(card, extra = '') {
 }
 
 const factions = [
-  ['01', 'Sapiens', 'green', 'Hold the line.', 'Soldiers, Reinforce, and a force that comes back for another fight.', 'Reinforce', 'reinforce'],
-  ['02', 'Moonlight Coven', 'crimson', 'Become something else.', 'A coven of creatures that grow, change form, and reward transformation.', 'Ambush', 'ambush'],
-  ['03', 'Junklings', 'black', 'Nothing goes to waste.', 'Make use of the graveyard and turn yesterday’s scraps into your next move.', 'Rummage', 'rummage'],
-  ['04', 'Gundari', 'orange', 'Get in the machine.', 'Bring Pilots and Mechs together to build a bigger threat on the battlefield.', 'Pilot', 'pilot'],
-  ['05', 'Mokotai', 'teal', 'Meet them head-on.', 'Yeti, Guardians, and Challenges that take the fight straight to enemy creatures.', 'Challenge', 'challenge'],
+  ['01', 'Sapiens', 'green', 'sapiens', 'Hold the line.', 'Soldiers, tanks and a force that keeps coming back for another fight.', 'Reinforce', 'reinforce'],
+  ['02', 'Moonlight Coven', 'crimson', 'coven', 'Become something else.', 'Creatures that grow, change shape and reward every transformation.', 'Ambush', 'ambush'],
+  ['03', 'Junklings', 'black', 'junklings', 'Nothing goes to waste.', 'Dig through the graveyard and turn yesterday’s scrap into your next move.', 'Rummage', 'rummage'],
+  ['04', 'Gundari', 'orange', 'gundari', 'Get in the machine.', 'Pair Pilots with Mechs and put something huge on the battlefield.', 'Pilot', 'pilot'],
+  ['05', 'Mokotai', 'teal', 'mokotai', 'Meet them head-on.', 'Yeti, Guardians and Challenges that take the fight straight to your enemy.', 'Challenge', 'challenge'],
 ];
 
-function home(featured) {
-  return shell('Home', 'Home', `<section class="hero"><div class="hero-world" aria-hidden="true"></div><div class="wrap hero-inner">
-  <div class="hero-copy"><div class="eyebrow"><span class="status-dot"></span> A BROWSER CARD GAME · IN PLAYTEST</div>
-  <h1>Pick a faction.<br>Make your <em>move.</em></h1><p class="hero-description">Soldiers. Shape-shifters. Scrap-built machines.<br class="desktop-break"> Build your deck and bring your own kind of trouble to the battlefield.</p>
-  <div class="actions">${button('Play cardgame', '/play/')}${button('Learn to play', '/rulebook/', true)}</div><p class="load-note">Play in your browser. The game downloads when you open it.</p></div>
-  <div class="hero-cards" aria-label="Cards from three of the five factions">${cardMarkup(featured[1], 'back-left')}${cardMarkup(featured[2], 'back-right')}${cardMarkup(featured[0], 'front-card')}<span class="orbit-label">YOUR DECK. YOUR NEXT MOVE.</span></div>
-  </div><div class="wrap hero-bottom"><span>TURN-BASED STRATEGY</span><span>FIVE DISTINCT FACTIONS</span><span>PLAY AGAINST AI OR FRIENDS</span></div></section>
-  <section class="wrap introduction"><div><span class="eyebrow">THE BATTLEFIELD IS YOURS</span><h2>A little planning.<br>A lot of possibilities.</h2></div><div class="intro-copy"><p>Play creatures, cast stratagems, and use Locations to shape the board. Spend your mana, choose your attacks, and push the opposing hero to zero.</p><div class="rule-numbers"><div><strong>30</strong><span>starting health</span></div><div><strong>7</strong><span>board slots</span></div><div><strong>10</strong><span>maximum mana</span></div></div></div></section>
-  <section id="factions" class="factions-section"><div class="wrap"><div class="section-heading"><div><span class="eyebrow">FIND YOUR SIDE</span><h2>Five factions.<br>Five ways to start trouble.</h2></div><a class="text-link" href="/rulebook/#deckbuilding">How decks work ${arrow}</a></div>
-  <div class="faction-list">${factions.map(([number, name, color, line, copy, keyword, anchor]) => `<article class="faction-row ${color}"><span class="faction-number">${number}</span><div class="faction-heading"><span class="faction-swatch" aria-hidden="true"></span><h3>${name}</h3></div><div class="faction-copy"><h4>${line}</h4><p>${copy}</p></div><a class="keyword-link" href="/glossary/#${anchor}">${keyword} ${arrow}</a></article>`).join('')}</div></div></section>
-  <section class="wrap learn-section"><div class="section-heading"><div><span class="eyebrow">GET YOUR BEARINGS</span><h2>Your first game starts here.</h2></div></div><div class="learning-grid">
-  <a class="learn-tile" href="/rulebook/"><span class="tile-number">01 / THE BASICS</span><h3>Learn the rules.</h3><p>From your opening hand to your final attack. A practical guide to the battlefield.</p><span class="text-link">Open the rulebook ${arrow}</span></a>
-  <a class="learn-tile" href="/glossary/"><span class="tile-number">02 / THE DETAILS</span><h3>Know your keywords.</h3><p>Guardian? Rummage? Pilot? Look up the abilities printed on your cards.</p><span class="text-link">Browse the glossary ${arrow}</span></a></div></section>
-  <section class="wrap final-cta"><span class="eyebrow">ENOUGH READING?</span><h2>There’s a move with<br>your name on it.</h2>${button('Enter the game', '/play/')}<p>Use a desktop browser with JavaScript and WebGL 2 enabled. Open the hosted game over HTTPS.</p></section>`, 'Play cardgame in your browser. Discover five factions, learn the rules, and look up every printed keyword.');
+function home(featured, cardCount) {
+  return shell('Home', 'Home', `<section class="hero"><div class="hero-art" aria-hidden="true"></div><div class="hero-grid" aria-hidden="true"></div><div class="wrap hero-inner">
+  <div class="hero-copy"><p class="hero-kicker"><span class="status-dot"></span>Playtest build online</p>
+  <h1 class="hero-title"><span class="sr-only">cardgame. </span><span aria-hidden="true">CARD<b>GAME</b></span></h1>
+  <p class="hero-tagline">Space-age card battles. Pick a faction, build a deck, and take the board.</p>
+  <div class="actions">${button('Play free', '/play/')}${button('How to play', '/rulebook/', true)}</div><p class="load-note">Runs in your browser. Nothing to install.</p></div>
+  <div class="hero-cards" aria-label="Cards from three of the five factions">${cardMarkup(featured[1], 'back-left')}${cardMarkup(featured[2], 'back-right')}${cardMarkup(featured[0], 'front-card')}</div>
+  </div><div class="hud-strip"><div class="wrap hud-inner"><span><b>${cardCount}</b> cards</span><span><b>5</b> factions</span><span><b>40</b> card decks</span><span>Versus AI or friends</span></div></div></section>
+  <section id="factions" class="factions-section"><div class="wrap section-top"><h2>Choose your faction</h2><a class="text-link" href="/rulebook/#deckbuilding">How decks work ${arrow}</a></div>
+  <div class="faction-rail">${factions.map(([number, name, color, art, line, copy, keyword, anchor]) => `<article class="faction ${color}" style="--art:url(/media/art/${art}.jpg)"><div class="faction-body"><span class="faction-number">${number}</span><h3>${name}</h3><h4>${line}</h4><p>${copy}</p><a class="keyword-chip" href="/glossary/#${anchor}">${keyword} ${arrow}</a></div></article>`).join('')}</div></section>
+  <section class="wrap basics"><div class="basics-copy"><h2>Simple to start.<br>Hard to master.</h2><p>Play creatures, cast stratagems and use Locations to shape the board. Spend your mana, choose your attacks and bring the other hero to zero.</p></div>
+  <div class="readouts"><div class="readout"><strong>30</strong><span>hero health</span></div><div class="readout"><strong>7</strong><span>board slots</span></div><div class="readout"><strong>10</strong><span>mana cap</span></div></div></section>
+  <section class="wrap learn-grid"><a class="learn-tile" style="--art:url(/media/art/coven.jpg)" href="/rulebook/"><span class="tile-tag">Rulebook</span><h3>Learn the rules.</h3><p>From your opening hand to your last attack.</p><span class="text-link">Open the rulebook ${arrow}</span></a>
+  <a class="learn-tile" style="--art:url(/media/art/mokotai.jpg)" href="/glossary/"><span class="tile-tag">Glossary</span><h3>Know your keywords.</h3><p>Guardian, Rummage, Pilot, Challenge and every other ability on the cards.</p><span class="text-link">Browse the glossary ${arrow}</span></a></section>
+  <section class="final-cta"><div class="hero-art" aria-hidden="true"></div><div class="wrap final-inner"><h2>The board is waiting.</h2>${button('Enter the game', '/play/')}<p>Use a desktop browser with JavaScript and WebGL 2 enabled.</p></div></section>`, 'Play cardgame in your browser. Five factions, space-age card battles, learn the rules and look up every keyword.');
 }
 
 const chapters = [
@@ -88,9 +89,9 @@ function glossary(keywords) {
   <div class="glossary-bottom"><p>New to the battlefield? Start with the basics.</p><a class="text-link" href="/rulebook/">Read the rulebook ${arrow}</a></div></section>`, 'Search cardgame keyword definitions, including Guardian, Reinforce, Rummage, Pilot, Challenge, and Colossal.');
 }
 
-export function renderPages({ featured, keywords, relayUrl = '', portraits = [] }) {
+export function renderPages({ featured, keywords, relayUrl = '', portraits = [], cardCount = 0 }) {
   siteConfig = { relayUrl, portraits };
-  return { 'index.html': home(featured), 'rulebook/index.html': rulebook(featured), 'glossary/index.html': glossary(keywords),
+  return { 'index.html': home(featured, cardCount), 'rulebook/index.html': rulebook(featured), 'glossary/index.html': glossary(keywords),
     'play/index.html': shell('Play', 'Play', '<div id="play-area" class="game-mount" data-game-mount data-game-src="/play/game.html"><div class="game-message"><noscript><p>cardgame needs JavaScript to log you in and run the game.</p></noscript></div></div>', 'Play cardgame with the site navigation available above the game.'),
     'account/index.html': shell('Account', 'Account', '<section class="wrap profile-page" data-profile><p class="profile-message"><noscript>Your profile needs JavaScript. </noscript>Loading your account…</p></section>', 'Your cardgame account: rank, balances, profile picture and sign-in methods.') };
 }

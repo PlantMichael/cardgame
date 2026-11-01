@@ -27,3 +27,22 @@ for src, dst, size, keep in jobs:
             image.thumbnail((size, size), Image.LANCZOS)
             image.save(dst / path.name, optimize=True)
             print(dst.name, path.name, image.size)
+
+# Large key art for the home page: JPEG, since photographic painting art is
+# 5-10x smaller than PNG. (name in site, source, max width)
+art = [
+    ('hero', root / 'assets/wallapepr.png', 2000),
+    ('sapiens', root / 'assets/green/tigershark.png', 1000),
+    ('coven', root / 'assets/crimson/moonchild.png', 1000),
+    ('junklings', root / 'assets/black/trashcolossus.png', 1000),
+    ('gundari', root / 'assets/maps/thedunes.png', 1000),
+    ('mokotai', root / 'assets/teal/frostyeti.png', 1000),
+]
+dst = root / 'website/assets/art'
+dst.mkdir(parents=True, exist_ok=True)
+for name, src, width in art:
+    with Image.open(src) as image:
+        image = image.convert('RGB')
+        image.thumbnail((width, width * 2), Image.LANCZOS)
+        image.save(dst / f'{name}.jpg', quality=80, optimize=True, progressive=True)
+        print('art', name, image.size, (dst / f'{name}.jpg').stat().st_size // 1024, 'KB')

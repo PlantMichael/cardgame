@@ -26,7 +26,8 @@ export function buildSite(destination = outputRoot, { relayUrl = process.env.CAR
   const keywords = JSON.parse(readFileSync(path.join(projectRoot, 'data/keywords.json'), 'utf8'));
   // Portraits the game offers (small copies; see website/tools/make-thumbs.py). The id is the filename the game stores.
   const portraits = readdirSync(path.join(projectRoot, 'website/assets/pfps')).filter(n => n.endsWith('.png')).sort();
-  const pages = renderPages({ featured, keywords, relayUrl, portraits });
+  const cardCount = JSON.parse(readFileSync(path.join(projectRoot, 'catalog/public/data/cards.json'), 'utf8')).cards.filter(c => c.collectible).length;
+  const pages = renderPages({ featured, keywords, relayUrl, portraits, cardCount });
   const gameRoot = path.join(projectRoot, 'build');
   for (const name of ['index.html', 'index.js', 'index.wasm', 'index.pck']) {
     if (!existsSync(path.join(gameRoot, name))) throw new Error(`Export the Web game first: missing build/${name}`);
@@ -39,7 +40,7 @@ export function buildSite(destination = outputRoot, { relayUrl = process.env.CAR
   }
   // The site output is not Godot content: keep the editor from importing the copies.
   writeFileSync(path.join(destination, '.gdignore'), '');
-  for (const folder of ['ranks', 'pfps', 'icons']) cpSync(path.join(projectRoot, 'website/assets', folder), path.join(destination, 'media', folder), { recursive: true });
+  for (const folder of ['ranks', 'pfps', 'icons', 'art']) cpSync(path.join(projectRoot, 'website/assets', folder), path.join(destination, 'media', folder), { recursive: true });
   for (const name of ['style.css', 'app.js', 'account.js']) cpSync(path.join(projectRoot, 'website', name), path.join(destination, name));
   cpSync(path.join(projectRoot, 'assets/cardgame/Ranks/cardgame-logo.png'), path.join(destination, 'media/logo.png'));
   cpSync(path.join(projectRoot, 'assets/fonts/Orbitron.ttf'), path.join(destination, 'media/Orbitron.ttf'));
