@@ -8,7 +8,7 @@ const button = (label, href, secondary = false) => `<a class="button${secondary 
 let siteConfig = { relayUrl: '', portraits: [], catalogOrigin: '' };
 
 function shell(title, active, content, description) {
-  const nav = [['Home', '/'], ['Rulebook', '/rulebook/'], ['Ranked', '/ranked/'], ['Glossary', '/glossary/'], ['Stats', '/stats/']];
+  const nav = [['Home', '/'], ['Ranked', '/ranked/'], ['Glossary', '/glossary/'], ['Stats', '/stats/']];
   const playing = active === 'Play';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${title === 'Home' ? 'cardgame — Space-age card battles in your browser' : `${title} — cardgame`}</title>
