@@ -31,7 +31,7 @@ Fetch `/data/stats/card-winrates.json` and join `cards[].id` to the printed cata
   "generatedAt": "2026-10-27T16:00:00.000Z",
   "methodology": {
     "metric": "starting_deck_inclusion",
-    "modes": ["ranked_ai", "authoritative_pvp"],
+    "modes": ["ranked_ai", "authoritative_pvp", "ranked_bots"],
     "aiSeats": "both",
     "copies": "once_per_player_game",
     "rulesVersions": "combined",
@@ -43,7 +43,7 @@ Fetch `/data/stats/card-winrates.json` and join `cards[].id` to the printed cata
 }
 ```
 
-`matches` means recorded **seat-games with the card in the starting deck**, whether starter or custom. Two copies count once per seat. Ranked AI counts BOTH decks: the human's cards receive the recorded outcome, and the AI's cards receive the opposite outcome. Settled authoritative PvP also counts both players. A card on both sides therefore gets one win and one loss from that match. AI results are client-reported, not verified PvP. All rules versions are combined. Created, drawn or played cards do not change this metric; it measures deck-inclusion outcomes rather than a card's causal strength.
+`matches` means recorded **seat-games with the card in the starting deck**, whether starter or custom. Two copies count once per seat. Ranked AI counts BOTH decks: the human's cards receive the recorded outcome, and the AI's cards receive the opposite outcome. Settled authoritative human PvP and genuine ranked-bot games also count both seats, requiring consistent canonical settlements. A card on both sides therefore gets one win and one loss from that match. Local AI results are client-reported; ranked bot games are server-verified. All rules versions are combined. Created, drawn or played cards do not change this metric; it measures deck-inclusion outcomes rather than a card's causal strength. The website's default combined exact-deck feed also includes ranked bots; isolated simulations remain separate.
 
 Every currently published collectible has a row. No recorded sample means counts of zero and `winRate: null`; otherwise the rate is a fraction from 0 to 1, visible from the first game. Legacy settlements without deck summaries, uncompleted/voided/drawn PvP, tokens and unpublished cards do not count. Already-recorded AI summaries include both saved starting decks automatically on the next refresh after deployment, without rewriting history or awarding results again. Missing/malformed historical deck fields contribute nothing for that seat; old missing decks cannot be reconstructed.
 

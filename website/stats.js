@@ -168,8 +168,8 @@ function resolvedLine() {
     h('p', { class: 'resolved' }, `${S.MODES[f.mode] || f.mode} · Last ${f.days} days · ${load.snapshot.games} game${load.snapshot.games === 1 ? '' : 's'} recorded`),
     h('details', { class: 'stats-disclosure' }, h('summary', {}, 'About these results'),
       h('p', { class: 'foot' }, parts.join(' · ')),
-      h('p', { class: 'foot' }, m.source === 'mixed' ? 'Combined playtest results from AI and player games. AI results are client-reported; player results are verified by the game server.' : m.source === 'server_verified' ? 'Results verified by the game server.' : 'These results are reported by the game client, rather than verified by the server.'),
-      h('p', { class: 'foot' }, `${seatGames} deck appearances: each game contributes one result to each deck that played. Repeat games by the same players can skew results. These numbers are a playtest guide, not proof that a deck is balanced.`),
+      h('p', { class: 'foot' }, m.source === 'mixed' ? 'Combined playtest results include human games and automated ranked bots. Local AI results are client-reported; ranked player and bot games are verified by the game server.' : m.source === 'server_verified' ? 'Results verified by the game server.' : 'These results are reported by the game client, rather than verified by the server.'),
+      h('p', { class: 'foot' }, `${seatGames} deck appearances: each game contributes one result to each deck that played. Repeated human or bot games can dominate the sample. These numbers are a playtest guide, not proof that a deck is balanced.`),
       h('p', { class: 'foot' }, `Updated ${when(load.snapshot.generatedAt)}. Deck names describe factions, with numbers to separate different card lists in these results. Saved player deck names are not published.`)));
 }
 

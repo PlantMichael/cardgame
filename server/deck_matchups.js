@@ -148,7 +148,7 @@ function observedPlays(full, legacy, deck, catalog) {
 
 async function loadRows(pool, publicRoot, query, now) {
   if (query.mode === 'all') {
-    const sources = await Promise.all(['ranked_ai', 'authoritative_pvp'].map(mode => loadRows(pool, publicRoot, { ...query, mode }, now)));
+    const sources = await Promise.all(['ranked_ai', 'authoritative_pvp'].map(mode => loadRows(pool, publicRoot, { ...query, mode, includeRankedBots: true }, now)));
     const sourceCount = sources.reduce((n, s) => n + s.sourceCount, 0);
     if (sourceCount > MAX_MATCHES) throw new Error('too many matches');
     return { rows: sources.flatMap(s => s.rows), sourceCount };
@@ -168,13 +168,14 @@ async function loadRows(pool, publicRoot, query, now) {
     const available = await pool.query("SELECT to_regclass('ranked_matches') IS NOT NULL AS available");
     if (!available.rows[0].available) return { rows: [], sourceCount: 0 };
     raw = (await pool.query({ text: `SELECT m.deck_a, m.deck_b, m.rules_version, m.first_seat, m.facts,
-      m.seat_a_player_id, m.seat_b_player_id, m.winner_seat, sa.won AS a_won, sb.won AS b_won
+      m.seat_a_player_id, m.seat_b_player_id, m.bot_a, m.bot_b, m.winner_seat, sa.won AS a_won, sb.won AS b_won
       FROM ranked_matches m
       JOIN ranked_settlements sa ON sa.match_id = m.match_id AND sa.player_id = m.seat_a_player_id AND sa.ai_match IS NULL
       JOIN ranked_settlements sb ON sb.match_id = m.match_id AND sb.player_id = m.seat_b_player_id AND sb.ai_match IS NULL
-      WHERE m.ended_at >= $1 AND m.ended_at <= $2 AND m.mode = 'authoritative' AND m.status = 'finished'
+      WHERE m.ended_at >= $1 AND m.ended_at <= $2 AND m.mode = ANY($5::text[]) AND m.status = 'finished'
       AND m.winner_seat IN ('a','b') AND m.end_reason = ANY($3::text[]) LIMIT $4`,
-      values: [since, new Date(now).toISOString(), [...SETTLING_REASONS], MAX_MATCHES + 1], query_timeout: 5000 })).rows;
+      values: [since, new Date(now).toISOString(), [...SETTLING_REASONS], MAX_MATCHES + 1,
+        query.includeRankedBots ? ['authoritative', 'ranked_bots'] : ['authoritative']], query_timeout: 5000 })).rows;
   }
   if (raw.length > MAX_MATCHES) throw new Error('too many matches');
   const rows = [];
@@ -190,7 +191,8 @@ async function loadRows(pool, publicRoot, query, now) {
     rows.push({ decks: [a, b], rulesVersion, aiVersion, aiLevel: ai ? ai.ai_level : null,
       plays: ai ? ['player', 'opponent'].map(role => observedPlays(ai.card_plays?.[role], null, a, catalog))
         : ['a', 'b'].map((seat, i) => observedPlays(row.facts?.seats?.[seat]?.card_plays, row.facts?.seats?.[seat]?.deck_cards, i === 0 ? a : b, catalog)),
-      won: ai ? row.won : row.a_won, people: ai ? [row.player_id] : [row.seat_a_player_id, row.seat_b_player_id],
+      won: ai ? row.won : row.a_won, people: ai ? [row.player_id]
+        : [row.bot_a ? null : row.seat_a_player_id, row.bot_b ? null : row.seat_b_player_id].filter(id => id !== null),
       first: ai ? (ai.first_player === undefined ? null : ai.first_player === 'player' ? 0 : 1) : row.first_seat === 'a' ? 0 : row.first_seat === 'b' ? 1 : null,
       turns: ai ? ai.turns : row.facts?.turns });
   }

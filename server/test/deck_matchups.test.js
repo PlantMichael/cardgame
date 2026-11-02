@@ -2,12 +2,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const { readFileSync } = require('node:fs');
 const { Pool } = require('pg');
 const { initLegacySchema } = require('../schema_legacy');
 const { initSchema, PgStore } = require('../authoritative/schema');
 const { PgSettleRepo, settleRankedMatch } = require('../authoritative/settle');
 const { loadCards } = require('../authoritative/decks');
 const { normalizeAIRecord } = require('../ranked_ai_record');
+const { provisionRankedBots } = require('../ranked_bot_accounts');
 const { createRelayServer } = require('../card_winrates');
 const { DECK_STATS_PATH } = require('../deck_matchups');
 const { disposableDatabase, PROJECT_DIR } = require('./helpers');
@@ -132,12 +134,13 @@ test('exact decks and matchups survive storage, cohort filtering, and both publi
   assert.equal((await data('?mode=all')).filters.rulesVersion, 4, 'combined latest still resolves a real rules version');
   await initSchema(pool);
   const store = new PgStore(pool);
-  async function pvp(id, deckA, deckB, winner, first = 'a', facts = null, status = 'finished') {
-    await store.createMatch({ match_id: id, rules_version: 3, seed: 1, first_seat: first,
-      seat_a_player_id: people[0], seat_b_player_id: people[1], deck_a: deckA, deck_b: deckB });
+  async function pvp(id, deckA, deckB, winner, first = 'a', facts = null, status = 'finished', extra = {}) {
+    const match = { match_id: id, rules_version: 3, seed: 1, first_seat: first,
+      seat_a_player_id: people[0], seat_b_player_id: people[1], deck_a: deckA, deck_b: deckB, ...extra };
+    await store.createMatch(match);
     await store.setStatus(id, { status, winner_seat: winner, end_reason: 'completed', facts });
     await pool.query('UPDATE ranked_matches SET ended_at = $2 WHERE match_id = $1', [id, new Date(clock)]);
-    await settleRankedMatch(new PgSettleRepo(pool), { matchId: id, seats: { a: people[0], b: people[1] }, winner, endReason: 'completed' });
+    await settleRankedMatch(new PgSettleRepo(pool), { matchId: id, seats: { a: match.seat_a_player_id, b: match.seat_b_player_id }, winner, endReason: 'completed' });
   }
   await pvp('pvp_a', A, B, 'a', 'a', { turns: 12, seats: { a: { card_plays: { g_001: 3, g_002: 1, g_003: 2 } }, b: { card_plays: { cr_002: 1 } } } });
   await pvp('pvp_b', B, A, 'a', 'b');
@@ -175,6 +178,56 @@ test('exact decks and matchups survive storage, cohort filtering, and both publi
   assert.deepEqual(pooled.playStats, { totalSeats: 24, trackedSeats: 6, completeSeats: 4,
     cards: [{ id: 'cr_002', plays: 2 }, { id: 'g_001', plays: 6 }, { id: 'g_002', plays: 3 }, { id: 'g_003', plays: 2 }] });
   assert.deepEqual(await data('?mode=all&rulesVersion=3', upstream), pooled, 'both HTTP boundaries preserve the public pool and coverage');
+
+  // Real registered bot identities and canonical settlements feed the existing
+  // combined API, including bot-only rows with zero distinct human testers.
+  await provisionRankedBots(pool);
+  const bots = (await pool.query('SELECT player_id,profile FROM ranked_bot_accounts ORDER BY bot_id')).rows;
+  const io = bots.find(b => b.profile.id === 'io'), callisto = bots.find(b => b.profile.id === 'callisto');
+  const release = JSON.parse(readFileSync(path.join(root, 'data/cards.json'), 'utf8'));
+  const fullDeck = color => release.cards.filter(c => c.collectible && !c.isToken && c.color === color)
+    .flatMap(c => Array(c.rarity === 'LEGENDARY' ? 1 : 2).fill(c.id)).slice(0, 40);
+  const C = fullDeck('GREEN'), D = fullDeck('CRIMSON');
+  assert.equal(C.length, 40); assert.equal(D.length, 40);
+  const cardId = C[0];
+  const cardsBefore = await (await fetch(catalog + '/data/stats/card-winrates.json')).json();
+  const beforeCard = cardsBefore.cards.find(c => c.id === cardId);
+  const botMeta = { mode: 'ranked_bots', rules_version: 777, engine_version: 2,
+    seat_a_player_id: io.player_id, seat_b_player_id: callisto.player_id, bot_a: io.profile, bot_b: callisto.profile };
+  const facts = { turns: 7, seats: { a: { card_plays: { [cardId]: 2 } }, b: { card_plays: {} } } };
+  await pvp('bots_only', C, D, 'a', 'a', facts, 'finished', botMeta);
+  clock += 60001;
+  const botOnly = await data('?mode=all&rulesVersion=777');
+  assert.equal(botOnly.games, 1);
+  assert.ok(botOnly.decks.every(d => d.testers === 0));
+  assert.ok(botOnly.matchups.every(m => m.testers === 0));
+  assert.deepEqual(await data('?mode=all&rulesVersion=777', upstream), botOnly);
+  const page = await import('../../website/stats-core.mjs');
+  assert.ok(page.validateSnapshot(botOnly), 'the actual stats page accepts a bot-only combined snapshot');
+  const metric = page.cardMetrics(botOnly, [cardId])[0];
+  assert.equal(metric.inDecks, 0.5); assert.equal(metric.deckWinRate, 1); assert.equal(metric.timesPlayed, 2);
+  assert.equal((await data('?mode=authoritative_pvp&rulesVersion=777')).games, 0, 'explicit human PvP remains separate');
+  const cId = botOnly.decks.find(d => d.cards.some(c => c.id === cardId)).id;
+  await pvp('human_bot', C, D, 'b', 'a', { ...facts, turns: 9 }, 'finished',
+    { ...botMeta, seat_a_player_id: people[0], seat_b_player_id: io.player_id, bot_a: null, bot_b: io.profile });
+  await pvp('bot_mirror', C, C, 'b', 'b', { turns: 11 }, 'finished', botMeta);
+  await pvp('bot_contradictory', C, D, 'a', 'a', facts, 'finished', botMeta);
+  await pool.query("UPDATE ranked_settlements SET won=NOT won WHERE match_id='bot_contradictory' AND player_id=$1", [io.player_id]);
+  clock += 60001;
+  const combinedBots = await data('?mode=all&rulesVersion=777');
+  assert.equal(combinedBots.games, 3, 'each canonical bot game counts once and contradictory settlements never count');
+  const shared = combinedBots.decks.find(d => d.id === cId);
+  assert.deepEqual([shared.matches, shared.wins, shared.losses, shared.testers], [4, 2, 2, 1], 'same exact human/bot list merges without counting bot accounts as people');
+  const botMirror = combinedBots.matchups.find(m => m.deckId === cId && m.opponentDeckId === cId);
+  assert.deepEqual([botMirror.matches, botMirror.wins, botMirror.testers], [2, 1, 0]);
+  assert.equal(combinedBots.playStats.trackedSeats, 4); assert.equal(combinedBots.playStats.completeSeats, 4);
+  const combinedCards = await (await fetch(catalog + '/data/stats/card-winrates.json')).json();
+  const afterCard = combinedCards.cards.find(c => c.id === cardId);
+  assert.equal(afterCard.matches - beforeCard.matches, 4); assert.equal(afterCard.wins - beforeCard.wins, 2);
+  assert.ok(combinedCards.methodology.modes.includes('ranked_bots'));
+  const sqlCard = (await pool.query(readFileSync(path.join(PROJECT_DIR, 'server/tools/card-winrates.sql'), 'utf8'))).rows.find(c => c.card_id === cardId);
+  assert.deepEqual([Number(sqlCard.games), Number(sqlCard.wins)], [afterCard.matches, afterCard.wins]);
+  assert.ok(!JSON.stringify(combinedBots).includes('player_id') && !JSON.stringify(combinedBots).includes('Io'));
 
   const beforeReads = reads;
   const concurrent = await Promise.all(Array.from({ length: 8 }, () => data(slice)));

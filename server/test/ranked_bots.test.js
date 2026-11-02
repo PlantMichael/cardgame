@@ -278,7 +278,11 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   assert.equal((await (await fetch(route)).json()).games, 0, 'ranked games never enter simulations');
   assert.equal((await (await fetch(httpUrl + '/data/stats/deck-matchups.json?mode=authoritative_pvp')).json()).games, 0);
   const humanCards = await (await fetch(httpUrl + '/data/stats/card-winrates.json')).json();
-  assert.ok(humanCards.cards.every(c => c.matches === 0));
+  assert.ok(humanCards.cards.some(c => c.matches > 0), 'ranked bot seats contribute to the shared card statistics');
+  const combined = await (await fetch(`http://127.0.0.1:${proxy.address().port}/data/stats/deck-matchups.json?mode=all`)).json();
+  assert.ok(combined.games >= 3, 'real worker results reach the existing stats page feed');
+  const page = await import('../../website/stats-core.mjs');
+  assert.ok(page.validateSnapshot(combined));
   for (const bad of ['?mode=bad', '?mode=ranked&mode=simulation', '?mode=ranked&days=0']) assert.equal((await fetch(route + bad)).status, 400);
   const snapshots = (await pool.query('SELECT bot_a,bot_b FROM ranked_matches WHERE match_id=$1', [first.match_id])).rows[0];
   await pool.query("UPDATE ranked_bot_accounts SET profile=jsonb_set(profile,'{version}','\"2.0\"')");

@@ -34,7 +34,7 @@ export async function cardWinrates(root, resolvePublicFile, { statsOrigin = DEFA
     counts.set(row.id, row);
   }
   return { generatedAt: data.generatedAt,
-    methodology: { metric: 'starting_deck_inclusion', modes: ['ranked_ai', 'authoritative_pvp'],
+    methodology: { metric: 'starting_deck_inclusion', modes: ['ranked_ai', 'authoritative_pvp', 'ranked_bots'],
       aiSeats: 'both', copies: 'once_per_player_game', rulesVersions: 'combined',
       minSample: 1, preliminary: true,
       privacy: 'No raw identities or deck lists. Small sample changes may reveal deck inclusion or outcomes.' },

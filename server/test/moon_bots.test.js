@@ -122,7 +122,7 @@ test('worker plays actual named bots, persists/replays results and feeds only si
   assert.ok(sameDeck.some(d => d.botKey.startsWith('ganymede@')), 'mirror deck retains the other bot identity');
   assert.deepEqual(data, await stats(origin));
   const after = await (await fetch(origin + '/data/stats/card-winrates.json')).json();
-  assert.deepEqual(after.cards, before.cards, 'human card stats never include bot games');
+  assert.deepEqual(after.cards, before.cards, 'isolated simulations never enter shared card statistics');
   assert.equal((await pool.query('SELECT count(*) AS n FROM ranked_settlements')).rows[0].n, '0');
   assert.equal((await pool.query('SELECT ranked_wins,ranked_losses FROM players')).rows[0].ranked_wins, 0);
 
