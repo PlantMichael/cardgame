@@ -783,13 +783,15 @@ func _queue_entry_to_choice(queue_name: String, entry) -> void:
 # --- Event feed ---
 #
 # Ordered, advisory records of what just happened, for animation and the log.
-# State is never read from them. Off by default: a simulation copy must not
+# Rules never read from them; play counts only observe them. Off by default: a simulation copy must not
 # pay for (or leak) them, and nothing consumes them until a controller or the
 # match host turns them on.
 
 var events_enabled: bool = false
 var events: Array[Dictionary] = []
 var _event_n: int = 0
+# Observation only: never copied into simulations, hashed, or sent in player views.
+var _card_plays: Dictionary = {}
 ## Set when a match ends by something other than the rules' own win check.
 var end_reason: String = ""
 
@@ -798,9 +800,18 @@ func set_events_enabled(enabled: bool) -> void:
 	player.log_draws = enabled
 	opponent.log_draws = enabled
 
+func card_play_counts(player_id: String) -> Dictionary:
+	return (_card_plays.get(player_id, {}) as Dictionary).duplicate()
+
 func _emit(type: String, data: Dictionary = {}) -> void:
 	if not events_enabled:
 		return
+	if type == "play":
+		var owner := str(data.get("owner", ""))
+		var card_id := str(data.get("card_id", ""))
+		var counts: Dictionary = _card_plays.get(owner, {})
+		counts[card_id] = int(counts.get(card_id, 0)) + 1
+		_card_plays[owner] = counts
 	_event_n += 1
 	data["n"] = _event_n
 	data["type"] = type

@@ -16,11 +16,11 @@ export function deckQuery(search) {
   const allowed = ['mode', 'days', 'rulesVersion', 'aiVersion', 'aiLevel'];
   for (const [key, value] of params) {
     if (!allowed.includes(key) || params.getAll(key).length !== 1) fail();
-    if (key === 'mode') { if (!['ranked_ai', 'authoritative_pvp'].includes(value)) fail(); }
+    if (key === 'mode') { if (!['ranked_ai', 'authoritative_pvp', 'all'].includes(value)) fail(); }
     else if (['rulesVersion', 'aiVersion'].includes(key) && ['latest', 'unknown'].includes(value)) continue;
     else if (!/^[1-9]\d*$/.test(value) || Number(value) > (key === 'days' ? 365 : key === 'aiLevel' ? 10 : 1000000)) fail();
   }
-  if (params.get('mode') === 'authoritative_pvp' && (params.has('aiVersion') || params.has('aiLevel'))) fail();
+  if (params.has('mode') && params.get('mode') !== 'ranked_ai' && (params.has('aiVersion') || params.has('aiLevel'))) fail();
   return params;
 }
 
@@ -60,11 +60,27 @@ function composition(row, catalog) {
   return { id, cards: pairs.map(([id, copies]) => ({ id, copies })), factions: factions.size ? [...factions].sort() : ['GENERIC'] };
 }
 
+function playStatistics(input, games, catalog) {
+  if (input === undefined) return { totalSeats: games * 2, trackedSeats: 0, completeSeats: 0, cards: [] };
+  if (!input || input.totalSeats !== games * 2 || !count(input.trackedSeats) || !count(input.completeSeats)
+      || input.completeSeats > input.trackedSeats || input.trackedSeats > input.totalSeats
+      || !Array.isArray(input.cards) || input.cards.length > catalog.size) fail();
+  const seen = new Set();
+  let total = 0;
+  const cards = input.cards.map(row => {
+    if (!catalog.has(row?.id) || seen.has(row.id) || !count(row.plays)) fail();
+    seen.add(row.id); total += row.plays;
+    return { id: row.id, plays: row.plays };
+  });
+  if (total > input.trackedSeats * 1000000 || (!input.trackedSeats && cards.length)) fail();
+  return { totalSeats: input.totalSeats, trackedSeats: input.trackedSeats, completeSeats: input.completeSeats, cards };
+}
+
 export function projectDeckMatchups(data, catalog, query) {
   const f = data?.filters, available = data?.availableFilters;
   const mode = query.get('mode') ?? 'ranked_ai';
-  if (data?.methodology?.metric !== 'exact_starting_deck_matchup' || data.methodology.rolesSeparated !== true ||
-      data.methodology.unit !== 'seat_game' || data.methodology.source !== (mode === 'ranked_ai' ? 'client_reported' : 'server_verified') ||
+  if (data?.methodology?.metric !== 'exact_starting_deck_matchup' || data.methodology.rolesSeparated !== (mode !== 'all') ||
+      data.methodology.unit !== 'seat_game' || data.methodology.source !== (mode === 'all' ? 'mixed' : mode === 'ranked_ai' ? 'client_reported' : 'server_verified') ||
       typeof data.generatedAt !== 'string' || !Number.isFinite(Date.parse(data.generatedAt)) ||
       !count(data.games) || data.games > 50000 || !Array.isArray(data.decks) || !Array.isArray(data.matchups) ||
       data.decks.length > 100000 || data.matchups.length > 100000 || !f || f.mode !== mode ||
@@ -78,11 +94,11 @@ export function projectDeckMatchups(data, catalog, query) {
     const values = available?.[key];
     if (!Array.isArray(values) || values.length > 50001 || new Set(values).size !== values.length ||
         values.some(v => key === 'aiLevels' ? !Number.isInteger(v) || v < 1 || v > 10 : !version(v))) fail();
-    if (mode === 'authoritative_pvp' && key !== 'rulesVersions' && values.length) fail();
+    if (mode !== 'ranked_ai' && key !== 'rulesVersions' && values.length) fail();
   }
   const byKey = new Map();
   const decks = data.decks.map(row => {
-    if (!['human', 'ai'].includes(row.role) || (mode === 'authoritative_pvp' && row.role !== 'human')) fail();
+    if (!(mode === 'all' ? ['combined'] : mode === 'authoritative_pvp' ? ['human'] : ['human', 'ai']).includes(row.role)) fail();
     const deck = { ...composition(row, catalog), role: row.role, ...statistics(row) };
     const key = `${deck.id}/${deck.role}`;
     if (byKey.has(key)) fail();
@@ -111,12 +127,12 @@ export function projectDeckMatchups(data, catalog, query) {
   return { generatedAt: data.generatedAt,
     filters: { mode, days: f.days, rulesVersion: f.rulesVersion, aiVersion: f.aiVersion, aiLevel: f.aiLevel },
     availableFilters: { rulesVersions: available.rulesVersions, aiVersions: available.aiVersions, aiLevels: available.aiLevels },
-    methodology: { metric: 'exact_starting_deck_matchup', unit: 'seat_game', rolesSeparated: true,
-      source: mode === 'ranked_ai' ? 'client_reported' : 'server_verified', minSample: 1, preliminary: true,
+    methodology: { metric: 'exact_starting_deck_matchup', unit: 'seat_game', rolesSeparated: mode !== 'all',
+      source: mode === 'all' ? 'mixed' : mode === 'ranked_ai' ? 'client_reported' : 'server_verified', minSample: 1, preliminary: true,
       interval: 'Wilson 95%; repeated testers are not independent samples',
       testers: 'Distinct human participants involved, including opponents; never AI accounts',
       privacy: 'Public exact deck lists and small-sample aggregates can permit inference. No identities or individual match histories.' },
-    games: data.games, decks, matchups };
+    games: data.games, playStats: playStatistics(data.playStats, data.games, catalog), decks, matchups };
 }
 
 export async function deckMatchups(root, search, { statsOrigin = DEFAULT_ORIGIN, statsTimeoutMs = 5000 } = {}) {

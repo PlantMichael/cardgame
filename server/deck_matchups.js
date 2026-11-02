@@ -4,6 +4,7 @@ const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const { MAX_DECK_SIZE, maxCopiesFor } = require('./authoritative/decks');
 const { SETTLING_REASONS } = require('./authoritative/settle');
+const { normalizeCardPlays } = require('./card_plays');
 
 const DECK_STATS_PATH = '/data/stats/deck-matchups.json';
 const MAX_MATCHES = 50000;
@@ -17,7 +18,7 @@ function parseQuery(search) {
     if (!allowed.has(key) || params.getAll(key).length !== 1) throw new Error('invalid query');
   }
   const mode = params.get('mode') ?? 'ranked_ai';
-  if (!['ranked_ai', 'authoritative_pvp'].includes(mode)) throw new Error('invalid mode');
+  if (!['ranked_ai', 'authoritative_pvp', 'all'].includes(mode)) throw new Error('invalid mode');
   function integer(key, fallback, max) {
     const raw = params.get(key) ?? String(fallback);
     if (!/^[1-9]\d*$/.test(raw) || Number(raw) > max) throw new Error('invalid integer');
@@ -27,7 +28,7 @@ function parseQuery(search) {
     const raw = params.get(key) ?? 'latest';
     return ['unknown', 'latest'].includes(raw) ? raw : integer(key, 1, 1000000);
   }
-  if (mode === 'authoritative_pvp' && (params.has('aiVersion') || params.has('aiLevel'))) throw new Error('irrelevant filter');
+  if (mode !== 'ranked_ai' && (params.has('aiVersion') || params.has('aiLevel'))) throw new Error('irrelevant filter');
   return { mode, days: integer('days', 30, 365), rulesVersion: version('rulesVersion'),
     aiVersion: mode === 'ranked_ai' ? version('aiVersion') : null,
     aiLevel: mode === 'ranked_ai' ? integer('aiLevel', 10, 10) : null };
@@ -57,7 +58,7 @@ function latest(values) {
 }
 
 function resolveCohort(rows, query) {
-  const aiLevels = [...new Set(rows.map(r => r.aiLevel).filter(Number.isInteger))].sort((a, b) => a - b);
+  const aiLevels = query.mode === 'ranked_ai' ? [...new Set(rows.map(r => r.aiLevel).filter(Number.isInteger))].sort((a, b) => a - b) : [];
   let candidates = rows.filter(r => query.aiLevel === null || r.aiLevel === query.aiLevel);
   const ruleChoices = versions(candidates.filter(r => query.aiVersion === null || query.aiVersion === 'latest' || r.aiVersion === query.aiVersion), 'rulesVersion');
   if (query.rulesVersion !== 'latest') candidates = candidates.filter(r => r.rulesVersion === query.rulesVersion);
@@ -97,11 +98,18 @@ function finish(value) {
 
 function aggregate(rows, filters, availableFilters, now) {
   const decks = new Map(), matchups = new Map();
+  const plays = new Map();
+  let trackedSeats = 0, completeSeats = 0;
   for (const row of rows) {
     for (const side of [0, 1]) {
       const deck = row.decks[side], opponent = row.decks[1 - side];
-      const role = filters.mode === 'ranked_ai' && side === 1 ? 'ai' : 'human';
-      const opponentRole = filters.mode === 'ranked_ai' && side === 0 ? 'ai' : 'human';
+      const role = filters.mode === 'all' ? 'combined' : filters.mode === 'ranked_ai' && side === 1 ? 'ai' : 'human';
+      const opponentRole = filters.mode === 'all' ? 'combined' : filters.mode === 'ranked_ai' && side === 0 ? 'ai' : 'human';
+      const observed = row.plays[side];
+      if (observed) {
+        trackedSeats++; completeSeats += Number(observed.complete);
+        for (const [id, count] of Object.entries(observed.counts)) plays.set(id, (plays.get(id) || 0) + count);
+      }
       const key = `${deck.id}/${role}`, pair = `${key}/${opponent.id}/${opponentRole}`;
       if (!decks.has(key)) decks.set(key, { deck, role, value: bucket() });
       if (!matchups.has(pair)) matchups.set(pair, { deckId: deck.id, opponentDeckId: opponent.id, role, opponentRole, value: bucket() });
@@ -112,17 +120,39 @@ function aggregate(rows, filters, availableFilters, now) {
     }
   }
   return { generatedAt: new Date(now).toISOString(), filters, availableFilters,
-    methodology: { metric: 'exact_starting_deck_matchup', unit: 'seat_game', rolesSeparated: true,
-      source: filters.mode === 'ranked_ai' ? 'client_reported' : 'server_verified',
+    methodology: { metric: 'exact_starting_deck_matchup', unit: 'seat_game', rolesSeparated: filters.mode !== 'all',
+      source: filters.mode === 'all' ? 'mixed' : filters.mode === 'ranked_ai' ? 'client_reported' : 'server_verified',
       minSample: 1, preliminary: true, interval: 'Wilson 95%; repeated testers are not independent samples',
       testers: 'Distinct human participants involved, including opponents; never AI accounts',
       privacy: 'Public exact deck lists and small-sample aggregates can permit inference. No identities or individual match histories.' },
     games: rows.length,
+    playStats: { totalSeats: rows.length * 2, trackedSeats, completeSeats,
+      cards: [...plays].sort(([a], [b]) => a.localeCompare(b)).map(([id, plays]) => ({ id, plays })) },
     decks: [...decks].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, row]) => ({ ...row.deck, role: row.role, ...finish(row.value) })),
     matchups: [...matchups].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, { value, ...row }]) => ({ ...row, ...finish(value) })) };
 }
 
+function observedPlays(full, legacy, deck, catalog) {
+  const counts = normalizeCardPlays(full, catalog);
+  if (counts !== null) return { counts, complete: true };
+  if (!Array.isArray(legacy) || !legacy.length || legacy.length > 40) return null;
+  const ids = new Set(deck.cards.map(c => c.id));
+  const partial = {};
+  for (const card of legacy) {
+    if (!ids.has(card?.card_id) || Object.hasOwn(partial, card.card_id)) return null;
+    partial[card.card_id] = card.played_copies;
+  }
+  const known = normalizeCardPlays(partial, catalog);
+  return known === null ? null : { counts: known, complete: false };
+}
+
 async function loadRows(pool, publicRoot, query, now) {
+  if (query.mode === 'all') {
+    const sources = await Promise.all(['ranked_ai', 'authoritative_pvp'].map(mode => loadRows(pool, publicRoot, { ...query, mode }, now)));
+    const sourceCount = sources.reduce((n, s) => n + s.sourceCount, 0);
+    if (sourceCount > MAX_MATCHES) throw new Error('too many matches');
+    return { rows: sources.flatMap(s => s.rows), sourceCount };
+  }
   const release = JSON.parse(readFileSync(path.join(publicRoot, 'data/cards.json'), 'utf8'));
   if (!Array.isArray(release.cards)) throw new Error('invalid catalog');
   const catalog = new Map(release.cards.filter(c => c.collectible === true && c.isToken === false).map(c => [c.id, c]));
@@ -136,7 +166,7 @@ async function loadRows(pool, publicRoot, query, now) {
       values: [since, new Date(now).toISOString(), MAX_MATCHES + 1], query_timeout: 5000 })).rows;
   } else {
     const available = await pool.query("SELECT to_regclass('ranked_matches') IS NOT NULL AS available");
-    if (!available.rows[0].available) return [];
+    if (!available.rows[0].available) return { rows: [], sourceCount: 0 };
     raw = (await pool.query({ text: `SELECT m.deck_a, m.deck_b, m.rules_version, m.first_seat, m.facts,
       m.seat_a_player_id, m.seat_b_player_id, m.winner_seat, sa.won AS a_won, sb.won AS b_won
       FROM ranked_matches m
@@ -158,11 +188,13 @@ async function loadRows(pool, publicRoot, query, now) {
     if (ai && ai.first_player !== undefined && !['player', 'opponent'].includes(ai.first_player)) continue;
     if (!ai && (row.a_won !== (row.winner_seat === 'a') || row.b_won !== (row.winner_seat === 'b'))) continue;
     rows.push({ decks: [a, b], rulesVersion, aiVersion, aiLevel: ai ? ai.ai_level : null,
+      plays: ai ? ['player', 'opponent'].map(role => observedPlays(ai.card_plays?.[role], null, a, catalog))
+        : ['a', 'b'].map((seat, i) => observedPlays(row.facts?.seats?.[seat]?.card_plays, row.facts?.seats?.[seat]?.deck_cards, i === 0 ? a : b, catalog)),
       won: ai ? row.won : row.a_won, people: ai ? [row.player_id] : [row.seat_a_player_id, row.seat_b_player_id],
       first: ai ? (ai.first_player === undefined ? null : ai.first_player === 'player' ? 0 : 1) : row.first_seat === 'a' ? 0 : row.first_seat === 'b' ? 1 : null,
       turns: ai ? ai.turns : row.facts?.turns });
   }
-  return rows;
+  return { rows, sourceCount: raw.length };
 }
 
 function createDeckMatchups({ pool, publicRoot, now = Date.now }) {
@@ -177,7 +209,7 @@ function createDeckMatchups({ pool, publicRoot, now = Date.now }) {
       cache.delete(victim[0]);
     }
     const entry = { pending: true, expires: 0 };
-    entry.promise = loadRows(pool, publicRoot, query, time).then(rows => {
+    entry.promise = loadRows(pool, publicRoot, query, time).then(({ rows }) => {
       const cohort = resolveCohort(rows, query);
       const result = aggregate(cohort.rows, cohort.filters, cohort.availableFilters, time);
       if (Buffer.byteLength(JSON.stringify(result)) > MAX_BYTES) throw new Error('too large');

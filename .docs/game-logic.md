@@ -301,3 +301,7 @@ Stratagem effects handled in `_apply_stratagem()`:
 - `"return_friendly_to_hand"` — Emergency Extraction: moves a friendly *creature* (not a hero, enemy, or Location) back to hand via `return_minion_to_hand()`. Target legality is `_stratagem_target_error()`, checked in `validate()` and `play_stratagem()` before anything is spent
 - `"deal_damage_all_enemy_draw_yeti"` — Whiteout: `effect_value` damage (plus amp) to every enemy *creature* (Locations excluded); if any creature was at 0 health at that checkpoint — read before `_remove_dead_minions()`, so a Reinforce refill or a later deathrattle cannot change it — runs `draw_random_yeti()` once
 - `"force_challenge"` — prompts player to pick a friendly Yeti to immediately challenge a chosen enemy; if `effect_value > 0` and the target dies, the Yeti gains +`effect_value`/+`effect_value`; e.g. Icewhip
+
+## Observed card plays
+
+`GameState.card_play_counts(player_id)` returns a detached dictionary of actual play-event counts. The existing `_emit` owner increments only for `play` events while events are enabled, so real creature/stratagem plays and replays count; attacks, draws, transforms and direct summons do not. Counts are observations: they are excluded from simulation clones, replay hashes and player views. Each new GameState begins with empty counts. GameManager includes the two snapshots as optional `card_plays` in ranked-AI summaries; MatchRecorder includes per-seat full counts in new authoritative facts. Older deck-card facts retain their original starting-UID semantics.

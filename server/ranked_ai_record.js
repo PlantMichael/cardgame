@@ -2,6 +2,7 @@
 // Completed local AI summaries are useful for testing, but never verified PvP.
 // Reuse deck-size bounds; cardIds is the relay's map of shipped non-token cards.
 const { MIN_DECK_SIZE, MAX_DECK_SIZE } = require('./authoritative/decks');
+const { normalizeCardPlays } = require('./card_plays');
 
 // Project only bounded, known fields. Labels and account identity are server-owned.
 function normalizeAIRecord(input, matchId, cardIds) {
@@ -16,7 +17,13 @@ function normalizeAIRecord(input, matchId, cardIds) {
   }
   if (input.ai_version !== undefined && !integer(input.ai_version, 1, 1000000)) return null;
   if (input.first_player !== undefined && !['player', 'opponent'].includes(input.first_player)) return null;
+  const plays = {};
+  for (const role of ['player', 'opponent']) {
+    const counts = normalizeCardPlays(input.card_plays?.[role], cardIds);
+    if (counts !== null) plays[role] = counts;
+  }
   return {
+    ...(Object.keys(plays).length ? { card_plays: plays } : {}),
     mode: 'ranked_ai', source: 'client_reported',
     player_deck: input.player_deck.slice(), opponent_deck: input.opponent_deck.slice(),
     ai_level: input.ai_level, turns: input.turns, rules_version: input.rules_version,

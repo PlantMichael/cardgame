@@ -366,6 +366,8 @@ func _handle_game_over() -> void:
 		var old_legend_rating := Auth.rank_legend_rating
 		var ai_match := _ranked_ai_match.duplicate(true)
 		ai_match["turns"] = game_state.turn_number
+		ai_match["card_plays"] = {"player": game_state.card_play_counts(LOCAL_PLAYER_ID),
+			"opponent": game_state.card_play_counts(OPPONENT_PLAYER_ID)}
 		Auth.report_ranked_result(won, -1, _ranked_match_id, ai_match)
 		board.show_game_over(won, true, old_bracket, old_in_legend, old_legend_rating)
 	elif is_campaign:

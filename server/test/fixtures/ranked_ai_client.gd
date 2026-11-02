@@ -19,9 +19,13 @@ func _run() -> void:
 		board.auto_confirm_mulligan = true
 		var human: Array[CardData] = []
 		var bot: Array[CardData] = []
-		for i in 10:
-			human.append(CardDatabase.get_card("g_001"))
-			bot.append(CardDatabase.get_card("cr_002"))
+		var starters := DeckManager.get_starter_decks()
+		var human_ids: Array[String] = []
+		var bot_ids: Array[String] = []
+		human_ids.assign(starters[0]["card_ids"])
+		bot_ids.assign(starters[1]["card_ids"])
+		human = DeckManager.build_deck_from_ids(human_ids)
+		bot = DeckManager.build_deck_from_ids(bot_ids)
 		var coinflip := {}
 		get_tree().process_frame.connect(func():
 			coinflip["first"] = "player" if board.coinflip_label.text == "Going First" else "opponent",
@@ -30,6 +34,20 @@ func _run() -> void:
 		if ranked:
 			print("AI_PRODUCER_FIRST ", coinflip["first"])
 		var gs := GameManagerAutoload.game_state
+		gs.player.max_mana = 10
+		gs.player.current_mana = 0
+		# Real accepted plays, including a copy generated into hand, reach telemetry.
+		var creature := CardDatabase.get_card("g_001").new_instance(gs.player.mint_card_uid())
+		gs.player.hand.append(creature)
+		var play := gs.execute({"type": "play_creature", "actor": "player_1", "card_uid": creature.uid})
+		if not play["ok"]:
+			get_tree().quit(1)
+			return
+		var buff := CardDatabase.get_card("g_str_001").new_instance(gs.player.mint_card_uid())
+		gs.player.hand.append(buff)
+		if not gs.execute({"type": "play_stratagem", "actor": "player_1", "card_uid": buff.uid, "target_instance_id": play["minion"].instance_id})["ok"]:
+			get_tree().quit(1)
+			return
 		# Depletion must not replace the starting lists in the submitted report.
 		gs.player.deck.clear()
 		gs.opponent.deck.clear()

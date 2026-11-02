@@ -45,7 +45,7 @@ test('exact decks and matchups survive storage, cohort filtering, and both publi
     await pool.query(`INSERT INTO ranked_settlements (match_id,player_id,won,outcome,ai_match,settled_at)
       VALUES ($1,$2,$3,'{}',$4,$5) ON CONFLICT DO NOTHING`, [id, person, won, record, new Date(at)]);
   }
-  await ai('ai_1_1', A, B, true, { first_player: 'player' });
+  await ai('ai_1_1', A, B, true, { first_player: 'player', card_plays: { player: { g_001: 2 }, opponent: { cr_002: 1 } } });
   await ai('ai_1_2', [...A].reverse(), B, false, { turns: 13, first_player: 'opponent' }, people[1]);
   await ai('ai_1_3', B, A, true, { turns: 9 });
   await ai('ai_1_4', A, A, true, { turns: 15, first_player: 'player' });
@@ -116,7 +116,7 @@ test('exact decks and matchups survive storage, cohort filtering, and both publi
     assert.ok(!JSON.stringify(stats).includes(privateText), privateText);
   }
   assert.deepEqual(await data(slice, upstream), stats, 'relay and catalog expose the same public contract');
-  for (const invalid of ['?mode=all', '?days=0', '?days=366', '?aiLevel=11', '?rulesVersion=3&rulesVersion=4',
+  for (const invalid of ['?mode=unknown', '?mode=all&aiLevel=4', '?mode=all&aiVersion=1', '?days=0', '?days=366', '?aiLevel=11', '?rulesVersion=3&rulesVersion=4',
     '?aiVersion=', '?player_id=1', '?mode=authoritative_pvp&aiLevel=10']) {
     for (const origin of [upstream, catalog]) assert.equal((await get(invalid, origin)).status, 400, invalid);
   }
@@ -126,6 +126,10 @@ test('exact decks and matchups survive storage, cohort filtering, and both publi
   assert.equal((await get()).headers.get('access-control-allow-origin'), '*');
   assert.equal((await data('?mode=authoritative_pvp')).games, 0, 'AI-only installation supports an empty PvP view');
 
+  const aiPool = await data('?mode=all&rulesVersion=3');
+  assert.equal(aiPool.games, 8, 'combined view includes all AI policies/levels and missing-policy history without PvP tables');
+  assert.ok(aiPool.decks.every(d => d.role === 'combined'));
+  assert.equal((await data('?mode=all')).filters.rulesVersion, 4, 'combined latest still resolves a real rules version');
   await initSchema(pool);
   const store = new PgStore(pool);
   async function pvp(id, deckA, deckB, winner, first = 'a', facts = null, status = 'finished') {
@@ -135,9 +139,9 @@ test('exact decks and matchups survive storage, cohort filtering, and both publi
     await pool.query('UPDATE ranked_matches SET ended_at = $2 WHERE match_id = $1', [id, new Date(clock)]);
     await settleRankedMatch(new PgSettleRepo(pool), { matchId: id, seats: { a: people[0], b: people[1] }, winner, endReason: 'completed' });
   }
-  await pvp('pvp_a', A, B, 'a', 'a', { turns: 12 });
+  await pvp('pvp_a', A, B, 'a', 'a', { turns: 12, seats: { a: { card_plays: { g_001: 3, g_002: 1, g_003: 2 } }, b: { card_plays: { cr_002: 1 } } } });
   await pvp('pvp_b', B, A, 'a', 'b');
-  await pvp('pvp_mirror', A, A, 'b', 'a', { turns: 9 });
+  await pvp('pvp_mirror', A, A, 'b', 'a', { turns: 9, seats: { a: { deck_cards: [{ card_id: 'g_001', played_copies: 1 }, { card_id: 'g_002', played_copies: 0 }] }, b: { deck_cards: [{ card_id: 'g_001', played_copies: 0 }, { card_id: 'g_002', played_copies: 2 }] } } });
   await pvp('pvp_unfinished', A, B, 'a', 'a', null, 'active');
   await pvp('pvp_contradictory', A, B, 'a');
   await pool.query("UPDATE ranked_settlements SET won = NOT won WHERE match_id = 'pvp_contradictory'");
@@ -150,6 +154,27 @@ test('exact decks and matchups survive storage, cohort filtering, and both publi
   assert.equal(pvpA.averageTurns, 10);
   const pvpMirror = pvpStats.matchups.find(m => m.deckId === aHuman.id && m.opponentDeckId === aHuman.id);
   assert.deepEqual([pvpMirror.matches, pvpMirror.wins, pvpMirror.losses], [2, 1, 1]);
+
+  await ai('ai_4_4', A, B, true, { ai_level: 4 });
+  const pooled = await data('?mode=all&rulesVersion=3');
+  assert.equal(pooled.games, 12, 'AI and canonical PvP games pool once, including low difficulty and old policies');
+  assert.deepEqual(pooled.filters, { mode: 'all', days: 30, rulesVersion: 3, aiVersion: null, aiLevel: null });
+  assert.deepEqual(pooled.availableFilters.aiLevels, []);
+  assert.deepEqual(pooled.availableFilters.aiVersions, []);
+  assert.equal(pooled.methodology.rolesSeparated, false);
+  assert.equal(pooled.methodology.source, 'mixed');
+  assert.ok(pooled.decks.every(d => d.role === 'combined'));
+  const combinedA = pooled.decks.find(d => d.id === aHuman.id);
+  assert.deepEqual([combinedA.matches, combinedA.wins, combinedA.losses, combinedA.testers], [13, 7, 6, 2]);
+  assert.equal(combinedA.turnSamples, 12);
+  assert.equal(combinedA.averageTurns, 137 / 12);
+  const combinedMirror = pooled.matchups.find(m => m.deckId === aHuman.id && m.opponentDeckId === aHuman.id);
+  assert.deepEqual([combinedMirror.matches, combinedMirror.wins, combinedMirror.losses], [4, 2, 2]);
+  assert.equal(pooled.decks.reduce((n,d) => n+d.matches,0), pooled.games*2);
+  assert.equal(pooled.decks.reduce((n,d) => n+d.wins,0), pooled.games);
+  assert.deepEqual(pooled.playStats, { totalSeats: 24, trackedSeats: 6, completeSeats: 4,
+    cards: [{ id: 'cr_002', plays: 2 }, { id: 'g_001', plays: 6 }, { id: 'g_002', plays: 3 }, { id: 'g_003', plays: 2 }] });
+  assert.deepEqual(await data('?mode=all&rulesVersion=3', upstream), pooled, 'both HTTP boundaries preserve the public pool and coverage');
 
   const beforeReads = reads;
   const concurrent = await Promise.all(Array.from({ length: 8 }, () => data(slice)));
@@ -169,7 +194,20 @@ test('exact decks and matchups survive storage, cohort filtering, and both publi
   assert.equal((await data(slice)).games, 6, 'failure is not cached as empty or stale success');
   const record = normalizeAIRecord({ player_deck: A, opponent_deck: B, rules_version: 999, ai_version: 999, ai_level: 10, turns: 1 }, 'ai_1_1', cards);
   await pool.query(`INSERT INTO ranked_settlements (match_id,player_id,won,outcome,ai_match,settled_at)
-    SELECT 'ai_' || (n+7000000) || '_9',$1,true,'{}',$2,$3 FROM generate_series(1,50001) n`, [people[0], record, new Date(clock)]);
+    SELECT 'ai_' || (n+7000000) || '_9',$1,true,'{}',$2,$3 FROM generate_series(1,25000) n`, [people[0], record, new Date(clock)]);
+  await pool.query(`INSERT INTO ranked_matches (match_id,mode,status,end_reason,rules_version,seed,first_seat,
+      seat_a_player_id,seat_b_player_id,deck_a,deck_b,winner_seat,ended_at)
+    SELECT 'stress_pvp_'||n,'authoritative','finished','completed',999,1,'a',$1,$2,$3,$4,'a',$5
+    FROM generate_series(1,25000) n`, [people[0],people[1],JSON.stringify(A),JSON.stringify(B),new Date(clock)]);
+  await pool.query(`INSERT INTO ranked_settlements (match_id,player_id,won,outcome,settled_at)
+    SELECT 'stress_pvp_'||n,person,won,'{}',$3 FROM generate_series(1,25000) n
+    CROSS JOIN (VALUES ($1::integer,true),($2::integer,false)) AS seats(person,won)`, [people[0],people[1],new Date(clock)]);
+  clock += 60001;
+  assert.equal((await get('?mode=all&rulesVersion=3')).status, 503, 'the union ceiling applies before version filtering');
+  assert.equal((await get(slice)).status, 200, 'each individual source remains within its own limit');
+  assert.equal((await get('?mode=authoritative_pvp&rulesVersion=3')).status, 200);
+  await pool.query(`INSERT INTO ranked_settlements (match_id,player_id,won,outcome,ai_match,settled_at)
+    SELECT 'ai_' || (n+8000000) || '_9',$1,true,'{}',$2,$3 FROM generate_series(1,25001) n`, [people[0], record, new Date(clock)]);
   clock += 60001;
   assert.equal((await get(slice)).status, 503, 'source ceiling fails honestly rather than silently truncating history');
 });

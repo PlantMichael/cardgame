@@ -10,6 +10,9 @@ extends RefCounted
 ## played. A card whose uid was not in the starting deck (a token, a created or
 ## returned card) is counted separately and never as a deck card.
 ##
+## New facts also include Core-observed card_plays for every actual play,
+## including replays/generated copies; deck_cards keeps its older UID semantics.
+##
 ## It only observes: it reads the state and the event feed after each command
 ## and never changes either. It is created by MatchHost for real matches only,
 ## never by duplicate_for_sim(), so AI search cannot record.
@@ -117,5 +120,5 @@ func facts(gs: GameState) -> Dictionary:
 		for uid in s["created"]:
 			var cid := str(s["created"][uid])
 			created[cid] = int(created.get(cid, 0)) + 1
-		out["seats"]["a" if pid == "host" else "b"] = {"deck_cards": deck_cards, "created": created}
+		out["seats"]["a" if pid == "host" else "b"] = {"deck_cards": deck_cards, "created": created, "card_plays": gs.card_play_counts(pid)}
 	return out

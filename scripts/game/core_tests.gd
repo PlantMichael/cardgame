@@ -1940,6 +1940,56 @@ static func _test_match_recorder() -> void:
 	_check("a simulation copy carries no recorder", not ("recorder" in sim))
 
 
+## Actual plays include replayed/generated copies, independently of deck inclusion.
+static func _test_card_play_counts() -> void:
+	print("[card play counts]")
+	var gs := _fresh_match("g_001")
+	gs.set_events_enabled(true)
+	gs.player.max_mana = 10
+	gs.player.current_mana = 0
+	var card := gs.player.hand[0]
+	var command := {"type": "play_creature", "actor": "a", "card_uid": card.uid}
+	var played := gs.execute(command)
+	_check("real creature play accepted", played["ok"])
+	_eq("one actual play is recorded", gs.card_play_counts("a"), {"g_001": 1})
+	_check("rejected repeated command is not a play", not gs.execute(command)["ok"])
+	_eq("rejection leaves count unchanged", gs.card_play_counts("a"), {"g_001": 1})
+	var sim := gs.duplicate_for_sim()
+	var next: CardData = sim.player.hand[0]
+	_check("simulated play accepted", sim.execute({"type": "play_creature", "actor": "a", "card_uid": next.uid})["ok"])
+	_eq("simulation records no plays", sim.card_play_counts("a"), {})
+	_eq("simulation leaves real counts alone", gs.card_play_counts("a"), {"g_001": 1})
+	var bounce := CardDatabase.get_card("gen_str_005").new_instance(gs.player.mint_card_uid())
+	gs.player.hand.append(bounce)
+	var body: Minion = played["minion"]
+	_check("bounce play accepted", gs.execute({"type": "play_stratagem", "actor": "a", "card_uid": bounce.uid, "target_instance_id": body.instance_id})["ok"])
+	var returned: CardData = gs.player.hand.back()
+	_check("returned copy replayed", gs.execute({"type": "play_creature", "actor": "a", "card_uid": returned.uid})["ok"])
+	_eq("replay increments the card and stratagem each once", gs.card_play_counts("a"), {"g_001": 2, "gen_str_005": 1})
+	var generated := CardDatabase.get_card("g_001").new_instance(gs.player.mint_card_uid())
+	gs.player.hand.append(generated)
+	_check("generated hand copy played", gs.execute({"type": "play_creature", "actor": "a", "card_uid": generated.uid})["ok"])
+	_eq("generated copy has an actual play", int(gs.card_play_counts("a")["g_001"]), 3)
+	var before := gs.card_play_counts("a")
+	var ready: Minion = gs.player.board[0]
+	ready.is_exhausted = false
+	_check("attack accepted", gs.execute({"type": "attack", "actor": "a", "attacker_instance_id": ready.instance_id, "target_player_id": "b"})["ok"])
+	_eq("attacking adds no plays", gs.card_play_counts("a"), before)
+	gs.execute({"type": "end_turn", "actor": "a"})
+	_eq("turn changes and draws add no plays", gs.card_play_counts("a"), before)
+	var fresh := _fresh_match("g_001")
+	_eq("a new match starts without prior counts", fresh.card_play_counts("a"), {})
+	var change := _fresh_match("cr_018")
+	change.set_events_enabled(true)
+	change.player.max_mana = 10
+	change.player.current_mana = 0
+	var shifting: CardData = change.player.hand[0]
+	_check("transforming creature played", change.execute({"type": "play_creature", "actor": "a", "card_uid": shifting.uid})["ok"])
+	var choice := change.pending_choice
+	_check("transformation answer accepted", change.execute({"type": "answer_choice", "actor": "a", "choice_id": choice["id"], "selection": choice["options"][0]})["ok"])
+	_eq("transforming is not another play", change.card_play_counts("a"), {"cr_018": 1})
+
+
 ## The relay's server-run match messages reach the thin client through Net's
 ## signals, and the legacy peer-hosted found message is left alone.
 static func _test_net_match_routing() -> void:
@@ -2208,6 +2258,7 @@ static func run() -> int:
 	_test_hand_identity()
 	_test_stray_ghost_cleanup()
 	_test_match_recorder()
+	_test_card_play_counts()
 	_test_player_views(card_id)
 	print("CORE TESTS: %d checks, %d failed" % [_checks, _failures])
 	print("RESULT: %s" % ("PASS" if _failures == 0 else "FAIL"))

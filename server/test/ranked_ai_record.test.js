@@ -29,6 +29,16 @@ test('AI summaries bound input and project server-owned provenance', () => {
   const tagged = normalizeAIRecord({ ...summary(), ai_version: 1, first_player: 'opponent' }, 'ai_1_2', cards);
   assert.equal(tagged.ai_version, 1);
   assert.equal(tagged.first_player, 'opponent');
+  const plays = { player: { g_001: 3, unknown_generated_token: 1 }, opponent: { cr_002: 0 } };
+  const counted = normalizeAIRecord({ ...summary(), card_plays: plays }, 'ai_1_2', cards);
+  assert.deepEqual(counted.card_plays, { player: { g_001: 3 }, opponent: { cr_002: 0 } });
+  plays.player.g_001 = 99;
+  assert.equal(counted.card_plays.player.g_001, 3, 'play counts are copied and privately projected');
+  for (const bad of [null, [], { g_001: -1 }, { g_001: 1.5 }, { g_001: 1000001 }, { g_001: 1000000, g_002: 1 }]) {
+    const usable = normalizeAIRecord({ ...summary(), card_plays: { player: bad } }, 'ai_1_2', cards);
+    assert.ok(usable, 'bad optional plays do not discard a valid result');
+    assert.equal(usable.card_plays, undefined, 'unusable telemetry remains unknown');
+  }
   for (const invalid of [{ ai_version: 0 }, { ai_version: '1' }, { ai_version: null },
     { ai_version: 1000001 }, { first_player: 'host' }, { first_player: null }]) {
     assert.equal(normalizeAIRecord({ ...summary(), ...invalid }, 'ai_1_2', cards), null);
@@ -190,7 +200,8 @@ test('real relay records AI summaries atomically and preserves legacy settlement
 
   if (process.env.GODOT_BIN) {
     const userData = mkdtempSync(path.join(os.tmpdir(), 'cardgame-ai-producer-'));
-    const godot = spawn(process.env.GODOT_BIN, ['--headless', '--path', PROJECT_DIR,
+    const projectArgs = process.env.GODOT_PACK ? ['--main-pack', path.resolve(process.env.GODOT_PACK)] : ['--path', PROJECT_DIR];
+    const godot = spawn(process.env.GODOT_BIN, ['--headless', ...projectArgs,
       'res://server/test/fixtures/ranked_ai_client.tscn'], {
       env: { ...process.env, APPDATA: userData, XDG_DATA_HOME: userData, AI_TEST_URL: url, AI_TEST_TOKEN: report.token }, stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -215,8 +226,11 @@ test('real relay records AI summaries atomically and preserves legacy settlement
       WHERE ai_match IS NOT NULL AND match_id NOT IN ('ai_1700000000_42', 'ai_1_4')`)).rows;
     assert.equal(clientRows.length, 1, 'only the ranked local game submitted a summary');
     assert.equal(clientRows[0].won, false);
-    assert.deepEqual(clientRows[0].ai_match.player_deck, Array(10).fill('g_001'));
-    assert.deepEqual(clientRows[0].ai_match.opponent_deck, Array(10).fill('cr_002'));
+    const starters = require(path.join(PROJECT_DIR, 'data/starters.json'));
+    assert.deepEqual([...clientRows[0].ai_match.player_deck].sort(), [...starters[0].card_ids].sort());
+    assert.deepEqual([...clientRows[0].ai_match.opponent_deck].sort(), [...starters[1].card_ids].sort());
+    assert.deepEqual(clientRows[0].ai_match.card_plays.player, { g_001: 1, g_str_001: 1 }, 'actual Core plays survive GameManager -> websocket -> stored summary');
+    assert.equal(typeof clientRows[0].ai_match.card_plays.opponent, 'object');
     assert.equal(clientRows[0].ai_match.ai_level, 1);
     assert.equal(clientRows[0].ai_match.turns, 7);
     assert.ok(Number.isInteger(clientRows[0].ai_match.rules_version) && clientRows[0].ai_match.rules_version > 0);

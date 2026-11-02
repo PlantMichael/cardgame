@@ -38,6 +38,19 @@ test('deck proxy projects the public contract and rejects malformed or unavailab
     if (mode === 'redirect') { res.writeHead(302, { Location: '/private' }).end(); return; }
     if (mode === 'large') { res.end(' '.repeat(4 * 1024 * 1024 + 1)); return; }
     const data = fixture();
+    if (new URL(req.url, 'http://localhost').searchParams.get('mode') === 'all') {
+      Object.assign(data.filters, { mode: 'all', aiVersion: null, aiLevel: null });
+      data.availableFilters.aiVersions = []; data.availableFilters.aiLevels = [];
+      data.methodology.rolesSeparated = false; data.methodology.source = 'mixed';
+      for (const row of data.decks) row.role = 'combined';
+      for (const row of data.matchups) { row.role = 'combined'; row.opponentRole = 'combined'; }
+      data.playStats = { totalSeats: 2, trackedSeats: 1, completeSeats: 0, private_id: 42, cards: [{ id: 'g_001', plays: 2, private_id: 42 }] };
+      if (mode === 'coverage') data.playStats.completeSeats = 2;
+      if (mode === 'play_count') data.playStats.cards[0].plays = -1;
+      if (mode === 'play_card') data.playStats.cards[0].id = 'private_card';
+      if (mode === 'play_duplicate') data.playStats.cards.push(data.playStats.cards[0]);
+      if (mode === 'play_bound') data.playStats.cards[0].plays = 1000001;
+    }
     if (mode === 'counts') data.decks[0].wins = 2;
     if (mode === 'card') data.decks[0].cards[0].id = 'unpublished_card';
     if (mode === 'identity') data.decks[0].id = 'wrong_hash';
@@ -75,5 +88,18 @@ test('deck proxy projects the public contract and rejects malformed or unavailab
   assert.equal((await fetch(url + '&token=private')).status, 400, 'invalid query is rejected before upstream failure');
   mode = 'ok';
   assert.equal((await fetch(url)).status, 200, 'errors are not cached');
+  const combinedUrl = 'http://127.0.0.1:'+proxy.address().port+DECK_STATS_PATH+'?mode=all&rulesVersion=3';
+  const combined = await (await fetch(combinedUrl)).json();
+  assert.equal(combined.filters.mode, 'all');
+  assert.ok(combined.decks.every(d => d.role === 'combined'));
+  assert.deepEqual(combined.playStats, { totalSeats: 2, trackedSeats: 1, completeSeats: 0, cards: [{ id: 'g_001', plays: 2 }] });
+  assert.equal(combined.methodology.source, 'mixed');
+  assert.equal(combined.methodology.rolesSeparated, false);
+  for (mode of ['coverage', 'play_count', 'play_card', 'play_duplicate', 'play_bound']) {
+    assert.equal((await fetch(combinedUrl)).status, 503, mode);
+  }
+  mode = 'ok';
+  assert.equal((await fetch(combinedUrl)).status, 200, 'a bad play aggregate never poisons recovery');
+  assert.equal((await fetch(combinedUrl+'&aiLevel=4')).status, 400, 'combined view rejects irrelevant AI filters');
   assert.equal((await fetch(`http://127.0.0.1:${proxy.address().port}/data/cards.json`)).status, 200);
 });
