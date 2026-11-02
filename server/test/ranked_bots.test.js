@@ -98,8 +98,8 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   const { pool, url, cleanup } = await database(t, 'ranked_bots_live', false);
   await initSchema(pool);
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'ranked-bots-relay-test-'));
-  // Checked-out worker connections use this proxy. Target the held lock's
-  // actual backend port, leaving ordinary cleanup queries directly connected.
+  // Checked-out worker connections use this proxy. Map protocol backend PIDs
+  // through local loopback ports, which also works across Docker's DB-side NAT.
   const transports = new Set();
   const target = new URL(url);
   const lockProxy = net.createServer(front => {
@@ -115,6 +115,10 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   await new Promise(resolve => lockProxy.listen(0, '127.0.0.1', resolve));
   const lockUrl = new URL(url); lockUrl.hostname = '127.0.0.1'; lockUrl.port = String(lockProxy.address().port);
   const lockPool = new Pool({ connectionString: lockUrl.href, ssl: false, query_timeout: 10000 });
+  lockPool.on('connect', client => {
+    const pair = [...transports].find(p => p.front.remotePort === client.connection.stream.localPort);
+    if (pair) pair.backendPid = client.processID;
+  });
   const workerPool = { connect: () => lockPool.connect(), query: (...args) => pool.query(...args) };
   // Reject each bot's first queue lookup after the real DB read. This leaves
   // the socket healthy while exercising recovery before queue insertion.
@@ -297,11 +301,9 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   const authRestart = events.length;
   stop = new AbortController(); startWorker();
   await until(() => { if (workerFailure) throw workerFailure; return events.slice(authRestart).some(e => e.event === 'joined'); }, 'fresh sessions rejoin after revocation');
-  const owner = (await pool.query(`SELECT l.pid,a.client_port FROM pg_locks l
-    JOIN pg_stat_activity a ON a.pid=l.pid
-    WHERE l.locktype='advisory' AND l.classid=731204 AND l.objid=2 AND l.granted`)).rows;
+  const owner = (await pool.query("SELECT pid FROM pg_locks WHERE locktype='advisory' AND classid=731204 AND objid=2 AND granted")).rows;
   assert.equal(owner.length, 1);
-  const lockTransport = [...transports].find(pair => pair.back.localPort === owner[0].client_port);
+  const lockTransport = [...transports].find(pair => pair.backendPid === owner[0].pid);
   assert.ok(lockTransport, 'fault targets the actual lock-owning DB transport');
   lockTransport.blackholed = true;
   lockTransport.front.unpipe(lockTransport.back); lockTransport.back.unpipe(lockTransport.front);
