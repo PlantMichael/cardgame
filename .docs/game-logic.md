@@ -314,6 +314,7 @@ history; cleared one-off cost modifier; preserved remaining printed Reinforce;
 attachment/aura cleanup; no death trigger. The deck destination ignores hand
 capacity and shuffles with the match generator. Drawn returned instances keep
 their UID through `PlayerState.instantiate_drawn_card`; initial catalog entries
-still mint one. Per-card attack/health now enter hand/graveyard/board net views; graveyard views also preserve existing discounts and Rummage history
-and the full replay hash. Opponent hands remain hidden, and older view fields
-default to printed stats. These incompatible card/rule changes use RulesVersion4.
+still mint one. Per-card attack/health enter hand/graveyard/board net views and
+the full internal replay hash. Graveyard views also preserve existing discounts
+and Rummage history. Opponent hands remain hidden. Older view fields default to
+printed stats or zero modifiers/history. These changes use RulesVersion4.
