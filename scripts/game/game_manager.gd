@@ -138,7 +138,8 @@ func _present(events: Array) -> void:
 ## Replaces the per-effect prompt code that used to live in this file
 ## (_run_player_on_play and the _process_pending_* family) - those decided
 ## outcomes here instead of in GameState.
-func _drive_choices() -> void:
+func _drive_choices(search_engine: MCTSEngine = null) -> void:
+	var engine := search_engine if search_engine != null else MCTSEngine.new(game_state.opponent.player_id, ai_controller.ai_level)
 	for _i in 64:
 		if not is_instance_valid(board) or game_state.current_phase == GameState.Phase.GAME_OVER:
 			return
@@ -152,7 +153,16 @@ func _drive_choices() -> void:
 			selection = await board.prompt_choice(choice)
 		else:
 			await get_tree().create_timer(ai_controller.THINK_DELAY * 0.5).timeout
-			selection = AIHeuristics.pick_choice_answer(game_state, choice)
+			if not is_instance_valid(board):
+				return
+			var action := await engine.choose_action(game_state)
+			if not is_instance_valid(board):
+				return
+			# A restart or another command may have replaced this decision while
+			# search yielded. Never apply an answer to a different choice.
+			if not game_state.has_pending_choice() or str(game_state.pending_choice["id"]) != str(choice["id"]):
+				return
+			selection = str(action.get("selection", choice["default"]))
 		if not is_instance_valid(board):
 			return
 		var result := game_state.execute({
@@ -168,6 +178,7 @@ func _drive_choices() -> void:
 			if not result["ok"]:
 				game_state.cancel_pending_choice()
 				return
+		engine.advance_after_real_action(game_state)
 		await _present(result["events"])
 		board.refresh()
 		await _announce_pending_draws()

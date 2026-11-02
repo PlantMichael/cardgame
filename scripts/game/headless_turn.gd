@@ -7,16 +7,15 @@ extends RefCounted
 ##  - list_legal_actions()/apply_action(): one atomic decision at a time, for
 ##    MCTSEngine's tree search.
 ##  - greedy_pick_action()/play_full_turn_greedy(): the same "always take the
-##    best-looking single action" policy AIController/SimRunner already use,
+##    best-looking single action" rollout policy,
 ##    for finishing rollouts and simulating the opponent's predicted turn
 ##    without spending search budget on it.
 
 # --- Atomic action enumeration (for search) ---
 
 ## Enumerates every legal atomic action `acting_id` can take right now: one
-## per playable creature, one per ready stratagem (target pre-resolved via the
-## shared heuristic pickers so the search doesn't also have to branch on
-## *which* enemy minion a spell hits), one per legal attacker/target pairing
+## per playable creature, each meaningful legal stratagem target, rules-owned
+## pending-choice answers, and one per legal attacker/target pairing
 ## (plus "attack face"), each legal Pilot pairing, and always `end_turn`.
 ##
 ## Actions are plain values addressed by uid/instance_id - never live CardData
@@ -29,6 +28,21 @@ static func list_legal_actions(gs: GameState, acting_id: String) -> Array[Dictio
 	if gs.current_phase == GameState.Phase.GAME_OVER:
 		return actions
 
+	if gs.has_pending_choice():
+		var choice := gs.pending_choice
+		var owner := str(choice["player_id"])
+		var selections: Array = choice["options"].duplicate()
+		if bool(choice["allow_none"]):
+			selections.append("")
+		# The searching side does not get to optimize the other player's answer.
+		if owner != acting_id:
+			selections = [AIHeuristics.pick_choice_answer(gs, choice)]
+		for selection in selections:
+			actions.append({"type": GameState.CMD_ANSWER_CHOICE, "actor": owner,
+				"choice_id": str(choice["id"]), "selection": str(selection)})
+		return actions
+	if gs.active_player_id != acting_id:
+		return actions
 	var acting: PlayerState = gs.find_player(acting_id)
 	if acting == null:
 		return actions
@@ -41,14 +55,7 @@ static func list_legal_actions(gs: GameState, acting_id: String) -> Array[Dictio
 			if acting.can_fit_card(card):
 				actions.append({"type": "play_creature", "actor": acting_id, "card_uid": card.uid})
 		elif card.card_type == CardData.CardType.STRATAGEM:
-			var pick := _pick_stratagem_target(card, gs, acting_id)
-			if pick["ready"]:
-				var picked_minion: Minion = pick["minion"]
-				actions.append({
-					"type": "play_stratagem", "actor": acting_id, "card_uid": card.uid,
-					"target_instance_id": picked_minion.instance_id if picked_minion != null else "",
-					"target_player_id": pick["player_id"],
-				})
+			actions.append_array(stratagem_actions(card, gs, acting_id))
 
 	var attackers: Array[Minion] = []
 	for m in acting.board:
@@ -78,7 +85,7 @@ static func list_legal_actions(gs: GameState, acting_id: String) -> Array[Dictio
 
 	actions.append_array(_pilot_actions(gs, acting))
 	actions.append({"type": "end_turn", "actor": acting_id})
-	return actions
+	return actions.filter(func(action): return gs.validate(action)["ok"])
 
 ## Use the same command validation as a human pilot action. In particular,
 ## an exhausted pilot is still eligible; neither creature can be an enemy.
@@ -94,21 +101,22 @@ static func _pilot_actions(gs: GameState, acting: PlayerState) -> Array[Dictiona
 				actions.append(action)
 	return actions
 
-## Applies exactly one atomic action produced by list_legal_actions() (or
-## greedy_pick_action()) and resolves any pending_* queue it triggers.
+## Applies one command. By default finishes its choices for greedy callers;
+## search passes resolve_choices=false to leave the next decision open.
 ##
 ## Returns whether the command was accepted. An action enumerated against a
 ## different state may legitimately no longer be legal here (the search
 ## applies a parent's action list to a child); that is a rejection, not a
 ## crash, and the caller gets `false` rather than a silently half-applied
 ## mutation.
-static func apply_action(gs: GameState, action: Dictionary) -> bool:
+static func apply_action(gs: GameState, action: Dictionary, resolve_choices: bool = true) -> bool:
 	var result := gs.execute(action)
 	if not result["ok"]:
 		return false
 	# Every decision an action opens is answered by policy, so the search sees
 	# exactly what the real game would produce (no private copy of the rules).
-	_resolve_pending(gs)
+	if resolve_choices:
+		_resolve_pending(gs)
 	return true
 
 # --- Greedy policy (rollout completion / predicted opponent turn) ---
@@ -116,7 +124,7 @@ static func apply_action(gs: GameState, action: Dictionary) -> bool:
 ## Picks the single next action a greedy (one-ply) heuristic AI would take:
 ## play the highest-priority playable card, else make the best-scoring
 ## attack, else end the turn. Same priorities AIController/SimRunner already
-## use, just returning one action instead of looping with UI side effects.
+## use historically, returning one action without UI side effects.
 static func greedy_pick_action(gs: GameState, acting_id: String) -> Dictionary:
 	var acting: PlayerState = gs.find_player(acting_id)
 	if acting == null:
@@ -225,19 +233,74 @@ static func greedy_pick_action(gs: GameState, acting_id: String) -> Dictionary:
 ## greedy_pick_action repeatedly. Used to simulate the opponent's predicted
 ## response, or to finish an AI rollout beyond the point the search tree
 ## stopped branching, without spending search budget on it.
-static func play_full_turn_greedy(gs: GameState, acting_id: String) -> void:
-	for _i in 60:  # safety cap; a real turn never needs anywhere near this many atomic actions
+static func play_full_turn_greedy(gs: GameState, acting_id: String, stop_for_other_choice: bool = false, trace: Variant = null) -> bool:
+	for _i in 120: # Commands plus their individual choice answers, still bounded.
 		if gs.current_phase == GameState.Phase.GAME_OVER:
-			return
-		var action := greedy_pick_action(gs, acting_id)
-		# A rejected action would otherwise spin this loop to its safety cap
-		# re-picking the same illegal move; end the turn instead.
-		if not apply_action(gs, action):
-			gs.execute({"type": "end_turn", "actor": acting_id})
-			_resolve_pending(gs)
-			return
-		if action["type"] == "end_turn" or gs.current_phase == GameState.Phase.GAME_OVER:
-			return
+			return true
+		var action: Dictionary
+		if gs.has_pending_choice():
+			var choice := gs.pending_choice
+			var owner := str(choice["player_id"])
+			if stop_for_other_choice and owner != acting_id:
+				return false
+			action = {"type": GameState.CMD_ANSWER_CHOICE, "actor": owner,
+				"choice_id": str(choice["id"]), "selection": AIHeuristics.pick_choice_answer(gs, choice)}
+		else:
+			if gs.active_player_id != acting_id:
+				return true
+			action = greedy_pick_action(gs, acting_id)
+		if not apply_action(gs, action, false):
+			# Preserve completed-turn behavior for ordinary rollout callers.
+			# A failed witness must stop without inventing a winning continuation.
+			if not stop_for_other_choice:
+				gs.execute({"type": "end_turn", "actor": acting_id})
+				_resolve_pending(gs)
+			return false
+		if trace != null:
+			trace.append(action)
+		if action["type"] == "end_turn":
+			if not stop_for_other_choice:
+				_resolve_pending(gs)
+			return true
+	return false
+
+# All meaningful target alternatives, using the same semantics as Board.
+static func stratagem_actions(card: CardData, gs: GameState, acting_id: String) -> Array[Dictionary]:
+	var actions: Array[Dictionary] = []
+	var acting := gs.find_player(acting_id)
+	var candidates: Array = []
+	if not card.stratagem_needs_target():
+		candidates.append({"minion": null, "player": ""})
+	else:
+		for p in [gs.player, gs.opponent]:
+			for m in p.board:
+				if not gs.is_targetable_by(m, acting_id):
+					continue
+				# Printed buffs are friendly-only. The legacy Board helper is
+				# permissive for these two effects; do not widen the AI's targets.
+				if card.effect in ["buff_creature", "buff_health"] and p != acting:
+					continue
+				if card.stratagem_needs_friendly_yeti() and (p != acting or not m.has_ability(Abilities.YETI)):
+					continue
+				if card.stratagem_needs_enemy_creature_only() and p == acting:
+					continue
+				if card.stratagem_needs_friendly_creature_only() and p != acting:
+					continue
+				if card.stratagem_needs_friendly_piloted_mech() and (p != acting or not m.is_piloted):
+					continue
+				if card.stratagem_needs_friendly_mech() and (p != acting or not m.has_ability(Abilities.MECH)):
+					continue
+				candidates.append({"minion": m, "player": ""})
+		if not card.stratagem_needs_creature_target():
+			for p in [gs.player, gs.opponent]:
+				candidates.append({"minion": null, "player": p.player_id})
+	for candidate in candidates:
+		var m: Minion = candidate["minion"]
+		var action := {"type": GameState.CMD_PLAY_STRATAGEM, "actor": acting_id, "card_uid": card.uid,
+			"target_instance_id": m.instance_id if m != null else "", "target_player_id": candidate["player"]}
+		if gs.validate(action)["ok"]:
+			actions.append(action)
+	return actions
 
 # --- Stratagem targeting (shared by both granularities above) ---
 

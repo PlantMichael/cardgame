@@ -3224,25 +3224,25 @@ func show_mulligan_screen(hand: Array[CardData], apply_swaps: Callable = Callabl
 	return swaps
 
 func _stratagem_needs_target(data: CardData) -> bool:
-	return data.effect not in ["destroy_all_creatures", "deal_damage_all_creatures", "deal_damage_all_enemy", "deal_damage_all_enemy_draw_yeti", "buff_all_friendly_attack", "buff_all_friendly_health", "eject_all_pilots", "sludge_spray"]
+	return data.stratagem_needs_target()
 
 func _stratagem_needs_creature_target(data: CardData) -> bool:
-	return data.effect in ["give_ability", "buff_creature", "buff_health", "force_challenge", "poke_bear", "blood_transfusion", "sanguine", "heal", "eject_pilot", "give_mech_shielded_temp", "tainted_blood", "exsanguinate", "blood_boil", "return_friendly_to_hand"]
+	return data.stratagem_needs_creature_target()
 
 func _stratagem_needs_friendly_yeti(data: CardData) -> bool:
-	return data.effect in ["force_challenge", "poke_bear"]
+	return data.stratagem_needs_friendly_yeti()
 
 func _stratagem_needs_enemy_creature_only(data: CardData) -> bool:
-	return data.effect in ["blood_transfusion", "exsanguinate"]
+	return data.stratagem_needs_enemy_creature_only()
 
 func _stratagem_needs_friendly_creature_only(data: CardData) -> bool:
-	return data.effect in ["sanguine", "heal", "give_ability", "tainted_blood", "blood_boil", "return_friendly_to_hand"]
+	return data.stratagem_needs_friendly_creature_only()
 
 func _stratagem_needs_friendly_piloted_mech(data: CardData) -> bool:
-	return data.effect == "eject_pilot"
+	return data.stratagem_needs_friendly_piloted_mech()
 
 func _stratagem_needs_friendly_mech(data: CardData) -> bool:
-	return data.effect == "give_mech_shielded_temp"
+	return data.stratagem_needs_friendly_mech()
 
 func _highlight_friendly_mech_targets(value: bool) -> void:
 	for wrapper in player_board_zone.get_children():

@@ -2,7 +2,7 @@ class_name MCTSBenchmark
 extends RefCounted
 
 ## Headless AI-vs-AI benchmark, independent of Board/UI (same spirit as
-## SimRunner's balance-testing games, but pitting MCTSEngine configurations
+## balance-testing games, pitting MCTSEngine configurations
 ## against each other or against the legacy greedy policy) so difficulty
 ## tuning can be verified by win rate instead of manual play.
 
@@ -48,7 +48,7 @@ static func run(count: int, policy_a: Policy, policy_b: Policy) -> Dictionary:
 			if gs.current_phase == GameState.Phase.GAME_OVER:
 				break
 			var acting_id := gs.active_player_id
-			await _play_turn(gs, acting_id, policy_a if acting_id == "sim_a" else policy_b)
+			await _play_turn(gs, acting_id, {"sim_a": policy_a, "sim_b": policy_b})
 			turns_played += 1
 		print("  game %d/%d done: winner=%s turns=%d" % [_i + 1, count, gs.winner_id, turns_played])
 
@@ -60,16 +60,31 @@ static func run(count: int, policy_a: Policy, policy_b: Policy) -> Dictionary:
 			results["draws"] += 1
 	return results
 
-static func _play_turn(gs: GameState, acting_id: String, policy: Policy) -> void:
-	if policy.kind == PolicyKind.GREEDY:
-		HeadlessTurn.play_full_turn_greedy(gs, acting_id)
-		return
-	var engine := MCTSEngine.new(acting_id, policy.level)
-	for _i in 60:
+static func _play_turn(gs: GameState, acting_id: String, policies: Dictionary) -> void:
+	var policy: Policy = policies[acting_id]
+	var engine := MCTSEngine.new(acting_id, policy.level) if policy.kind == PolicyKind.MCTS else null
+	for _i in 120:
 		if gs.current_phase == GameState.Phase.GAME_OVER:
 			return
-		var action := await engine.choose_action(gs)
-		HeadlessTurn.apply_action(gs, action)
-		if action["type"] == "end_turn" or gs.current_phase == GameState.Phase.GAME_OVER:
+		if gs.has_pending_choice():
+			var owner := str(gs.pending_choice["player_id"])
+			var choice_policy: Policy = policies[owner]
+			var command: Dictionary
+			if choice_policy.kind == PolicyKind.MCTS:
+				var chooser := engine if owner == acting_id and engine != null else MCTSEngine.new(owner, choice_policy.level)
+				command = await chooser.choose_action(gs)
+			else:
+				command = {"type": GameState.CMD_ANSWER_CHOICE, "actor": owner,
+					"choice_id": gs.pending_choice["id"], "selection": AIHeuristics.pick_choice_answer(gs, gs.pending_choice)}
+			if not HeadlessTurn.apply_action(gs, command, false):
+				push_error("Benchmark choice rejected: " + str(command))
+				return
+		elif gs.active_player_id != acting_id:
 			return
-		engine.advance_after_real_action(gs)
+		else:
+			var action: Dictionary = await engine.choose_action(gs) if engine != null else HeadlessTurn.greedy_pick_action(gs, acting_id)
+			if not HeadlessTurn.apply_action(gs, action, false):
+				push_error("Benchmark action rejected: " + str(action))
+				return
+		if engine != null:
+			engine.advance_after_real_action(gs)

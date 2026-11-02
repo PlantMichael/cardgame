@@ -74,14 +74,15 @@ const LP_WIN_STREAK := 45  # 3rd win-in-a-row and every win after, until a loss
 const LP_WIN_STREAK_THRESHOLD := 3
 const LP_LOSS := 20
 
-const MIN_AI_LEVEL := 1
+const MIN_AI_LEVEL := 3
 const MAX_AI_LEVEL := 10
 
-## Ranked playtests use the strongest policy at every rank, without deliberate
-## random mistakes. Rank progression must not change the test opponent's skill.
-## Keep the call shape shared with the ranked queue and match report.
-static func get_ai_level(_bracket_index: int, _in_legend: bool) -> int:
-	return MAX_AI_LEVEL
+## Restore the ladder curve: Orbital III starts at 3, Cosmic I reaches 10,
+## and the three legend tiers stay at 10.
+static func get_ai_level(bracket_index: int, in_legend: bool) -> int:
+	if in_legend:
+		return MAX_AI_LEVEL
+	return clampi(MIN_AI_LEVEL + (bracket_index * (MAX_AI_LEVEL - MIN_AI_LEVEL)) / (BRACKET_COUNT - 1), MIN_AI_LEVEL, MAX_AI_LEVEL)
 
 ## e.g. "Orbital III", "Cosmic I", or "Superluminal (1240)". Doesn't include
 ## LP — see get_lp_string for the "62 / 100 LP" progress readout.

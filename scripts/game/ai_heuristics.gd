@@ -189,7 +189,7 @@ static func pick_health_buff_target(minions: Array[Minion]) -> Minion:
 ## One policy serves the live AI, the search's rollouts and the greedy
 ## completion, so a decision the AI makes is the same wherever it is made.
 ## Returns "" to decline.
-static func pick_choice_answer(gs: GameState, choice: Dictionary) -> String:
+static func _fallback_choice_answer(gs: GameState, choice: Dictionary) -> String:
 	var options: Array = choice["options"]
 	if options.is_empty():
 		return ""
@@ -290,6 +290,31 @@ static func pick_choice_answer(gs: GameState, choice: Dictionary) -> String:
 			pick = minions[0] if not minions.is_empty() else null
 	return pick.instance_id if pick != null else ""
 
+## Compare the actual results of every offered choice, not a card/target
+## priority list. This cheap policy completes rollouts; MCTS still branches
+## over all choices and can see payoffs beyond the immediate state.
+static func pick_choice_answer(gs: GameState, choice: Dictionary) -> String:
+	var preferred := _fallback_choice_answer(gs, choice)
+	var selections: Array = [preferred]
+	for selection in choice["options"]:
+		if selection not in selections:
+			selections.append(selection)
+	if bool(choice["allow_none"]) and "" not in selections:
+		selections.append("")
+	var best := preferred
+	var best_value := -INF
+	for selection in selections:
+		var after := gs.duplicate_for_sim()
+		var result := after.execute({"type": GameState.CMD_ANSWER_CHOICE, "actor": str(choice["player_id"]),
+			"choice_id": str(choice["id"]), "selection": str(selection)})
+		if not result["ok"]:
+			continue
+		var value := evaluate_state(after, str(choice["player_id"]))
+		if value > best_value:
+			best_value = value
+			best = str(selection)
+	return best
+
 static func evaluate_state(gs: GameState, ai_player_id: String) -> float:
 	if gs.current_phase == GameState.Phase.GAME_OVER and gs.winner_id != "":
 		return 100000.0 if gs.winner_id == ai_player_id else -100000.0
@@ -302,13 +327,14 @@ static func evaluate_state(gs: GameState, ai_player_id: String) -> float:
 
 	var my_board_power := 0.0
 	for m in me.board:
-		my_board_power += m.current_attack * 1.5 + m.current_health
+		my_board_power += _minion_value(m)
 	var enemy_board_power := 0.0
 	for m in enemy.board:
-		enemy_board_power += m.current_attack * 1.5 + m.current_health
+		enemy_board_power += _minion_value(m)
 	score += my_board_power - enemy_board_power
 
-	score += (me.hand.size() - enemy.hand.size()) * 3.0
+	score += _hand_value(me) - enemy.hand.size() * 3.0
+	score += _retrieval_value(me) - _retrieval_value(enemy, false)
 
 	if gs.active_player_id == me.player_id:
 		score -= (me.max_mana - me.current_mana) * 0.5
@@ -319,4 +345,64 @@ static func evaluate_state(gs: GameState, ai_player_id: String) -> float:
 ## the search values racing/stabilizing much more once either hero is low.
 static func _hero_health_value(hp: int) -> float:
 	var clamped := maxf(0.0, float(hp))
-	return clamped + maxf(0.0, 15.0 - clamped) * 2.0
+	return clamped - maxf(0.0, 15.0 - clamped) * 2.0
+
+## Persistent mechanics are worth more than vanilla stats; an on-play effect
+## already spent is not counted again as board value.
+static func _minion_value(m: Minion) -> float:
+	var value := m.current_attack * 1.5 + m.current_health
+	if m.has_ability(Abilities.DUAL_STRIKE):
+		value += m.current_attack * 1.5
+	if m.has_ability(Abilities.VOIDTOUCH):
+		value += 3.0
+	if m.has_ability(Abilities.COMBAT_IMMUNE):
+		value += m.current_attack * 2.0
+	value += get_shield_value(m) * 1.5
+	for ability in m.abilities:
+		if ability in [Abilities.RUMMAGE_DRAW, Abilities.HEAL_TO_DRAW, Abilities.ATTACK_RUMMAGE,
+			Abilities.GROWVIN_AURA, Abilities.BROODTENDER_AURA, Abilities.TACTICAL_OFFICER]:
+			value += 4.0
+		elif ability.begins_with("deathrattle_") or ability == Abilities.RUMMAGE_ON_DEATH:
+			value += 2.0
+	return value
+
+## Public graveyard resources matter only alongside an available retrieval
+## source. Credit at most the best accessible replay, not every dead card as
+## if it were already in hand. The search must still execute the real chain.
+static func _card_potential(card: CardData) -> float:
+	var value := card.attack * 1.5 + card.health
+	for ab in card.abilities:
+		if ab.begins_with("on_play_damage_"):
+			value += float(ab.get_slice("_", 3)) * 2.5
+	return value
+
+static func _hand_value(p: PlayerState) -> float:
+	var value := p.hand.size() * 3.0
+	for card in p.hand:
+		if p.can_play_card(card):
+			value += minf(3.0, _card_potential(card) * 0.2)
+	return value
+
+static func _retrieval_value(p: PlayerState, include_hand: bool = true) -> float:
+	var best := 0.0
+	var sources: Array[CardData] = []
+	if include_hand:
+		for card in p.hand:
+			if p.can_play_card(card):
+				sources.append(card)
+	for m in p.board:
+		# A battlecry already spent on the board is not a future retrieval.
+		if p.hand.size() < PlayerState.MAX_HAND_SIZE and m.abilities.any(func(ab): return ab in [Abilities.RUMMAGE_ON_DEATH, Abilities.ATTACK_RUMMAGE]):
+			sources.append(m.data)
+	for source in sources:
+		var retrieves := source.abilities.any(func(ab): return ab in [Abilities.RUMMAGE,
+			Abilities.RUMMAGE_ON_DEATH, Abilities.ATTACK_RUMMAGE, Abilities.RUMMAGE_AND_PLAY,
+			Abilities.RUMMAGE_BUFF_CREATURE])
+		if not retrieves:
+			continue
+		for card in p.graveyard:
+			if card.cost >= source.cost or card.card_type != CardData.CardType.CREATURE:
+				continue
+			# A possible retrieval must be worth less than an actual hand card.
+			best = maxf(best, minf(2.0, _card_potential(card) * 0.25))
+	return best
