@@ -5,7 +5,7 @@
 // Contract: catalog/stats-website-spec.md on the API branch (e3c9c9e). Rates and
 // interval bounds are fractions. A deck is identified by id AND role.
 
-export const MODES = { ranked_ai: 'Ranked AI', authoritative_pvp: 'Authoritative PvP' };
+export const MODES = { ranked_ai: 'Against AI', authoritative_pvp: 'Against players' };
 export const SERVER_PARAMS = ['mode', 'days', 'rulesVersion', 'aiVersion', 'aiLevel'];
 export const DEFAULT_COHORT = { mode: 'ranked_ai', days: '30', rulesVersion: 'latest', aiVersion: 'latest', aiLevel: '10' };
 export const FACTION_NAMES = { GREEN: 'Sapiens', CRIMSON: 'Moonlight Coven', BLACK: 'Junklings', ORANGE: 'Gundari', TEAL: 'Mokotai', GENERIC: 'Generic' };
@@ -108,9 +108,24 @@ export function factionLabel(deck) {
   const names = (deck.factions || []).map((f) => FACTION_NAMES[f] || f);
   return names.length ? names.join(' / ') : 'Unknown';
 }
-/** No names exist in the API: an honest label, with the full id as identity. */
-export function deckLabel(deck) {
-  return `${factionLabel(deck)} · ${shortId(deck.id)}`;
+/** Public results omit saved deck names. Number distinct lists within a faction,
+ * using the same label for the same list in either role. IDs still own links. */
+export function deckLabels(decks) {
+  const groups = new Map();
+  for (const deck of decks) {
+    const faction = factionLabel(deck);
+    if (!groups.has(faction)) groups.set(faction, new Set());
+    groups.get(faction).add(deck.id);
+  }
+  const labels = new Map();
+  for (const [faction, ids] of groups) {
+    const variants = [...ids].sort();
+    variants.forEach((id, i) => labels.set(id, `${faction} deck${variants.length > 1 ? ` ${i + 1}` : ''}`));
+  }
+  return labels;
+}
+export function deckLabel(deck, labels) {
+  return labels?.get(deck.id) || `${factionLabel(deck)} deck`;
 }
 export const deckKey = (id, role) => `${id}/${role}`;
 export const cardCount = (deck) => deck.cards.reduce((n, c) => n + c.copies, 0);
@@ -140,7 +155,7 @@ export function indexSnapshot(snapshot) {
   const matchByKey = new Map(snapshot.matchups.map((m) => [`${deckKey(m.deckId, m.role)}>${deckKey(m.opponentDeckId, m.opponentRole)}`, m]));
   // Share of recorded human seat-games: the denominator is every human deck row, before any local filtering.
   const humanSeatGames = snapshot.decks.filter((d) => d.role === 'human').reduce((n, d) => n + d.matches, 0);
-  return { byKey, matchByKey, humanSeatGames };
+  return { byKey, matchByKey, humanSeatGames, labels: deckLabels(snapshot.decks) };
 }
 
 export function findDeck(index, id, role) {
@@ -177,7 +192,7 @@ export function manaCurve(deck, cards) {
 
 const names = (deck, cards) => deck.cards.map((c) => (cards.get(c.id)?.name || c.id).toLowerCase());
 
-export function filterDecks(snapshot, cards, route) {
+export function filterDecks(snapshot, cards, route, labels = deckLabels(snapshot.decks)) {
   const q = route.q.trim().toLowerCase();
   const x = route.x.trim().toLowerCase();
   return snapshot.decks.filter((d) => {
@@ -185,7 +200,7 @@ export function filterDecks(snapshot, cards, route) {
     if (d.matches < route.min) return false;
     if (route.faction && !(d.factions || []).includes(route.faction)) return false;
     const n = names(d, cards);
-    if (q && !n.some((name) => name.includes(q))) return false;
+    if (q && ![deckLabel(d, labels).toLowerCase(), ...n].some((name) => name.includes(q))) return false;
     if (x && n.some((name) => name.includes(x))) return false;
     return true;
   });

@@ -387,7 +387,25 @@
   .sort:hover { color: var(--cyan); }
   .deck-link { color: var(--paper); text-decoration-color: #5ee6ff66; }
   .deck-link:hover { color: var(--cyan); }
-  .prelim { margin-left: 8px; padding: 2px 6px; font: 700 9px/1.4 var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--ember); border: 1px solid #ff9a3c66; }
+  .deck-preview, .sample-note { display: block; margin-top: 6px; font: 400 12px/1.5 'Segoe UI', sans-serif; overflow-wrap: anywhere; }
+  .stats-table .sample-note, .sample-note { color: var(--ember); }
+  .deck-explorer { table-layout: fixed; }
+  .deck-explorer th:first-child { width: 60%; }
+  .deck-explorer thead th:not(:first-child) { text-align: right; }
+  .deck-explorer th, .deck-explorer td { padding-block: 18px; }
+  .deck-explorer tbody th { overflow-wrap: anywhere; }
+  .stats-disclosure { margin: 14px 0; color: var(--muted); }
+  .stats-disclosure > summary { width: fit-content; max-width: 100%; padding: 8px 0; cursor: pointer; color: var(--cyan); font-size: 14px; }
+  .stats-disclosure[open] > summary { margin-bottom: 8px; }
+  .simple-filters { gap: 18px; }
+  .deck-search { display: flex; align-items: end; gap: 10px; flex: 1; }
+  .deck-search .cohort-field { flex: 1; }
+  .results-context .resolved { margin: 0; }
+  .results-context .stats-disclosure { margin: 4px 0 0; }
+  .stats-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: 8px 24px; }
+  .stats-toolbar > .stats-disclosure { margin: 0; }
+  .stats-toolbar .cohort-bar { margin-top: 10px; }
+  .deck-id { overflow-wrap: anywhere; }
   .curve { display: inline-flex; align-items: end; gap: 2px; height: 22px; }
   .curve i { display: block; width: 6px; background: linear-gradient(var(--cyan), var(--violet)); min-height: 1px; }
   .curve.large { display: flex; align-items: end; gap: 10px; height: auto; margin-bottom: 14px; }
@@ -449,6 +467,9 @@
     .header-inner nav { flex-wrap: wrap; }
     .header-inner nav a { padding: 10px 7px; letter-spacing: .08em; font-size: 10px; }
     .stats-table th, .stats-table td { padding: 8px; }
+    .deck-search { flex-basis: 100%; flex-wrap: wrap; }
+    .deck-explorer th:first-child { width: 48%; }
+    .deck-explorer thead th { white-space: normal; line-height: 1.5; letter-spacing: .04em; }
   }
 }
 
