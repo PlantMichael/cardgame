@@ -114,24 +114,47 @@ export function factionLabel(deck) {
   const names = (deck.factions || []).map((f) => FACTION_NAMES[f] || f);
   return names.length ? names.join(' / ') : 'Unknown';
 }
-/** Public results omit saved deck names. Number distinct lists within a faction,
- * using the same label for the same list in either role. IDs still own links. */
-export function deckLabels(decks) {
-  const groups = new Map();
-  for (const deck of decks) {
-    const faction = factionLabel(deck);
-    if (!groups.has(faction)) groups.set(faction, new Set());
-    groups.get(faction).add(deck.id);
+/** A composition-based estimate, never the controller's personality or a claim
+ * about the original draft. Counts are weighted by copies; missing cards cannot
+ * establish a style. Exact composition IDs still own links and statistics. */
+export function deckArchetype(deck, cards) {
+  const total = cardCount(deck);
+  if (!total || deck.cards.some(({ id }) => !Number.isFinite(cards.get(id)?.manaCost))) return 'Unclassified';
+  let mana = 0, cheap = 0, creatures = 0, pressure = 0, defense = 0;
+  const packages = [
+    { enable: /^(pilot_\d|on_play_pilot_mech)/, payoff: /^(on_piloted_|on_friendly_pilot_)/ },
+    { enable: /^(rummage|attack_rummage|deathrattle_rummage)/, payoff: /^(on_play_voidtouch_if_rummaged|stinkpile_passive)/ },
+    { enable: /^(transform_at_max_health_|on_play_transform|deathrattle_transform)/, payoff: /^(on_friendly_transform_|mirror_transform)/ },
+    { enable: /^(reinforce|on_friendly_death_reinforce)/, payoff: /^(on_reinforce_|on_any_reinforce_)/ },
+  ].map(p => ({ ...p, enablers: 0, payoffs: 0 }));
+  for (const { id, copies } of deck.cards) {
+    const card = cards.get(id), tags = card.abilities || [];
+    mana += card.manaCost * copies;
+    if (card.manaCost <= 3) cheap += copies;
+    if (card.type === 'CREATURE') creatures += copies;
+    // These are the same printed aggression/defense families used by the
+    // game's archetype builder. Include printed stratagem text: its effect
+    // key is intentionally absent from the public card catalog.
+    if (tags.some(t => /^(rush|dual_strike|challenge|ambush|cloaked|on_play_challenge|on_play_yeti_challenge|pilot_gives_rush|on_piloted_gain_rush)/.test(t)) || /\b(rush|challenge)\b/i.test(card.description || '')) pressure += copies;
+    if (tags.some(t => /^(guardian|shielded_|rejuvenate_|on_play_damage_|on_play_aoe_enemy_|heal_to_draw|combat_immune|null$)/.test(t)) || /\b(destroy|deal \d+ damage|restore|heal)\b/i.test(card.description || '')) defense += copies;
+    for (const p of packages) {
+      if (tags.some(t => p.payoff.test(t))) p.payoffs += copies;
+      else if (tags.some(t => p.enable.test(t))) p.enablers += copies;
+    }
   }
-  const labels = new Map();
-  for (const [faction, ids] of groups) {
-    const variants = [...ids].sort();
-    variants.forEach((id, i) => labels.set(id, `${faction} deck${variants.length > 1 ? ` ${i + 1}` : ''}`));
-  }
-  return labels;
+  const average = mana / total;
+  if (average <= 3.2 && cheap / total >= .6 && creatures / total >= .6) return 'Aggro';
+  if (packages.some(p => p.enablers / total >= .15 && p.payoffs / total >= .15)) return 'Combo';
+  if (average >= 3.5 && defense / total >= .35) return 'Control';
+  if (average <= 4 && cheap / total >= .45 && pressure / total >= .2) return 'Tempo';
+  return 'Midrange';
+}
+/** Labels may repeat; they never group or merge exact compositions. */
+export function deckLabels(decks, cards = new Map()) {
+  return new Map(decks.map(deck => [deck.id, `${factionLabel(deck)} ${deckArchetype(deck, cards)}`]));
 }
 export function deckLabel(deck, labels) {
-  return labels?.get(deck.id) || `${factionLabel(deck)} deck`;
+  return labels?.get(deck.id) || `${factionLabel(deck)} Unclassified`;
 }
 export const deckKey = (id, role) => `${id}/${role}`;
 export const cardCount = (deck) => deck.cards.reduce((n, c) => n + c.copies, 0);
@@ -171,12 +194,12 @@ export function validateSnapshot(s) {
 
 // ---- joins ----------------------------------------------------------------------
 
-export function indexSnapshot(snapshot) {
+export function indexSnapshot(snapshot, cards = new Map()) {
   const byKey = new Map(snapshot.decks.map((d) => [deckKey(d.id, d.role), d]));
   const matchByKey = new Map(snapshot.matchups.map((m) => [`${deckKey(m.deckId, m.role)}>${deckKey(m.opponentDeckId, m.opponentRole)}`, m]));
   // Share of recorded human seat-games: the denominator is every human deck row, before any local filtering.
   const humanSeatGames = snapshot.decks.filter((d) => d.role === 'human').reduce((n, d) => n + d.matches, 0);
-  return { byKey, matchByKey, humanSeatGames, labels: deckLabels(snapshot.decks) };
+  return { byKey, matchByKey, humanSeatGames, labels: deckLabels(snapshot.decks, cards) };
 }
 
 export function findDeck(index, id, role) {
@@ -213,7 +236,7 @@ export function manaCurve(deck, cards) {
 
 const names = (deck, cards) => deck.cards.map((c) => (cards.get(c.id)?.name || c.id).toLowerCase());
 
-export function filterDecks(snapshot, cards, route, labels = deckLabels(snapshot.decks)) {
+export function filterDecks(snapshot, cards, route, labels = deckLabels(snapshot.decks, cards)) {
   const q = route.q.trim().toLowerCase();
   const x = route.x.trim().toLowerCase();
   return snapshot.decks.filter((d) => {

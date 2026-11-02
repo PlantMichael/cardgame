@@ -86,7 +86,7 @@ async function fetchCohort(force = false) {
 }
 function setLoaded(mySeq, key, demo, snapshot) {
   if (mySeq !== seq) return;
-  load = { status: snapshot.games === 0 ? 'empty' : 'ok', snapshot, index: S.indexSnapshot(snapshot), code: 200, key, demo };
+  load = { status: snapshot.games === 0 ? 'empty' : 'ok', snapshot, index: S.indexSnapshot(snapshot, catalog.cards), code: 200, key, demo };
   render();
 }
 function fail(mySeq, key, demo, code) {
@@ -105,6 +105,7 @@ async function fetchCatalog() {
     if (!Array.isArray(body.cards)) throw new Error('shape');
     catalog = { status: 'ok', cards: S.cardsById(body), list: body.cards };
   } catch { catalog = { status: 'failed', cards: new Map(), list: [] }; }
+  if (load.snapshot) load.index = S.indexSnapshot(load.snapshot, catalog.cards);
   render();
 }
 
@@ -170,7 +171,7 @@ function resolvedLine() {
       h('p', { class: 'foot' }, parts.join(' · ')),
       h('p', { class: 'foot' }, m.source === 'mixed' ? 'Combined playtest results include human games and automated ranked bots. Local AI results are client-reported; ranked player and bot games are verified by the game server.' : m.source === 'server_verified' ? 'Results verified by the game server.' : 'These results are reported by the game client, rather than verified by the server.'),
       h('p', { class: 'foot' }, `${seatGames} deck appearances: each game contributes one result to each deck that played. Repeated human or bot games can dominate the sample. These numbers are a playtest guide, not proof that a deck is balanced.`),
-      h('p', { class: 'foot' }, `Updated ${when(load.snapshot.generatedAt)}. Deck names describe factions, with numbers to separate different card lists in these results. Saved player deck names are not published.`)));
+      h('p', { class: 'foot' }, `Updated ${when(load.snapshot.generatedAt)}. Deck names estimate archetypes from the cards and mana curve. Lists with the same name keep separate results; use the featured cards or full list to tell them apart. Missing card data shows Unclassified. Saved player deck names are not published.`)));
 }
 
 // ---- states ------------------------------------------------------------------------------------
