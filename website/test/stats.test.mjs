@@ -126,6 +126,21 @@ test('local filters: role, faction, card search, exclusion, minimum sample, stab
   assert.deepEqual(S.sortDecks(snapshot.decks, 'bogus', 'desc').map((d) => d.matches), S.sortDecks(snapshot.decks, 'matches', 'desc').map((d) => d.matches));
 });
 
+test('readable deck labels distinguish faction lists without exposing hashes and can be searched', () => {
+  const deck = snapshot.decks.find((d) => d.role === 'human');
+  const variant = { ...deck, id: 'different-list' };
+  const decks = [...snapshot.decks, variant];
+  const name = S.deckLabel(deck, decks);
+  assert.match(name, / deck [1-9][0-9]*$/);
+  assert.notEqual(name, S.deckLabel(variant, decks));
+  assert.equal(S.deckLabel({ ...deck, role: 'ai' }, decks), name);
+  assert.equal(S.deckLabel(deck, [...decks].reverse()), name, 'input order does not change the label');
+  assert.ok(!name.includes(S.shortId(deck.id)));
+  const route = { ...S.routeFromSearch(''), q: name.toUpperCase() };
+  assert.deepEqual(S.filterDecks({ ...snapshot, decks }, cards, route).map((d) => d.id), [deck.id]);
+  assert.ok(S.filterDecks(snapshot, cards, { ...route, q: S.factionLabel(deck) }).some((d) => d.id === deck.id));
+});
+
 test('a single-game 100% deck keeps its sample and is not hidden by default', () => {
   const lone = snapshot.matchups.find((m) => m.matches === 1 && m.winRate === 1);
   assert.ok(lone);

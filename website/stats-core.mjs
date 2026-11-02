@@ -5,7 +5,7 @@
 // Contract: catalog/stats-website-spec.md on the API branch (e3c9c9e). Rates and
 // interval bounds are fractions. A deck is identified by id AND role.
 
-export const MODES = { ranked_ai: 'Ranked AI', authoritative_pvp: 'Authoritative PvP' };
+export const MODES = { ranked_ai: 'Against AI', authoritative_pvp: 'Against players' };
 export const SERVER_PARAMS = ['mode', 'days', 'rulesVersion', 'aiVersion', 'aiLevel'];
 export const DEFAULT_COHORT = { mode: 'ranked_ai', days: '30', rulesVersion: 'latest', aiVersion: 'latest', aiLevel: '10' };
 export const FACTION_NAMES = { GREEN: 'Sapiens', CRIMSON: 'Moonlight Coven', BLACK: 'Junklings', ORANGE: 'Gundari', TEAL: 'Mokotai', GENERIC: 'Generic' };
@@ -108,9 +108,13 @@ export function factionLabel(deck) {
   const names = (deck.factions || []).map((f) => FACTION_NAMES[f] || f);
   return names.length ? names.join(' / ') : 'Unknown';
 }
-/** No names exist in the API: an honest label, with the full id as identity. */
-export function deckLabel(deck) {
-  return `${factionLabel(deck)} · ${shortId(deck.id)}`;
+/** Public results omit saved deck names. Number distinct lists within a faction,
+ * using the same label for the same list in either role. IDs still own links. */
+export function deckLabel(deck, decks = []) {
+  const faction = factionLabel(deck);
+  const variants = [...new Set(decks.filter((d) => factionLabel(d) === faction).map((d) => d.id))].sort();
+  const number = variants.length > 1 ? ` ${variants.indexOf(deck.id) + 1}` : '';
+  return `${faction} deck${number}`;
 }
 export const deckKey = (id, role) => `${id}/${role}`;
 export const cardCount = (deck) => deck.cards.reduce((n, c) => n + c.copies, 0);
@@ -185,7 +189,7 @@ export function filterDecks(snapshot, cards, route) {
     if (d.matches < route.min) return false;
     if (route.faction && !(d.factions || []).includes(route.faction)) return false;
     const n = names(d, cards);
-    if (q && !n.some((name) => name.includes(q))) return false;
+    if (q && ![deckLabel(d, snapshot.decks).toLowerCase(), ...n].some((name) => name.includes(q))) return false;
     if (x && n.some((name) => name.includes(x))) return false;
     return true;
   });
