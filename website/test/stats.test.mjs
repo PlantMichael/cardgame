@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildFixtureSnapshot, deckId } from '../tools/stats-fixture.mjs';
+import { buildFixtureSnapshot, buildCombinedFixtureSnapshot, deckId } from '../tools/stats-fixture.mjs';
 import * as S from '../stats-core.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -113,7 +113,7 @@ test('share is of ALL human seat-games before any local filter', () => {
 });
 
 test('local filters: role, faction, card search, exclusion, minimum sample, stable sort', () => {
-  const route = (over) => ({ ...S.routeFromSearch(''), ...over });
+  const route = (over) => ({ ...S.routeFromSearch('?mode=ranked_ai'), ...over });
   assert.equal(S.filterDecks(snapshot, cards, route({})).length, 3, 'human decks by default');
   assert.equal(S.filterDecks(snapshot, cards, route({ who: 'ai' })).length, 3);
   assert.equal(S.filterDecks(snapshot, cards, route({ faction: 'GREEN' })).length, 1);
@@ -137,7 +137,7 @@ test('readable deck labels distinguish faction lists without exposing hashes and
   assert.equal(S.deckLabel({ ...deck, role: 'ai' }, labels), name);
   assert.equal(S.deckLabel(deck, S.deckLabels([...decks].reverse())), name, 'input order does not change the label');
   assert.ok(!name.includes(S.shortId(deck.id)));
-  const route = { ...S.routeFromSearch(''), q: name.toUpperCase() };
+  const route = { ...S.routeFromSearch('?mode=ranked_ai'), q: name.toUpperCase() };
   assert.deepEqual(S.filterDecks({ ...snapshot, decks }, cards, route).map((d) => d.id), [deck.id]);
   assert.ok(S.filterDecks(snapshot, cards, { ...route, q: S.factionLabel(deck) }).some((d) => d.id === deck.id));
 });
@@ -188,7 +188,7 @@ test('cohort parsing is strict and round-trips through the URL', () => {
 });
 
 test('deck links keep both id and role plus the cohort', () => {
-  const route = { ...S.routeFromSearch('?days=14&aiLevel=5'), view: 'deck', deck: K.H1, role: 'ai' };
+  const route = { ...S.routeFromSearch('?mode=ranked_ai&days=14&aiLevel=5'), view: 'deck', deck: K.H1, role: 'ai' };
   const search = S.searchFromRoute(route);
   const back = S.routeFromSearch(search);
   assert.equal(back.deck, K.H1);
@@ -212,6 +212,52 @@ test('malformed or incoherent snapshots are rejected instead of rendered', () =>
   const noRole = structuredClone(snapshot);
   delete noRole.decks[0].role;
   assert.equal(S.validateSnapshot(noRole), false);
+  const badCopies=structuredClone(snapshot);badCopies.decks[0].cards[0].copies=-1;
+  assert.equal(S.validateSnapshot(badCopies),false,'weighted card metrics require valid copy counts');
   const empty = { ...structuredClone(snapshot), games: 0, decks: [], matchups: [] };
   assert.equal(S.validateSnapshot(empty), true, 'an empty cohort is a valid, successful snapshot');
+});
+
+
+test('combined defaults and pooled fixture keep exact identities, mirrors and missing pairs', () => {
+  const mixed = buildCombinedFixtureSnapshot(catalog);
+  assert.ok(S.validateSnapshot(mixed));
+  assert.equal(S.routeFromSearch('').cohort.mode,'all');
+  assert.equal(S.routeFromSearch('').who,'combined');
+  assert.deepEqual([...S.serverQuery(S.DEFAULT_COHORT).keys()].sort(),['days','mode','rulesVersion']);
+  assert.equal(S.filterDecks(mixed,cards,S.routeFromSearch('')).length,3);
+  assert.equal(mixed.decks.reduce((n,d)=>n+d.matches,0),mixed.games*2);
+  assert.equal(mixed.decks.reduce((n,d)=>n+d.wins,0),mixed.games);
+  const axes=S.matrixAxes(mixed,'all',8,8),grid=S.buildMatrix(mixed,axes.rowDecks,axes.colDecks);
+  const row=id=>axes.rowDecks.findIndex(d=>d.id===id),col=id=>axes.colDecks.findIndex(d=>d.id===id);
+  assert.equal(grid[row(mixed._keys.A)][col(mixed._keys.C)].winRate,0);
+  assert.equal(grid[row(mixed._keys.B)][col(mixed._keys.C)],null);
+  assert.deepEqual([grid[row(mixed._keys.A)][col(mixed._keys.A)].matches,grid[row(mixed._keys.A)][col(mixed._keys.A)].wins],[2,1]);
+});
+
+test('card metrics weight copies and win rate by appearances and distinguish missing play history',()=>{
+  const mixed={decks:[{matches:3,wins:2,cards:[{id:'g_001',copies:2}]},{matches:1,wins:0,cards:[{id:'g_001',copies:1},{id:'cr_002',copies:1}]}],
+    playStats:{totalSeats:4,trackedSeats:2,completeSeats:1,cards:[{id:'g_001',plays:7},{id:'g_003',plays:4}]}};
+  const get=s=>new Map(S.cardMetrics(s,['g_001','cr_002','g_003','cr_003']).map(r=>[r.id,r]));
+  const metrics=get(mixed);
+  assert.deepEqual(metrics.get('g_001'),{id:'g_001',appearances:4,inDecks:1,averageCopies:1.75,deckWinRate:0.5,timesPlayed:7});
+  assert.equal(metrics.get('cr_002').inDecks,0.25);
+  assert.equal(metrics.get('cr_002').deckWinRate,0);
+  assert.deepEqual(metrics.get('g_003'),{id:'g_003',appearances:0,inDecks:0,averageCopies:null,deckWinRate:null,timesPlayed:4},'a generated card can be played without starting in a deck');
+  assert.equal(get({...mixed,playStats:undefined}).get('g_001').timesPlayed,null);
+  assert.equal(get({...mixed,playStats:{totalSeats:4,trackedSeats:4,completeSeats:4,cards:[]}}).get('g_001').timesPlayed,0,'fully recorded zero stays different from missing history');
+  assert.equal(S.sortCardMetrics([...metrics.values()],'deckWinRate','asc')[0].id,'cr_002');
+  assert.equal(S.sortCardMetrics([...metrics.values()],'deckWinRate','desc')[0].id,'g_001');
+  assert.equal(S.sortCardMetrics([...metrics.values()],'timesPlayed','desc')[0].id,'g_001');
+});
+
+test('card filters and sorting survive shared URLs; legacy AI/PvP cohorts remain selectable by URL',()=>{
+  const route=S.routeFromSearch('?view=cards&mode=all&q=Slime&faction=BLACK&sort=deckWinRate&dir=asc');
+  assert.deepEqual(S.routeFromSearch(S.searchFromRoute(route)),route);
+  const legacy=S.routeFromSearch('?mode=ranked_ai&aiVersion=1&aiLevel=4&view=cards');
+  assert.equal(legacy.cohort.aiLevel,'4');
+  assert.deepEqual(S.routeFromSearch(S.searchFromRoute(legacy)),legacy);
+  assert.equal(S.routeFromSearch('?mode=authoritative_pvp').cohort.mode,'authoritative_pvp');
+  const bad=buildCombinedFixtureSnapshot(catalog);bad.playStats.completeSeats=bad.playStats.totalSeats+1;
+  assert.equal(S.validateSnapshot(bad),false);
 });

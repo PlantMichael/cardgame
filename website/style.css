@@ -406,6 +406,14 @@
   .stats-toolbar > .stats-disclosure { margin: 0; }
   .stats-toolbar .cohort-bar { margin-top: 10px; }
   .deck-id { overflow-wrap: anywhere; }
+  .matchup-picker { flex: 1 1 420px; max-width: 100%; }
+  .matchup-picker select { width: 100%; }
+  .card-statistics { min-width: 760px; table-layout: fixed; }
+  .card-statistics th:first-child { width: 32%; }
+  .card-statistics thead th:not(:first-child) { text-align: right; }
+  .card-row-details > summary { cursor: pointer; padding-block: 6px; min-height: 24px; overflow-wrap: anywhere; }
+  .card-row-details[open] > summary { color: var(--cyan); margin-bottom: 8px; }
+  .card-row-details p { margin: 6px 0; font-weight: 400; }
   .curve { display: inline-flex; align-items: end; gap: 2px; height: 22px; }
   .curve i { display: block; width: 6px; background: linear-gradient(var(--cyan), var(--violet)); min-height: 1px; }
   .curve.large { display: flex; align-items: end; gap: 10px; height: auto; margin-bottom: 14px; }
@@ -440,7 +448,7 @@
   .cell { display: grid; gap: 2px; width: 100%; min-height: 54px; padding: 6px; border: 1px solid transparent; color: var(--paper); cursor: pointer; text-align: center; font: inherit; }
   .cell b { font: 800 14px/1.2 var(--display); }
   .cell small { font-size: 11px; color: #dbe3ff; }
-  .cell.none { background: transparent; border: 1px dashed var(--line); color: var(--muted); cursor: default; }
+  .cell.none { background: transparent; border: 1px dashed var(--line); color: var(--muted); }
   .cell.none b { font: 600 12px/1.2 'Segoe UI', sans-serif; }
   .cell.heat-0 { background: #7a1730; }
   .cell.heat-1 { background: #5c2340; }

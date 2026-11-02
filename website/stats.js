@@ -25,7 +25,6 @@ const h = (tag, props = {}, ...kids) => {
 let route = S.routeFromSearch(location.search);
 let load = { status: 'loading', snapshot: null, index: null, code: 0 };
 let catalog = { status: 'loading', cards: new Map(), list: [] };
-let inclusion = { status: 'idle', rates: new Map() };
 let seq = 0; // every cohort request gets a number; only the newest may update the page
 let inflight = null;
 const cache = new Map(); // query string -> { at, snapshot }
@@ -70,7 +69,7 @@ async function fetchCohort(force = false) {
   const controller = new AbortController();
   inflight = controller;
   try {
-    const url = demo ? '/media/stats-demo.json' : S.apiUrl(CATALOG, route.cohort);
+    const url = demo ? (route.cohort.mode === 'all' ? '/media/stats-demo-combined.json' : '/media/stats-demo.json') : S.apiUrl(CATALOG, route.cohort);
     const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
     if (mySeq !== seq) return; // a newer selection superseded this one
     if (!response.ok) { fail(mySeq, key, demo, response.status); return; }
@@ -97,6 +96,8 @@ function fail(mySeq, key, demo, code) {
 }
 
 async function fetchCatalog() {
+  catalog = {status:'loading',cards:new Map(),list:[]};
+  render();
   try {
     const response = await fetch(route.demo ? '/media/stats-demo-cards.json' : `${CATALOG}/data/cards.json`);
     if (!response.ok) throw new Error(String(response.status));
@@ -107,22 +108,10 @@ async function fetchCatalog() {
   render();
 }
 
-async function fetchInclusion() {
-  if (inclusion.status !== 'idle' || route.demo) return;
-  inclusion = { status: 'loading', rates: new Map() };
-  try {
-    const response = await fetch(`${CATALOG}/data/stats/card-winrates.json`);
-    if (!response.ok) throw new Error(String(response.status));
-    const body = await response.json();
-    inclusion = { status: 'ok', rates: new Map((body.cards || []).map((c) => [c.id, c])) };
-  } catch { inclusion = { status: 'failed', rates: new Map() }; }
-  render();
-}
-
 // ---- small pieces -------------------------------------------------------------------------
 const cardName = (id) => catalog.cards.get(id)?.name || id;
 const when = (iso) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-const roleWord = (role) => (role === 'ai' ? 'AI' : 'Player');
+const roleWord = (role) => (role === 'combined' ? 'Combined' : role === 'ai' ? 'AI' : 'Player');
 const small = (n) => n < 10;
 const deckName = (deck) => S.deckLabel(deck, load.index?.labels);
 const sampleNote = (row) => `Only ${row.matches} game${row.matches === 1 ? '' : 's'} recorded—results may change.`;
@@ -148,7 +137,7 @@ function curveBars(deck) {
     buckets.map((n, i) => h('i', { style: `height:${Math.round((n / max) * 100)}%`, title: `${i === 7 ? '7+' : i}: ${n}` })));
 }
 function deckLink(deck, text) {
-  return link({ view: 'deck', deck: deck.id, role: deck.role, opp: '', oppRole: 'ai' }, text || deckName(deck), { class: 'deck-link' });
+  return link({ view: 'deck', deck: deck.id, role: deck.role, opp: '', oppRole: route.cohort.mode === 'all' ? 'combined' : 'ai' }, text || deckName(deck), { class: 'deck-link' });
 }
 
 // ---- cohort bar -------------------------------------------------------------------------------
@@ -156,31 +145,16 @@ function option(value, label, selected) { return h('option', { value: String(val
 
 function cohortBar() {
   const c = route.cohort;
-  const avail = load.snapshot?.availableFilters;
-  const choices = (list, fallback) => [...new Set([...fallback, ...(list || []).map(String)])];
-  const rules = choices(avail?.rulesVersions, ['latest', 'unknown']);
-  const ai = choices(avail?.aiVersions, ['latest', 'unknown']);
-  const levels = avail?.aiLevels?.length ? [...new Set([c.aiLevel, ...avail.aiLevels.map(String)].filter(Boolean))].sort((a, b) => a - b) : ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
-  const field = (label, control) => h('label', { class: 'cohort-field' }, h('span', {}, label), control);
-  const mode = h('select', { name: 'mode' }, Object.entries(S.MODES).map(([v, l]) => option(v, l, c.mode)));
-  const days = h('input', { name: 'days', type: 'number', min: '1', max: '365', step: '1', value: c.days, required: true });
-  const rulesSel = h('select', { name: 'rulesVersion' }, rules.map((v) => option(v, v === 'latest' ? 'Latest' : v === 'unknown' ? 'Unknown' : `Version ${v}`, c.rulesVersion)));
-  const aiSel = h('select', { name: 'aiVersion' }, ai.map((v) => option(v, v === 'latest' ? 'Latest' : v === 'unknown' ? 'Unknown' : `Policy ${v}`, c.aiVersion)));
-  const lvl = h('select', { name: 'aiLevel' }, levels.map((v) => option(v, `Level ${v}`, c.aiLevel)));
-  const form = h('form', { class: 'cohort-bar', ariaLabel: 'Results filters', onsubmit: (e) => {
-    e.preventDefault();
-    const next = new URLSearchParams({ mode: mode.value, days: days.value, rulesVersion: rulesSel.value });
-    if (mode.value === 'ranked_ai') { next.set('aiVersion', aiSel.value); next.set('aiLevel', lvl.value); }
-    go({ cohort: S.cohortFromParams(next), opp: '' });
-  } },
-  field('Game type', mode), field('Days to include', days), field('Game version', rulesSel),
-  c.mode === 'ranked_ai' ? field('AI policy', aiSel) : null, c.mode === 'ranked_ai' ? field('AI difficulty', lvl) : null,
-  h('button', { type: 'submit', class: 'button small' }, h('span', {}, 'Apply')));
-  // Changing the mode only swaps which fields apply; applying sends the request.
-  mode.addEventListener('change', () => { const next = new URLSearchParams({ mode: mode.value, days: days.value, rulesVersion: rulesSel.value });
-    if (mode.value === 'ranked_ai') { next.set('aiVersion', 'latest'); next.set('aiLevel', '10'); }
-    go({ cohort: S.cohortFromParams(next), opp: '' }); });
-  return h('details', { class: 'stats-disclosure' }, h('summary', {}, 'Change game type or date range'), form);
+  const rules = [...new Set(['latest','unknown',...(load.snapshot?.availableFilters.rulesVersions || []).map(String)])];
+  const days = h('input',{name:'days',type:'number',min:'1',max:'365',step:'1',value:c.days,required:true});
+  const version = h('select',{name:'rulesVersion'},rules.map(v=>option(v,v==='latest'?'Latest':v==='unknown'?'Unknown':'Version '+v,c.rulesVersion)));
+  return h('details',{class:'stats-disclosure'},h('summary',{},'Date range and game version'),
+    h('form',{class:'cohort-bar',ariaLabel:'Results filters',onsubmit:e=>{
+      e.preventDefault(); go({cohort:S.cohortFromParams(new URLSearchParams({...c,days:days.value,rulesVersion:version.value})),opp:''});
+    }},h('label',{class:'cohort-field'},h('span',{},'Days to include'),days),
+    h('label',{class:'cohort-field'},h('span',{},'Game version'),version),
+    h('button',{type:'submit',class:'button small'},h('span',{},'Apply')),
+    c.mode !== 'all' ? link({cohort:S.DEFAULT_COHORT,deck:'',opp:'',role:'combined',who:'combined'},'Use combined results',{class:'text-link'}) : null));
 }
 
 function resolvedLine() {
@@ -194,7 +168,7 @@ function resolvedLine() {
     h('p', { class: 'resolved' }, `${S.MODES[f.mode] || f.mode} · Last ${f.days} days · ${load.snapshot.games} game${load.snapshot.games === 1 ? '' : 's'} recorded`),
     h('details', { class: 'stats-disclosure' }, h('summary', {}, 'About these results'),
       h('p', { class: 'foot' }, parts.join(' · ')),
-      h('p', { class: 'foot' }, m.source === 'server_verified' ? 'Results verified by the game server.' : 'These results are reported by the game client, rather than verified by the server.'),
+      h('p', { class: 'foot' }, m.source === 'mixed' ? 'Combined playtest results from AI and player games. AI results are client-reported; player results are verified by the game server.' : m.source === 'server_verified' ? 'Results verified by the game server.' : 'These results are reported by the game client, rather than verified by the server.'),
       h('p', { class: 'foot' }, `${seatGames} deck appearances: each game contributes one result to each deck that played. Repeat games by the same players can skew results. These numbers are a playtest guide, not proof that a deck is balanced.`),
       h('p', { class: 'foot' }, `Updated ${when(load.snapshot.generatedAt)}. Deck names describe factions, with numbers to separate different card lists in these results. Saved player deck names are not published.`)));
 }
@@ -213,7 +187,7 @@ function statusPanel() {
         Number(route.cohort.days) > 7 ? h('button', { type: 'button', class: 'button small secondary', onclick: () => go({ cohort: { ...route.cohort, days: '7' } }) }, h('span', {}, 'Try the last 7 days')) : null,
         route.demo ? null : link({ demo: true }, 'Preview the layout with demo data', { class: 'text-link' })));
   }
-  if (load.status === 'empty') return h('div', { class: 'state', role: 'status' }, h('p', {}, 'No games recorded for these filters. Try a longer date range or another game type.'));
+  if (load.status === 'empty') return h('div', { class: 'state', role: 'status' }, h('p', {}, 'No games recorded for these filters. Try a longer date range.'));
   return null;
 }
 
@@ -223,7 +197,7 @@ function explorer() {
   const rows = S.sortDecks(S.filterDecks(snap, catalog.cards, route, load.index.labels), route.sort, route.dir);
   const factions = ['GREEN', 'CRIMSON', 'BLACK', 'ORANGE', 'TEAL'];
   const patch = (p) => go(p, { replace: true });
-  const advancedActive = route.who !== 'human' || route.x || route.min > 1 || !['matches', 'winRate'].includes(route.sort);
+  const advancedActive = (route.cohort.mode !== 'all' && route.who !== 'human') || route.x || route.min > 1 || !['matches', 'winRate'].includes(route.sort);
   const filters = h('div', { class: 'filter-row simple-filters' },
     h('label', { class: 'cohort-field' }, h('span', {}, 'Faction'), h('select', { onchange: (e) => patch({ faction: e.target.value }) },
       option('', 'Any faction', route.faction), factions.map((f) => option(f, S.FACTION_NAMES[f], route.faction)))),
@@ -233,8 +207,8 @@ function explorer() {
   const moreFilters = h('details', { class: 'stats-disclosure', open: !!advancedActive },
     h('summary', {}, 'More filters' + (advancedActive ? ' (active)' : '')),
     h('div', { class: 'filter-row' },
-      h('label', { class: 'cohort-field' }, h('span', {}, 'Decks played by'), h('select', { onchange: (e) => patch({ who: e.target.value }) },
-        option('human', 'Players', route.who), option('ai', 'AI', route.who))),
+      route.cohort.mode !== 'all' ? h('label', { class: 'cohort-field' }, h('span', {}, 'Decks played by'), h('select', { onchange: (e) => patch({ who: e.target.value }) },
+        option('human', 'Players', route.who), option('ai', 'AI', route.who))) : null,
       h('label', { class: 'cohort-field' }, h('span', {}, 'Without this card'), h('input', { type: 'search', value: route.x, placeholder: 'Card name', onchange: (e) => patch({ x: e.target.value }) })),
       h('label', { class: 'cohort-field' }, h('span', {}, 'At least this many games'), h('input', { type: 'number', min: '1', value: String(route.min), onchange: (e) => patch({ min: Math.max(1, Number(e.target.value) || 1) }) })),
       h('label', { class: 'cohort-field' }, h('span', {}, 'Sort by'), h('select', { onchange: (e) => patch({ sort: e.target.value, dir: 'desc' }) },
@@ -255,7 +229,7 @@ function explorer() {
   return h('section', {},
     filters, moreFilters,
     rows.length ? table : h('p', { class: 'state', role: 'status' }, 'No decks match. Try another faction or clear your search and extra filters.'),
-    h('p', { class: 'foot', role: 'status' }, rows.length + ' ' + (route.who === 'human' ? 'player' : 'AI') + ' deck' + (rows.length === 1 ? '' : 's') + ' shown.'));
+    h('p', { class: 'foot', role: 'status' }, rows.length + ' ' + (route.who === 'combined' ? '' : route.who === 'human' ? 'player ' : 'AI ') + 'deck' + (rows.length === 1 ? '' : 's') + ' shown.'));
 }
 
 // ---- deck detail ------------------------------------------------------------------------------------
@@ -282,7 +256,7 @@ function deckDetail() {
   const back = link({ view: 'explorer', deck: '', opp: '' }, '← All decks', { class: 'text-link' });
   if (!deck) {
     return h('section', {}, back, h('h2', {}, 'No results for this deck'),
-      h('p', { class: 'state' }, 'This deck has no results for the selected game type and date range. Try changing the filters.'));
+      h('p', { class: 'state' }, 'This deck has no results for the selected date range and game version. Try changing the filters.'));
   }
   const opponents = S.opponentsOf(load.snapshot, load.index, deck).sort((a, b) => b.matchup.matches - a.matchup.matches);
   const selected = route.opp ? S.findDeck(load.index, route.opp, route.oppRole) : null;
@@ -293,19 +267,19 @@ function deckDetail() {
     h('tbody', {}, opponents.map(({ matchup, opponent }) => {
       const on = selected && opponent && opponent.id === selected.id && opponent.role === selected.role;
       return h('tr', { class: on ? 'selected' : '' },
-        h('th', { scope: 'row' }, opponent ? link({ opp: opponent.id, oppRole: opponent.role }, `${roleWord(opponent.role)} · ${deckName(opponent)}`, { ariaCurrent: on ? 'true' : undefined, class: 'deck-link' }) : `${roleWord(matchup.opponentRole)} deck`,
+        h('th', { scope: 'row' }, opponent ? link({ opp: opponent.id, oppRole: opponent.role }, `${route.cohort.mode === 'all' ? '' : roleWord(opponent.role)+' · '}${deckName(opponent)}`, { ariaCurrent: on ? 'true' : undefined, class: 'deck-link' }) : `${roleWord(matchup.opponentRole)} deck`,
           small(matchup.matches) ? h('small', { class: 'sample-note' }, sampleNote(matchup)) : null),
         h('td', { class: 'num strong' }, S.pct(matchup.winRate)), sampleCell(matchup));
     }))));
   const side = h('aside', { class: 'opp-panel', ariaLabel: 'Selected opponent' },
-    selected ? [h('h3', {}, 'Opponent cards'), h('p', { class: 'opp-title' }, `${roleWord(selected.role)} · ${deckName(selected)}`),
+    selected ? [h('h3', {}, 'Opponent cards'), h('p', { class: 'opp-title' }, `${route.cohort.mode === 'all' ? '' : roleWord(selected.role)+' · '}${deckName(selected)}`),
       oppRow ? h('p', {}, `${deck.role === 'ai' ? 'This deck' : 'Your selected deck'} wins ${S.pct(oppRow.matchup.winRate)} (${S.record(oppRow.matchup)}) against it.`) : null,
       oppRow ? h('details', { class: 'stats-disclosure' }, h('summary', {}, 'More matchup details'), moreNumbers(oppRow.matchup)) : null,
       compositionList(selected), h('div', { class: 'actions' }, link({ view: 'deck', deck: selected.id, role: selected.role, opp: '' }, 'Open this deck', { class: 'text-link' }), link({ opp: '' }, 'Clear', { class: 'text-link' }))]
       : null);
   return h('section', {}, back,
     h('h2', {}, deckName(deck)),
-    h('p', { class: 'lede' }, `${S.cardCount(deck)} cards · Played by ${deck.role === 'ai' ? 'AI' : 'players'}`),
+    h('p', { class: 'lede' }, `${S.cardCount(deck)} cards · Played by ${deck.role === 'combined' ? 'players and AI in the combined results' : deck.role === 'ai' ? 'AI' : 'players'}`),
     h('dl', { class: 'stat-grid' },
       statBlock('Win rate', S.pct(deck.winRate), `${deck.wins} wins · ${deck.losses} losses`),
       statBlock('Games played', String(deck.matches))),
@@ -329,57 +303,88 @@ function deckDetail() {
 // ---- matrix ------------------------------------------------------------------------------------------
 function matrixView() {
   const snap = load.snapshot;
-  const { rowDecks, colDecks } = S.matrixAxes(snap, snap.filters.mode, route.rows, route.cols);
-  const grid = S.buildMatrix(snap, rowDecks, colDecks);
-  const chosen = route.opp && route.deck ? { r: rowDecks.findIndex((d) => d.id === route.deck && d.role === route.role), c: colDecks.findIndex((d) => d.id === route.opp && d.role === route.oppRole) } : null;
-  const select = (key, value) => h('select', { onchange: (e) => go({ [key]: Number(e.target.value) }, { replace: true }) }, [3, 5, 8, 10, 15, 25].map((n) => option(n, String(n), value)));
-  const cell = (r, c) => {
-    const m = grid[r][c];
-    const label = m ? `${S.pct(m.winRate)} · ${S.record(m)}` : 'No games';
-    const on = chosen && chosen.r === r && chosen.c === c;
-    return h('td', {}, h('button', { type: 'button', class: `cell heat-${S.heat(m?.winRate)}${on ? ' on' : ''}${m ? '' : ' none'}`, ariaPressed: String(!!on),
-      ariaLabel: `${deckName(rowDecks[r])} against ${roleWord(colDecks[c].role)} ${deckName(colDecks[c])}: ${m ? `${S.pct(m.winRate)}, ${S.record(m)}, ${m.matches} games played` : 'no games recorded'}`,
-      onclick: () => go({ deck: rowDecks[r].id, role: rowDecks[r].role, opp: colDecks[c].id, oppRole: colDecks[c].role }, { replace: true }) },
-    h('b', {}, m ? S.pct(m.winRate) : 'No games'), m ? h('small', {}, `${m.matches} games`) : null));
-  };
-  const detail = chosen && chosen.r >= 0 && chosen.c >= 0 ? (() => {
-    const m = grid[chosen.r][chosen.c]; const a = rowDecks[chosen.r]; const b = colDecks[chosen.c];
-    return h('div', { class: 'matrix-detail', role: 'region', ariaLabel: 'Selected matchup' }, h('h3', {}, 'Selected matchup'),
-      h('p', {}, link({ view: 'deck', deck: a.id, role: a.role, opp: b.id, oppRole: b.role }, deckName(a)), ` (${roleWord(a.role)}) against `, link({ view: 'deck', deck: b.id, role: b.role, opp: '' }, deckName(b)), ` (${roleWord(b.role)})`),
-      m ? h('div', {}, h('p', {}, `${S.pct(m.winRate)} win rate · ${m.matches} games played`), small(m.matches) ? h('p', { class: 'sample-note' }, sampleNote(m)) : null, h('details', { class: 'stats-disclosure' }, h('summary', {}, 'More matchup details'), moreNumbers(m))) : h('p', { class: 'state' }, 'No games recorded for this pairing for these filters.'));
-  })() : h('p', { class: 'foot' }, 'Select a result to compare both decks.');
-  const listRows = grid.flatMap((row, r) => row.map((m, c) => ({ m, a: rowDecks[r], b: colDecks[c] })));
-  return h('section', {},
-    h('h2', {}, 'Deck matchups'),
-    h('p', { class: 'lede' }, `Each cell is the row deck’s result against the column deck. ${snap.filters.mode === 'ranked_ai' ? 'Rows are human decks; columns are AI decks.' : 'Both axes are human decks.'} Pick a result to compare the two decks. A deck with no recorded games shows “No games”.`),
-    h('div', { class: 'filter-row' }, h('label', { class: 'cohort-field' }, h('span', {}, 'Rows (most played)'), select('rows', route.rows)), h('label', { class: 'cohort-field' }, h('span', {}, 'Columns'), select('cols', route.cols))),
-    rowDecks.length && colDecks.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'matrix' }, h('caption', { class: 'sr-only' }, 'Row deck win rate against column deck'),
-      h('thead', {}, h('tr', {}, h('td', {}), colDecks.map((d) => h('th', { scope: 'col' }, h('span', { class: 'axis' }, roleWord(d.role)), deckName(d))))),
-      h('tbody', {}, rowDecks.map((d, r) => h('tr', {}, h('th', { scope: 'row' }, link({ view: 'deck', deck: d.id, role: d.role, opp: '' }, deckName(d), { class: 'deck-link' }), h('small', {}, ` · ${d.matches} games`)), colDecks.map((_, c) => cell(r, c))))))) : h('p', { class: 'state' }, 'Not enough decks for these filters to build a matrix.'),
-    detail,
-    h('details', { class: 'matrix-list' }, h('summary', {}, 'Show every pairing as a list'),
-      h('div', { class: 'table-wrap' }, h('table', { class: 'stats-table compact' }, h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, 'Row deck'), h('th', { scope: 'col' }, 'Column deck'), h('th', { scope: 'col' }, 'Win rate'), h('th', { scope: 'col' }, 'Record'))),
-        h('tbody', {}, listRows.map(({ m, a, b }) => h('tr', {}, h('td', {}, deckName(a)), h('td', {}, `${roleWord(b.role)} · ${deckName(b)}`), h('td', { class: 'num' }, m ? S.pct(m.winRate) : 'No games'), h('td', { class: 'num' }, m ? `${S.record(m)} (n=${m.matches})` : '—'))))))));
+  const ownRole = snap.filters.mode === 'all' ? 'combined' : 'human';
+  const choices = S.sortDecks(snap.decks.filter(d=>d.role===ownRole),'matches','desc');
+  const deck = route.deck ? choices.find(d=>d.id===route.deck && d.role===route.role) : choices[0];
+  const opponents = deck ? S.opponentsOf(snap,load.index,deck).sort((a,b)=>b.matchup.matches-a.matchup.matches) : [];
+  const selected = route.opp ? S.findDeck(load.index,route.opp,route.oppRole) : null;
+  const picked = selected && opponents.find(o=>o.matchup.opponentDeckId===selected.id && o.matchup.opponentRole===selected.role);
+  const opponentName = d => (snap.filters.mode==='all'?'':roleWord(d.role)+' · ')+deckName(d);
+  const table = h('div',{class:'table-wrap'},h('table',{class:'stats-table deck-explorer'},
+    h('caption',{class:'sr-only'},'Results against each opponent'),
+    h('thead',{},h('tr',{},...['Opponent','Win rate','Games played'].map(t=>h('th',{scope:'col'},t)))),
+    h('tbody',{},opponents.map(({matchup,opponent})=>h('tr',{class:selected?.id===opponent?.id && selected?.role===opponent?.role?'selected':''},
+      h('th',{scope:'row'},opponent ? link({deck:deck.id,role:deck.role,opp:opponent.id,oppRole:opponent.role},opponentName(opponent),{class:'deck-link'}) : 'Unknown deck',
+        small(matchup.matches)?h('small',{class:'sample-note'},sampleNote(matchup)):null),
+      h('td',{class:'num strong'},S.pct(matchup.winRate)),sampleCell(matchup))))));
+  const detail = deck && selected ? h('div',{class:'matrix-detail',role:'region',ariaLabel:'Selected matchup'},
+    h('h3',{},deckName(deck)+' vs '+opponentName(selected)),
+    picked ? h('p',{},deckName(deck)+' wins '+S.pct(picked.matchup.winRate)+' of '+picked.matchup.matches+' games against this deck.')
+      : h('p',{class:'state'},'No games recorded for this pairing.'),
+    picked ? h('details',{class:'stats-disclosure'},h('summary',{},'More matchup details'),moreNumbers(picked.matchup)) : null,
+    h('details',{class:'stats-disclosure'},h('summary',{},'Cards in these decks'),
+      h('div',{class:'deck-columns'},h('div',{},h('h3',{},deckName(deck)),compositionList(deck)),h('div',{},h('h3',{},opponentName(selected)),compositionList(selected))))) : null;
+  const {rowDecks,colDecks} = S.matrixAxes(snap,snap.filters.mode,route.rows,route.cols);
+  const grid = S.buildMatrix(snap,rowDecks,colDecks);
+  const gridSize = (key,value)=>h('select',{onchange:e=>go({[key]:Number(e.target.value)},{replace:true})},[3,5,8,10,15,25].map(n=>option(n,String(n),value)));
+  const comparison = h('details',{class:'stats-disclosure'},h('summary',{},'Compare all decks'),
+    h('p',{class:'foot'},'Read each result from the deck on the left. No games means this pairing has not been recorded.'),
+    h('div',{class:'filter-row'},h('label',{class:'cohort-field'},h('span',{},'Deck rows'),gridSize('rows',route.rows)),
+      h('label',{class:'cohort-field'},h('span',{},'Opponent columns'),gridSize('cols',route.cols))),
+    h('div',{class:'table-wrap'},h('table',{class:'matrix'},h('caption',{class:'sr-only'},'Deck comparison grid'),
+      h('thead',{},h('tr',{},h('td',{}),colDecks.map(d=>h('th',{scope:'col'},opponentName(d))))),
+      h('tbody',{},rowDecks.map((d,r)=>h('tr',{},h('th',{scope:'row'},deckName(d)),colDecks.map((enemy,c)=>{
+        const match=grid[r][c]; const on=deck?.id===d.id && selected?.id===enemy.id && selected?.role===enemy.role;
+        return h('td',{},h('button',{type:'button',class:'cell heat-'+S.heat(match?.winRate)+(match?'':' none')+(on?' on':''),ariaPressed:String(on),
+          ariaLabel:deckName(d)+' against '+opponentName(enemy)+': '+(match?S.pct(match.winRate)+', '+match.matches+' games':'no games recorded'),
+          onclick:()=>go({deck:d.id,role:d.role,opp:enemy.id,oppRole:enemy.role},{replace:true})},
+          h('b',{},match?S.pct(match.winRate):'No games'),match?h('small',{},match.matches+' games'):null));
+      })))))));
+  return h('section',{},h('h2',{class:'sr-only'},'Deck matchups'),
+    h('div',{class:'filter-row'},h('label',{class:'cohort-field matchup-picker'},h('span',{},'Your deck'),
+      h('select',{onchange:e=>go({deck:e.target.value,role:ownRole,opp:''})},option('','Choose a deck',deck?.id||''),choices.map(d=>option(d.id,deckName(d),deck?.id))))),
+    deck ? (opponents.length?table:h('p',{class:'state'},'No opponent results for this deck yet.')) : h('p',{class:'state'},'Choose a deck with results for these filters.'),
+    detail,comparison);
 }
 
 // ---- cards (supporting context) ------------------------------------------------------------------------
 function cardsView() {
-  fetchInclusion();
+  const snap = load.snapshot;
   const q = route.q.trim().toLowerCase();
-  const list = catalog.list.filter((c) => c.collectible && (!route.faction || c.color === route.faction) && (!q || c.name.toLowerCase().includes(q)));
-  return h('section', {},
-    h('h2', {}, 'Cards'),
-    h('p', { class: 'lede' }, 'Win rates are for decks that started with each card, across all game types and versions. They do not measure what a card contributed on its own.'),
-    h('div', { class: 'filter-row' },
-      h('label', { class: 'cohort-field' }, h('span', {}, 'Faction'), h('select', { onchange: (e) => go({ faction: e.target.value }, { replace: true }) }, option('', 'Any faction', route.faction), ['GREEN', 'CRIMSON', 'BLACK', 'ORANGE', 'TEAL', 'GENERIC'].map((f) => option(f, S.FACTION_NAMES[f], route.faction)))),
-      h('label', { class: 'cohort-field' }, h('span', {}, 'Search'), h('input', { type: 'search', value: route.q, placeholder: 'Card name', onchange: (e) => go({ q: e.target.value }, { replace: true }) }))),
-    catalog.status === 'failed' ? h('p', { class: 'state error' }, 'Could not load the card list.') : null,
-    h('div', { class: 'table-wrap' }, h('table', { class: 'stats-table' }, h('thead', {}, h('tr', {}, ['Card', 'Cost', 'Type', 'Faction', 'Text', 'Inclusion win rate'].map((t) => h('th', { scope: 'col' }, t)))),
-      h('tbody', {}, list.map((c) => {
-        const r = inclusion.rates.get(c.id);
-        return h('tr', {}, h('th', { scope: 'row' }, c.name), h('td', { class: 'num' }, String(c.manaCost)), h('td', {}, c.type.toLowerCase()), h('td', {}, S.FACTION_NAMES[c.color] || c.color), h('td', { class: 'rules' }, c.description),
-          h('td', { class: 'num' }, r ? (r.matches ? `${S.pct(r.winRate)} (n=${r.matches})` : 'No games') : inclusion.status === 'failed' ? 'Unavailable' : '—'));
-      })))));
+  const ids = catalog.list.filter(c=>c.collectible && !c.isToken).map(c=>c.id);
+  const sort = S.CARD_SORT_KEYS.includes(route.sort)?route.sort:'timesPlayed';
+  const rows = S.sortCardMetrics(S.cardMetrics(snap,ids).map(row=>({...row,name:cardName(row.id)})),sort,route.dir)
+    .filter(row=>catalog.cards.has(row.id) && (!route.faction||catalog.cards.get(row.id).color===route.faction) && (!q||row.name.toLowerCase().includes(q)));
+  const coverage = snap.playStats || {totalSeats:snap.games*2,trackedSeats:0,completeSeats:0};
+  const heading = (key,label,help)=>h('th',{scope:'col',ariaSort:sort===key?(route.dir==='asc'?'ascending':'descending'):'none'},
+    h('button',{type:'button',class:'sort',title:help,onclick:()=>go({sort:key,dir:sort===key&&route.dir==='desc'?'asc':'desc'},{replace:true})},label,sort===key?(route.dir==='asc'?' ▲':' ▼'):''));
+  return h('section',{},h('h2',{class:'sr-only'},'Card statistics'),
+    h('div',{class:'filter-row simple-filters'},
+      h('label',{class:'cohort-field'},h('span',{},'Faction'),h('select',{onchange:e=>go({faction:e.target.value},{replace:true})},option('','Any faction',route.faction),
+        ['GREEN','CRIMSON','BLACK','ORANGE','TEAL','GENERIC'].map(f=>option(f,S.FACTION_NAMES[f],route.faction)))),
+      h('form',{class:'deck-search',onsubmit:e=>{e.preventDefault();go({q:e.currentTarget.elements.q.value},{replace:true});}},
+        h('label',{class:'cohort-field'},h('span',{},'Find a card'),h('input',{name:'q',type:'search',value:route.q,placeholder:'Card name'})),
+        h('button',{type:'submit',class:'button small'},h('span',{},'Search')))),
+    h('p',{class:'foot'},coverage.trackedSeats===0?'No card-play history is recorded for these games. The deck statistics are still available.'
+      : coverage.completeSeats<coverage.totalSeats?'Times played is partially recorded for older games. Counts below show recorded plays only.':'Play counts are fully recorded for these results.'),
+    h('details',{class:'stats-disclosure'},h('summary',{},'About card statistics'),
+      h('p',{class:'foot'},'In % of decks: the share of recorded deck appearances that started with the card. Each game contributes one appearance for each deck.'),
+      h('p',{class:'foot'},'Average copies: copies in decks containing this card, weighted by games played. Deck win rate: wins by those decks, not the card’s individual contribution.'),
+      h('p',{class:'foot'},'Times played: actual card plays, including replays and generated copies. Drawing, summoning or transforming a card does not add a play.'),
+      h('p',{class:'foot'},coverage.completeSeats+' of '+coverage.totalSeats+' deck results have complete play tracking; '+(coverage.trackedSeats-coverage.completeSeats)+' have partial tracking. Missing history is not counted as zero.')),
+    catalog.status==='failed'?h('div',{class:'state error'},h('p',{},'Could not load card names.'),h('button',{type:'button',class:'button small',onclick:fetchCatalog},'Retry'))
+      :catalog.status==='loading'?h('p',{class:'state',role:'status'},'Loading card names…')
+      :!rows.length?h('p',{class:'state',role:'status'},'No cards match. Clear your search or choose another faction.')
+      :h('div',{class:'table-wrap'},h('table',{class:'stats-table card-statistics'},h('caption',{class:'sr-only'},'Card statistics'),
+        h('thead',{},h('tr',{},heading('name','Card','Sort by card name'),heading('inDecks','In % of decks','Share of deck appearances containing this card'),
+          heading('averageCopies','Avg. copies','Average copies among decks containing the card'),heading('deckWinRate','Deck win rate','Win rate of decks containing the card'),heading('timesPlayed','Times played','Actual recorded plays; older history can be incomplete'))),
+        h('tbody',{},rows.map(row=>{const card=catalog.cards.get(row.id);return h('tr',{},
+          h('th',{scope:'row'},h('details',{class:'card-row-details'},h('summary',{},card.name),
+            h('p',{class:'foot'},card.manaCost+' mana · '+card.type.toLowerCase()+' · '+(S.FACTION_NAMES[card.color]||card.color)),
+            h('p',{class:'rules'},card.description),h('p',{class:'foot'},row.appearances+' deck appearances containing this card.')),
+            row.appearances>0&&small(row.appearances)?h('small',{class:'sample-note'},'Only '+row.appearances+' deck results.'):null),
+          h('td',{class:'num'},S.pct(row.inDecks)),h('td',{class:'num'},row.averageCopies===null?'—':row.averageCopies.toFixed(1).replace(/\.0$/,'')),
+          h('td',{class:'num strong'},S.pct(row.deckWinRate)),h('td',{class:'num',title:coverage.completeSeats<coverage.totalSeats?'At least this many plays were recorded; older history can be incomplete.':'Actual recorded plays'},row.timesPlayed===null?'—':(coverage.completeSeats<coverage.totalSeats?'≥ ':'')+row.timesPlayed.toLocaleString()));})))));
 }
 
 // ---- page ---------------------------------------------------------------------------------------------------
@@ -387,25 +392,27 @@ function tabs() {
   const items = [['explorer', 'Decks'], ['matrix', 'Matchups'], ['cards', 'Cards']];
   const current = route.view === 'deck' ? 'explorer' : route.view;
   return h('nav', { class: 'stats-tabs', ariaLabel: 'Statistics views' }, items.map(([view, label]) =>
-    link({ view, deck: '', opp: '' }, label, { ariaCurrent: current === view ? 'page' : undefined })));
+    link({ view, deck: '', opp: '', q:'', sort:view==='cards'?'timesPlayed':'matches', dir:'desc' }, label, { ariaCurrent: current === view ? 'page' : undefined })));
 }
 
 function render() {
   if (!app) return;
   const body = [];
   if (route.demo) body.push(h('p', { class: 'demo-banner', role: 'note' }, 'DEMO DATA: synthetic results for previewing the layout. These are not recorded games.', ' ', link({ demo: false }, 'Leave demo', { class: 'text-link' })));
-  body.push(h('header', { class: 'stats-head' }, h('p', { class: 'eyebrow' }, 'Playtest statistics'), h('h1', {}, 'Deck results'),
-    h('p', { class: 'lede' }, 'See which decks are winning. Pick one to see its cards and what it beats.')));
+  const heading = route.view === 'cards' ? 'Card statistics' : route.view === 'matrix' ? 'Deck matchups' : 'Deck results';
+  const intro = route.view === 'cards' ? 'See card popularity, deck win rates and recorded plays.' : route.view === 'matrix' ? 'Pick a deck to see which opponents it beats.' : 'See which decks are winning. Pick one to see its cards and what it beats.';
+  body.push(h('header', { class: 'stats-head' }, h('p', { class: 'eyebrow' }, 'Playtest statistics'), h('h1', {}, heading),
+    h('p', { class: 'lede' }, intro)));
   body.push(tabs());
-  if (route.view !== 'cards') body.push(h('div', { class: 'stats-toolbar' }, resolvedLine(), cohortBar()));
-  const status = route.view === 'cards' ? null : statusPanel();
+  body.push(h('div', { class: 'stats-toolbar' }, resolvedLine(), cohortBar()));
+  const status = statusPanel();
   if (status) body.push(status);
   else if (route.view === 'cards') body.push(cardsView());
   else if (load.snapshot && load.status === 'ok') body.push(route.view === 'deck' ? deckDetail() : route.view === 'matrix' ? matrixView() : explorer());
   app.replaceChildren(...body.filter(Boolean));
-  document.title = `${route.view === 'cards' ? 'Cards' : 'Deck results'} — cardgame stats`;
+  document.title = heading+' — cardgame stats';
 }
 
 render();
 fetchCatalog();
-if (route.view !== 'cards') fetchCohort();
+fetchCohort();

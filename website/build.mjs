@@ -2,7 +2,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { renderPages } from './pages.mjs';
-import { buildFixtureSnapshot } from './tools/stats-fixture.mjs';
+import { buildFixtureSnapshot, buildCombinedFixtureSnapshot } from './tools/stats-fixture.mjs';
 
 export const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const outputRoot = path.join(projectRoot, 'website-dist');
@@ -46,6 +46,8 @@ export function buildSite(destination = outputRoot, { relayUrl = process.env.CAR
   // Layout preview for /stats/?demo=1: synthetic results, labelled as such on screen.
   const printed = JSON.parse(readFileSync(path.join(projectRoot, 'catalog/public/data/cards.json'), 'utf8'));
   const { _keys, ...demoSnapshot } = buildFixtureSnapshot(printed);
+  const { _keys: combinedKeys, ...combinedDemo } = buildCombinedFixtureSnapshot(printed);
+  writeFileSync(path.join(destination, 'media/stats-demo-combined.json'), JSON.stringify(combinedDemo));
   writeFileSync(path.join(destination, 'media/stats-demo.json'), JSON.stringify(demoSnapshot));
   writeFileSync(path.join(destination, 'media/stats-demo-cards.json'), JSON.stringify(printed));
   for (const name of ['style.css', 'app.js', 'account.js', 'stats.js', 'stats-core.mjs']) cpSync(path.join(projectRoot, 'website', name), path.join(destination, name));

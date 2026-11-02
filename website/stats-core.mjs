@@ -5,9 +5,9 @@
 // Contract: catalog/stats-website-spec.md on the API branch (e3c9c9e). Rates and
 // interval bounds are fractions. A deck is identified by id AND role.
 
-export const MODES = { ranked_ai: 'Against AI', authoritative_pvp: 'Against players' };
+export const MODES = { all: 'Combined results', ranked_ai: 'Against AI', authoritative_pvp: 'Against players' };
 export const SERVER_PARAMS = ['mode', 'days', 'rulesVersion', 'aiVersion', 'aiLevel'];
-export const DEFAULT_COHORT = { mode: 'ranked_ai', days: '30', rulesVersion: 'latest', aiVersion: 'latest', aiLevel: '10' };
+export const DEFAULT_COHORT = { mode: 'all', days: '30', rulesVersion: 'latest' };
 export const FACTION_NAMES = { GREEN: 'Sapiens', CRIMSON: 'Moonlight Coven', BLACK: 'Junklings', ORANGE: 'Gundari', TEAL: 'Mokotai', GENERIC: 'Generic' };
 
 const VERSION = /^(latest|unknown|[1-9][0-9]{0,5}|1000000)$/;
@@ -23,9 +23,9 @@ export function cohortFromParams(params) {
   const rulesVersion = VERSION.test(get('rulesVersion') || '') ? get('rulesVersion') : DEFAULT_COHORT.rulesVersion;
   const cohort = { mode, days, rulesVersion };
   if (mode === 'ranked_ai') {
-    cohort.aiVersion = VERSION.test(get('aiVersion') || '') ? get('aiVersion') : DEFAULT_COHORT.aiVersion;
+    cohort.aiVersion = VERSION.test(get('aiVersion') || '') ? get('aiVersion') : 'latest';
     const level = get('aiLevel');
-    cohort.aiLevel = /^([1-9]|10)$/.test(level || '') ? level : DEFAULT_COHORT.aiLevel;
+    cohort.aiLevel = /^([1-9]|10)$/.test(level || '') ? level : '10';
   }
   return cohort;
 }
@@ -55,15 +55,18 @@ export const VIEW_KEYS = ['view', 'deck', 'role', 'opp', 'oppRole', 'faction', '
 export function routeFromSearch(search) {
   const params = new URLSearchParams(search);
   const view = ['explorer', 'deck', 'matrix', 'cards'].includes(params.get('view')) ? params.get('view') : 'explorer';
-  const role = (r, fallback) => (r === 'human' || r === 'ai' ? r : fallback);
+  const cohort = cohortFromParams(params);
+  const role = (r, fallback) => (['human', 'ai', 'combined'].includes(r) ? r : fallback);
+  const ownRole = cohort.mode === 'all' ? 'combined' : 'human';
+  const enemyRole = cohort.mode === 'all' ? 'combined' : cohort.mode === 'ranked_ai' ? 'ai' : 'human';
   const min = /^[0-9]{1,6}$/.test(params.get('min') || '') ? Number(params.get('min')) : 1;
   return {
-    cohort: cohortFromParams(params), view,
-    deck: params.get('deck') || '', role: role(params.get('role'), 'human'),
-    opp: params.get('opp') || '', oppRole: role(params.get('oppRole'), 'ai'),
+    cohort, view,
+    deck: params.get('deck') || '', role: role(params.get('role'), ownRole),
+    opp: params.get('opp') || '', oppRole: role(params.get('oppRole'), enemyRole),
     faction: (params.get('faction') || '').toUpperCase(), q: params.get('q') || '', x: params.get('x') || '',
-    min: Math.max(1, min), sort: params.get('sort') || 'matches', dir: params.get('dir') === 'asc' ? 'asc' : 'desc',
-    who: params.get('who') === 'ai' ? 'ai' : 'human',
+    min: Math.max(1, min), sort: params.get('sort') || (view === 'cards' ? 'timesPlayed' : 'matches'), dir: params.get('dir') === 'asc' ? 'asc' : 'desc',
+    who: cohort.mode === 'all' ? 'combined' : params.get('who') === 'ai' ? 'ai' : 'human',
     rows: clampInt(params.get('rows'), 3, 25, 8), cols: clampInt(params.get('cols'), 3, 25, 8),
     demo: params.get('demo') === '1',
   };
@@ -76,16 +79,19 @@ function clampInt(raw, lo, hi, fallback) {
 /** Search string for a route; defaults are omitted so shared links stay short and stable. */
 export function searchFromRoute(route) {
   const q = serverQuery(route.cohort);
+  const ownRole = route.cohort.mode === 'all' ? 'combined' : 'human';
+  const enemyRole = route.cohort.mode === 'all' ? 'combined' : route.cohort.mode === 'ranked_ai' ? 'ai' : 'human';
   const set = (k, v, def) => { if (v !== undefined && v !== '' && v !== def) q.set(k, String(v)); };
   set('view', route.view, 'explorer');
   if (route.view === 'deck' || route.view === 'matrix') {
-    set('deck', route.deck); set('role', route.role, 'human');
-    set('opp', route.opp); if (route.opp) set('oppRole', route.oppRole, 'ai');
+    set('deck', route.deck); set('role', route.role, ownRole);
+    set('opp', route.opp); if (route.opp) set('oppRole', route.oppRole, enemyRole);
   }
   if (route.view === 'explorer') {
-    set('who', route.who, 'human'); set('faction', route.faction); set('q', route.q); set('x', route.x);
+    set('who', route.who, ownRole); set('faction', route.faction); set('q', route.q); set('x', route.x);
     set('min', route.min, 1); set('sort', route.sort, 'matches'); set('dir', route.dir, 'desc');
   }
+  if (route.view === 'cards') { set('faction', route.faction); set('q', route.q); set('sort', route.sort, 'timesPlayed'); set('dir', route.dir, 'desc'); }
   if (route.view === 'matrix') { set('rows', route.rows, 8); set('cols', route.cols, 8); }
   if (route.demo) q.set('demo', '1');
   return `?${q.toString()}`;
@@ -142,9 +148,24 @@ export function validateSnapshot(s) {
   if (!s || typeof s !== 'object' || !s.filters || !s.availableFilters || !s.methodology) return false;
   if (!isCount(s.games) || !Array.isArray(s.decks) || !Array.isArray(s.matchups)) return false;
   if (typeof s.generatedAt !== 'string' || Number.isNaN(Date.parse(s.generatedAt))) return false;
-  const deckOk = (d) => d && typeof d.id === 'string' && (d.role === 'human' || d.role === 'ai') && Array.isArray(d.cards) && validRow(d);
+  const roles = s.filters.mode === 'all' ? ['combined'] : s.filters.mode === 'authoritative_pvp' ? ['human'] : ['human','ai'];
+  const compositionOk = xs => Array.isArray(xs) && xs.length > 0 && xs.length <= 40
+    && xs.every(c=>typeof c?.id==='string' && Number.isInteger(c.copies) && c.copies>=1 && c.copies<=2)
+    && new Set(xs.map(c=>c.id)).size===xs.length && xs.reduce((n,c)=>n+c.copies,0)<=40;
+  const deckOk = (d) => d && typeof d.id === 'string' && roles.includes(d.role) && compositionOk(d.cards) && validRow(d);
   const matchOk = (m) => m && typeof m.deckId === 'string' && typeof m.opponentDeckId === 'string'
-    && (m.role === 'human' || m.role === 'ai') && (m.opponentRole === 'human' || m.opponentRole === 'ai') && validRow(m);
+    && roles.includes(m.role) && roles.includes(m.opponentRole) && validRow(m);
+  if (s.playStats !== undefined) {
+    const p = s.playStats;
+    if (!p || p.totalSeats !== s.games*2 || !isCount(p.trackedSeats) || !isCount(p.completeSeats)
+        || p.completeSeats > p.trackedSeats || p.trackedSeats > p.totalSeats || !Array.isArray(p.cards)) return false;
+    const ids = new Set(); let plays = 0;
+    for (const c of p.cards) {
+      if (typeof c?.id !== 'string' || ids.has(c.id) || !isCount(c.plays)) return false;
+      ids.add(c.id); plays += c.plays;
+    }
+    if (plays > p.trackedSeats*1000000 || (!p.trackedSeats && p.cards.length)) return false;
+  }
   return s.decks.every(deckOk) && s.matchups.every(matchOk);
 }
 
@@ -236,7 +257,7 @@ export function buildMatrix(snapshot, rowDecks, colDecks) {
 /** The decks a matrix starts from: most played first. AI mode is human rows vs AI columns; PvP is human vs human. */
 export function matrixAxes(snapshot, mode, rows, cols) {
   const byPlays = (list) => [...list].sort((a, b) => b.matches - a.matches || a.id.localeCompare(b.id));
-  const human = byPlays(snapshot.decks.filter((d) => d.role === 'human'));
+  const human = byPlays(snapshot.decks.filter((d) => d.role === (mode === 'all' ? 'combined' : 'human')));
   const ai = byPlays(snapshot.decks.filter((d) => d.role === 'ai'));
   return { rowDecks: human.slice(0, rows), colDecks: (mode === 'ranked_ai' ? ai : human).slice(0, cols) };
 }
@@ -245,4 +266,37 @@ export function matrixAxes(snapshot, mode, rows, cols) {
 export function heat(rate) {
   if (typeof rate !== 'number') return -1;
   return Math.min(5, Math.floor(rate * 6));
+}
+
+// Metrics use deck appearances (one per seat-game), never unweighted list averages.
+export function cardMetrics(snapshot, cardIds = []) {
+  const rows = new Map();
+  const get = id => {
+    if (!rows.has(id)) rows.set(id, { id, appearances: 0, copies: 0, wins: 0, plays: 0 });
+    return rows.get(id);
+  };
+  for (const id of cardIds) get(id);
+  const total = snapshot.decks.reduce((n,d) => n+d.matches,0);
+  for (const deck of snapshot.decks) for (const {id,copies} of deck.cards) {
+    const row = get(id);
+    row.appearances += deck.matches; row.copies += deck.matches*copies; row.wins += deck.wins;
+  }
+  for (const {id,plays} of snapshot.playStats?.cards || []) get(id).plays = plays;
+  return [...rows.values()].map(row => ({ id: row.id, appearances: row.appearances,
+    inDecks: total ? row.appearances/total : null,
+    averageCopies: row.appearances ? row.copies/row.appearances : null,
+    deckWinRate: row.appearances ? row.wins/row.appearances : null,
+    timesPlayed: snapshot.playStats?.trackedSeats ? row.plays : null }));
+}
+export const CARD_SORT_KEYS = ['name','inDecks','averageCopies','deckWinRate','timesPlayed'];
+export function sortCardMetrics(rows, key, dir) {
+  const field = CARD_SORT_KEYS.includes(key) ? key : 'timesPlayed';
+  const sign = dir === 'asc' ? 1 : -1;
+  return [...rows].sort((a,b) => {
+    const av=a[field], bv=b[field];
+    if (av == null && bv != null) return 1;
+    if (bv == null && av != null) return -1;
+    const value = field === 'name' ? String(av).localeCompare(String(bv)) : (av ?? 0)-(bv ?? 0);
+    return sign*value || b.appearances-a.appearances || a.id.localeCompare(b.id);
+  });
 }

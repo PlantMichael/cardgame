@@ -118,3 +118,24 @@ export function buildFixtureSnapshot(catalog, { generatedAt = '2026-11-02T12:00:
     games, decks: deckRows, matchups, _keys: Object.fromEntries(Object.entries(decks).map(([k, d]) => [k, d.id])),
   };
 }
+
+// Separate, explicitly synthetic pooled fixture; values are hand-computable,
+// not a browser reimplementation of the production database aggregate.
+export function buildCombinedFixtureSnapshot(catalog) {
+  const base = buildFixtureSnapshot(catalog);
+  const a = base.decks.find(d=>d.id===base._keys.H1 && d.role==='human');
+  const b = base.decks.find(d=>d.id===base._keys.A2 && d.role==='ai');
+  const c = base.decks.find(d=>d.id===base._keys.H3 && d.role==='human');
+  const result = (wins,losses,testers=2) => stats({wins,losses,testers,
+    turnTotal:(wins+losses)*12,turnSamples:wins+losses,first:[0,0],second:[0,0],unknown:[wins+losses,wins]});
+  const deck = (d,w,l) => ({id:d.id,cards:d.cards,factions:d.factions,role:'combined',...result(w,l)});
+  const pair = (own,enemy,w,l,testers=2) => ({deckId:own.id,opponentDeckId:enemy.id,role:'combined',opponentRole:'combined',...result(w,l,testers)});
+  const generated = catalog.cards.find(d=>d.collectible && d.color==='CRIMSON').id;
+  return {generatedAt:base.generatedAt,filters:{mode:'all',days:30,rulesVersion:3,aiVersion:null,aiLevel:null},
+    availableFilters:{rulesVersions:[3],aiVersions:[],aiLevels:[]},
+    methodology:{...base.methodology,rolesSeparated:false,source:'mixed'},games:6,
+    decks:[deck(a,3,4),deck(b,1,2),deck(c,2,0)],
+    matchups:[pair(a,b,2,1),pair(b,a,1,2),pair(a,c,0,2),pair(c,a,2,0),pair(a,a,1,1,1)],
+    playStats:{totalSeats:12,trackedSeats:8,completeSeats:6,cards:[{id:a.cards[0].id,plays:9},{id:b.cards[0].id,plays:3},{id:generated,plays:4}]},
+    _keys:{A:a.id,B:b.id,C:c.id,generated}};
+}

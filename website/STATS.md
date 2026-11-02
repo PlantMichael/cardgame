@@ -6,14 +6,14 @@
 
 | View | Address keys | What it shows |
 |---|---|---|
-| Decks | `view` omitted | Three columns: deck, win rate and games played. Faction and deck/card-name search are visible; role, excluded card, minimum games and extra sorting live under More filters. Small samples get a plain-language warning. |
-| Deck detail | `view=deck&deck=<id>&role=<human\|ai>` | Starting cards, win rate, games played and a three-column opponent table. `opp` and `oppRole` select an opponent and show its cards. Record, statistical range, testers, average turns, turn-order splits and full deck ID are available in optional details. |
-| Exact-deck matchups | `view=matrix&rows=&cols=` | Row deck's result against each column deck. "No games" is shown for a missing pairing and is different from a real 0-win record. Every cell is a button; a list of all pairings is available below. |
-| Cards | `view=cards` | Printed cards with the starting-deck inclusion win rate, labelled as not controlled card strength and not following the cohort. |
+| Decks | `view` omitted | Three columns: deck, win rate and games played. Faction and deck/card-name search are visible; excluded card, minimum games and extra sorting live under More filters (role selection only for old filtered links). Small samples get a plain-language warning. |
+| Deck detail | `view=deck&deck=<id>&role=<combined\|human\|ai>` | Starting cards, win rate, games played and a three-column opponent table. `opp` and `oppRole` select an opponent and show its cards. Record, statistical range, testers, average turns, turn-order splits and full deck ID are available in optional details. |
+| Exact-deck matchups | `view=matrix&rows=&cols=` | A deck picker and Opponent / Win rate / Games played table. Selected pair details and cards expand on demand; the optional comparison grid retains real-zero versus missing-pair distinctions. |
+| Cards | `view=cards` | The screenshot metrics: In % of decks, Average copies, Deck win rate, Times played; sortable, searchable and filtered by faction. Card text/details expand from the name. Uses the same snapshot/date/rules selection as every tab. |
 
 The cohort bar sends only `mode, days, rulesVersion, aiVersion, aiLevel` to the server. Switching to PvP removes the AI keys from the address and the request. Results are shown with the resolved `filters` from the response, not the requested "latest". A newer selection supersedes a slower older request, successful snapshots are reused for 60 seconds, and failures are shown as unavailable, never as zero games.
 
-The game type/date/version controls are collapsed under “Change game type or date range”; a short line always identifies the resolved game type, date range and total games. “About these results” retains source, version and sampling limitations. Public results do not contain saved player deck names: labels use the faction plus a number when distinct lists share it, with two high-cost card names beneath each list row for recognition. The same list has the same label in both roles. Numbers are local to the returned results and can change when the selected data changes; links continue to use the exact ID and role. No lists or outcomes are merged by their display labels.
+Default mode=all pools eligible ranked-AI/player games and controller roles. The game-type/AI controls are removed. Date/rules controls are collapsed under “Date range and game version”; a short line identifies the resolved dataset and total games. Existing filtered API URLs and role keys remain supported. “About these results” retains source, version and sampling limitations. Public results do not contain saved player deck names: labels use the faction plus a number when distinct lists share it, with two high-cost card names beneath each list row for recognition. The same list has the same label in both roles. Numbers are local to the returned results and can change when the selected data changes; links continue to use the exact ID and role. No lists or outcomes are merged by their display labels.
 
 ## Configuration and build
 
@@ -21,7 +21,7 @@ The game type/date/version controls are collapsed under “Change game type or d
 
 ## Demo data
 
-`/stats/?demo=1` loads `media/stats-demo.json`, a **synthetic** snapshot in the real schema (real card ids, invented results; `website/tools/stats-fixture.mjs`), and shows a banner saying so. It exists to review the layout while the live route is unavailable and to drive the tests. The page never falls back to it by itself.
+`/stats/?demo=1` loads `media/stats-demo-combined.json` (old filtered links use `media/stats-demo.json`), a **synthetic** snapshot in the real schema (real card ids, invented results; `website/tools/stats-fixture.mjs`), and shows a banner saying so. It exists to review the layout while the live route is unavailable and to drive the tests. The page never falls back to it by itself.
 
 ## Tests
 
@@ -33,4 +33,8 @@ node --test website/test/stats.test.mjs website/test/site.test.mjs
 
 ## Service availability
 
-The configured catalog must serve `/data/stats/deck-matchups.json`. If unavailable, the live page shows an error and Retry; it never substitutes demo results or treats a failed request as zero games. This presentation change does not change the relay, catalog contract or aggregation.
+The configured catalog must serve `/data/stats/deck-matchups.json`. If unavailable, the live page shows an error and Retry; it never substitutes demo results or treats a failed request as zero games. Deploy the compatible relay/catalog additions before switching the website to mode=all. See the catalog developer contract for pooling, privacy, count bounds and partial historical play coverage.
+
+## Card statistics
+
+Card metrics weight exact starting lists by recorded deck appearances. Average copies is conditional on inclusion; deck win rate measures outcomes of the whole deck. Times played uses actual recorded events, including replays/generated copies, and is independent of inclusion. No play coverage displays an em dash; incomplete coverage displays a lower bound (≥) with a visible note and exact coverage under About card statistics. Old AI games lack these events; older PvP history can be partial. Never turn unavailable/unknown recording into a zero. Definitions and formulas are in [the API contract](../catalog/stats-website-spec.md#recorded-plays-and-card-table-formulas).
