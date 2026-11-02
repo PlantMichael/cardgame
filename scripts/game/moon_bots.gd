@@ -57,6 +57,34 @@ static func choose_action(gs: GameState, engine: MCTSEngine, profile: Dictionary
 			return action
 	return await engine.choose_action(gs)
 
+## Search beliefs use only a seat-filtered view and its own known draft.
+## Sample unknown cards from public priors, never the authoritative hidden state.
+static func planning_state(view: Dictionary, my_id: String, own_deck: Array[CardData], planning_seed: int) -> GameState:
+	var gs := GameState.from_net_dict(view, my_id)
+	gs.set_gameplay_seed(planning_seed)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = planning_seed
+	var public_pool: Array[CardData] = []
+	for id in published_ids():
+		var card := CardDatabase.get_card(str(id))
+		if card != null:
+			public_pool.append(card)
+	for p in [gs.player, gs.opponent]:
+		# Simulated future draws must never alias a real visible hand uid.
+		p._next_card_uid = 1000000
+		var pool: Array[CardData] = own_deck if p.player_id == my_id and not own_deck.is_empty() else public_pool
+		if pool.is_empty():
+			continue
+		var deck_count := mini(p.get_deck_size(), 120)
+		for _i in deck_count:
+			p.deck.append(pool[rng.randi_range(0, pool.size() - 1)])
+		if p.player_id != my_id:
+			for _i in mini(p.get_hand_size(), PlayerState.MAX_HAND_SIZE):
+				p.hand.append(pool[rng.randi_range(0, pool.size() - 1)].new_instance(p.mint_card_uid()))
+	if gs.turn_number > 1:
+		gs._first_turn_taken = {"host": true, "guest": true}
+	return gs
+
 static func play(a: Dictionary, b: Dictionary, faction_a: int, faction_b: int, first: String, game_seed: int) -> Dictionary:
 	var allowed := published_ids()
 	# One draft per profile/faction/release makes exact-deck samples accumulate.

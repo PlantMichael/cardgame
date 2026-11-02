@@ -53,4 +53,4 @@ async function saveBotMatch(pool, id, input) {
   if (saved.rowCount !== 1) throw new Error('match id already contains a different result');
 }
 
-module.exports = { profiles, initBotSchema, normalizeBotMatch, saveBotMatch };
+module.exports = { profiles, initBotSchema, normalizeBotMatch, saveBotMatch, normalizeBotParticipant: participant };

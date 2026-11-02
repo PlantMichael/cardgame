@@ -94,10 +94,10 @@ function createRelayServer({ pool, publicRoot = PUBLIC_ROOT, now = Date.now }) {
       send(405, { error: 'method not allowed' }, { Allow: 'GET, HEAD, OPTIONS' }); return;
     }
     if (pathname === BOT_STATS_PATH) {
-      let days;
-      try { days = botQuery((req.url ?? '').split('?').slice(1).join('?')); }
+      let query;
+      try { query = botQuery((req.url ?? '').split('?').slice(1).join('?')); }
       catch { send(400, { error: 'invalid stats query' }); return; }
-      try { send(200, await botStats(days), { 'Cache-Control': 'no-cache' }); }
+      try { send(200, await botStats(query), { 'Cache-Control': 'no-cache' }); }
       catch { send(503, { error: 'bot statistics unavailable' }); }
       return;
     }

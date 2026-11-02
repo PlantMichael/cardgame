@@ -99,6 +99,11 @@ const LEGACY_DDL = [
           CHECK ((password_hash IS NOT NULL AND salt IS NOT NULL) OR google_sub IS NOT NULL);
       END IF;
     END $$`,
+  `CREATE TABLE IF NOT EXISTS ranked_bot_accounts (
+    bot_id TEXT PRIMARY KEY,
+    player_id INTEGER UNIQUE NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    profile JSONB NOT NULL
+  )`,
 ];
 
 async function initLegacySchema(pool) {

@@ -69,6 +69,7 @@ class Authoritative {
         log: this.log,
       });
       await this.host.start(); // 'ready' triggers manager.resume() for matches in flight
+      await this.manager.resuming;
     }
     this.timer = setInterval(() => {
       this.manager.tick().catch((e) => this.log.error('match tick failed', e.message));

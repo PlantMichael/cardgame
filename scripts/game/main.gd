@@ -16,6 +16,7 @@ const CoreTestsScript = preload("res://scripts/game/core_tests.gd")
 const ConnectionWaitScript = preload("res://scripts/game/connection_wait.gd")
 const MoonBotsScript = preload("res://scripts/game/moon_bots.gd")
 const MoonBotTestsScript = preload("res://scripts/game/moon_bot_tests.gd")
+const RankedBotsClientScript = preload("res://scripts/game/ranked_bots_client.gd")
 
 var _canvas: CanvasLayer
 var _player_deck_ids: Array[String] = []
@@ -75,6 +76,9 @@ var _campaign_pvp_role: String = ""
 const CAMPAIGN_OPPONENT_NAME := "Rival Warlord"
 
 func _ready() -> void:
+	if "--ranked-bots" in OS.get_cmdline_user_args():
+		add_child(RankedBotsClientScript.new())
+		return
 	if "--bot-tests" in OS.get_cmdline_user_args():
 		_run_bot_tests()
 		return

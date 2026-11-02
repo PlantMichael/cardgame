@@ -21,6 +21,7 @@ test('bot proxy bounds upstream failures, projects privacy and recovers without 
     if (mode === 'source') data.methodology.source = 'server_verified';
     if (mode === 'counts') data.games = 1;
     if (mode === 'days') data.days = 7;
+    if (mode === 'ranked') { data.mode = 'ranked'; data.methodology.source = 'server_verified'; }
     res.end(JSON.stringify(data));
   });
   await new Promise(r => upstream.listen(0, '127.0.0.1', r));
@@ -40,4 +41,10 @@ test('bot proxy bounds upstream failures, projects privacy and recovers without 
     assert.equal(response.headers.get('cache-control'), 'no-store');
   }
   mode = 'ok'; assert.equal((await fetch(url)).status, 200);
+  assert.equal((await fetch(url + '?mode=ranked')).status, 503, 'simulation cannot masquerade as ranked data');
+  mode = 'ranked';
+  const ranked = await fetch(url + '?mode=ranked'); assert.equal(ranked.status, 200);
+  assert.equal((await ranked.json()).mode, 'ranked');
+  assert.equal(requested, '/data/stats/bot-matchups.json?days=30&mode=ranked');
+  assert.equal((await fetch(url)).status, 503, 'ranked data cannot masquerade as simulations');
 });

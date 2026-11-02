@@ -4,11 +4,12 @@
 // that matters: a duplicate (match_id, seq) is an error.
 
 class MemoryStore {
-  constructor({ decks = {} } = {}) {
+  constructor({ decks = {}, bots = {} } = {}) {
     this.matches = new Map();
     this.actions = new Map();
     this.auditLog = [];
     this.decks = decks; // key `${player_id}:${deck_name}` -> { faction_idx, card_ids }
+    this.bots = bots;
   }
 
   async createMatch(m) {
@@ -45,6 +46,7 @@ class MemoryStore {
   async audit(a) { this.auditLog.push({ ...a, at: Date.now() }); }
 
   async loadDeck(player_id, deck_name) { return this.decks[`${player_id}:${deck_name}`] || null; }
+  async loadBot(playerId) { return this.bots[playerId] || null; }
 }
 
 module.exports = { MemoryStore };

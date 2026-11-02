@@ -98,6 +98,25 @@ test('a shipped starter deck can be queued by name without being saved', { skip 
   assert.equal(r.ok, true, JSON.stringify(r));
 });
 
+test('concurrent pairing cannot start two matches for one player', { skip }, async () => {
+  const ctx = setup();
+  const pair = id => ctx.manager.createMatch({ matchId: id, a: { playerId: 1, deckName: 'green' }, b: { playerId: 2, deckName: 'crimson' } });
+  const results = await Promise.all([pair('race_a'), pair('race_b')]);
+  assert.equal(results.filter(r => r.ok).length, 1);
+  assert.equal(ctx.store.matches.size, 1);
+});
+
+test('ranked bot provenance is snapshotted at the same canonical match boundary', { skip }, async () => {
+  const ctx = setup();
+  ctx.store.bots[1] = { id: 'io', name: 'Io', version: '1.0', level: 10, style: 'tempo' };
+  const match = await startedMatch(ctx);
+  const row = ctx.store.matches.get(match.id);
+  assert.equal(row.mode, 'ranked_bots'); assert.equal(row.bot_a.version, '1.0'); assert.equal(row.bot_b, null);
+  assert.equal(row.engine_version, 1);
+  ctx.store.bots[1].version = '2.0';
+  assert.equal(row.bot_a.version, '1.0');
+});
+
 test('join gives each seat only its own view; both seated -> active', { skip }, async () => {
   const ctx = setup();
   const m = await startedMatch(ctx);

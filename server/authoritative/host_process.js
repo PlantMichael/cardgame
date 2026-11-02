@@ -78,6 +78,7 @@ class HostProcess extends EventEmitter {
     const hello = await this.request('hello', { secret: this.secret });
     if (!hello.ok) throw new Error('match host refused hello: ' + JSON.stringify(hello));
     this.rulesVersion = hello.rules_version;
+    this.engineVersion = hello.engine_version;
     this.state = 'ready';
     this.missed = 0;
     this._pinger = setInterval(() => this._ping(), PING_INTERVAL_MS);

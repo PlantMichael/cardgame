@@ -5,6 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const { initLegacySchema } = require('./schema_legacy');
 const { initBotSchema } = require('./bot_matches');
+const { reservedBotName } = require('./ranked_bot_accounts');
+const { matchQueuedPlayers } = require('./ranked_queue');
 const { normalizeAIRecord } = require('./ranked_ai_record');
 const { createRelayServer } = require('./card_winrates');
 const { createGoogleAuthFromEnv } = require('./google_auth');
@@ -269,14 +271,7 @@ function lobbyList() {
 // ws -> { id, username, rating, queuedAt }
 const rankedQueue = new Map();
 
-const RANKED_BAND_START = 100; // initial +/- rating window
-const RANKED_BAND_GROWTH_PER_SEC = 60; // widens the longer both sides wait
 const RANKED_SWEEP_MS = 500;
-
-function ratingBandAt(queuedAt, now) {
-  const waitedSec = (now - queuedAt) / 1000;
-  return RANKED_BAND_START + waitedSec * RANKED_BAND_GROWTH_PER_SEC;
-}
 
 // Pairs up queued players within each other's widening rating band, oldest
 // entries first so a long-waiting player matches as soon as anyone in range
@@ -284,30 +279,10 @@ function ratingBandAt(queuedAt, now) {
 // joined moments apart (and whose bands only now overlap) still get paired
 // without either of them sending another message.
 function sweepRankedQueue() {
-  if (rankedQueue.size < 2) return;
-  const now = Date.now();
-  const waiting = Array.from(rankedQueue.entries()).sort((a, b) => a[1].queuedAt - b[1].queuedAt);
-  const matched = new Set();
-  for (let i = 0; i < waiting.length; i++) {
-    const [wsA, a] = waiting[i];
-    if (matched.has(wsA)) continue;
-    const bandA = ratingBandAt(a.queuedAt, now);
-    for (let j = i + 1; j < waiting.length; j++) {
-      const [wsB, b] = waiting[j];
-      if (matched.has(wsB)) continue;
-      const bandB = ratingBandAt(b.queuedAt, now);
-      const diff = Math.abs(a.rating - b.rating);
-      if (diff <= bandA && diff <= bandB) {
-        matched.add(wsA);
-        matched.add(wsB);
-        rankedQueue.delete(wsA);
-        rankedQueue.delete(wsB);
-        if (auth) startServerRankedMatch(wsA, a, wsB, b);
-        else startRankedMatch(wsA, a, wsB, b);
-        break;
-      }
-    }
-  }
+  matchQueuedPlayers(rankedQueue, (wsA, a, wsB, b) => {
+    if (auth) startServerRankedMatch(wsA, a, wsB, b);
+    else startRankedMatch(wsA, a, wsB, b);
+  });
 }
 
 // Ranked matches the server itself started, keyed by lobby id.
@@ -373,7 +348,8 @@ async function startServerRankedMatch(wsA, a, wsB, b) {
   for (const [w, p, o] of [[wsA, a, b], [wsB, b, a]]) {
     sendTo(w, {
       type: 'ranked_match_found', server_run: true, match_id: id,
-      opponent_name: o.username, opponent_rating: o.rating,
+      opponent_name: o.botProfile ? `${o.botProfile.name} [Bot ${o.botProfile.version}]` : o.username,
+      opponent_rating: o.rating, opponent_bot: o.botProfile ?? null,
     });
   }
 }
@@ -494,6 +470,10 @@ async function main() {
             sendTo(ws, { type: 'register_result', success: false, message: validationError });
             return;
           }
+          if (reservedBotName(username)) {
+            sendTo(ws, { type: 'register_result', success: false, message: 'That username is reserved for a ranked bot.' });
+            return;
+          }
           try {
             const existing = await pool.query('SELECT id FROM players WHERE username = $1', [username]);
             if (existing.rows.length > 0) {
@@ -550,8 +530,9 @@ async function main() {
             const result = await pool.query(
               `SELECT p.id, p.username, p.wins, p.losses, p.rating,
                       p.rank_bracket, p.rank_in_legend, p.rank_legend_rating, p.rank_lp, p.ranked_win_streak,
-                      p.ranked_wins, p.ranked_losses, p.pfp_id
-               FROM sessions s JOIN players p ON p.id = s.player_id WHERE s.token = $1`,
+                      p.ranked_wins, p.ranked_losses, p.pfp_id, b.profile AS bot_profile
+               FROM sessions s JOIN players p ON p.id = s.player_id
+               LEFT JOIN ranked_bot_accounts b ON b.player_id=p.id WHERE s.token = $1`,
               [token]
             );
             const player = result.rows[0];
@@ -560,7 +541,8 @@ async function main() {
               return;
             }
             const decks = await decksOf(player.id);
-            sendTo(ws, { type: 'login_result', success: true, token, ...profileOf(player), decks });
+            sendTo(ws, { type: 'login_result', success: true, token, ...profileOf(player), decks,
+              ranked_authoritative: !!auth, rules_version: auth?.rulesVersion ?? null, bot_profile: player.bot_profile ?? null });
           } catch (err) {
             console.error('resume_session error', err);
             sendTo(ws, { type: 'login_result', success: false, message: 'Server error, try again.' });
@@ -971,8 +953,9 @@ async function main() {
         case 'queue_ranked': {
           try {
             const result = await pool.query(
-              `SELECT p.id, p.username, p.rating
-               FROM sessions s JOIN players p ON p.id = s.player_id WHERE s.token = $1`,
+              `SELECT p.id, p.username, p.rating, b.profile AS bot_profile
+               FROM sessions s JOIN players p ON p.id = s.player_id
+               LEFT JOIN ranked_bot_accounts b ON b.player_id=p.id WHERE s.token = $1`,
               [msg.token]
             );
             const player = result.rows[0];
@@ -980,7 +963,7 @@ async function main() {
               sendTo(ws, { type: 'error', message: 'Session expired.' });
               return;
             }
-            const entry = { playerId: player.id, username: player.username, rating: player.rating, queuedAt: Date.now() };
+            const entry = { playerId: player.id, username: player.username, rating: player.rating, queuedAt: Date.now(), botProfile: player.bot_profile };
             if (auth) {
               // A client that cannot speak this server's rules must update
               // before it can queue; one already in a match cannot queue twice.
@@ -989,7 +972,8 @@ async function main() {
                 return;
               }
               if (auth.manager.matchOf(player.id)) {
-                sendTo(ws, { type: 'ranked_refused', reason: 'already_in_match' });
+                sendTo(ws, { type: 'ranked_refused', reason: 'already_in_match',
+                  ...(player.bot_profile ? { match_id: auth.manager.matchOf(player.id).id } : {}) });
                 return;
               }
               if (typeof msg.deck_name !== 'string' || msg.deck_name.length < 1 || msg.deck_name.length > 64) {

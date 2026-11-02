@@ -129,5 +129,34 @@ static func run() -> int:
 			missed += 1
 	check("Ganymede's mistakes remain legal", legal_mistakes)
 	check("Ganymede frequently passes up a visible win", missed >= 8)
+	# Ranked planning is derived from a filtered view, not a privileged game copy.
+	var draft := Bots.build_deck(profiles["io"], 0, allowed)
+	var foe := Bots.build_deck(profiles["ganymede"], 1, allowed)
+	var live := GameState.new("host", "guest", draft, foe, 401)
+	live.start_game("host")
+	var before := live.state_hash()
+	var visible := live.to_net_dict("host")
+	var secret := live.duplicate_for_sim()
+	var plan := Bots.planning_state(visible, "host", draft, 501)
+	check("Ranked beliefs preserve visible hand identities", plan.player.hand.map(func(c): return c.uid) == live.player.hand.map(func(c): return c.uid))
+	check("Ranked beliefs use only visible hidden-card counts", plan.opponent.hand.size() == live.opponent.hand.size() and plan.opponent.deck.size() == live.opponent.deck.size())
+	var policy_engine := MCTSEngine.new("host", 10, "tempo")
+	policy_engine._search_rng.seed = 91
+	var real_command := await Bots.choose_action(plan, policy_engine, profiles["io"], rng)
+	check("Filtered-view planning leaves authoritative state unchanged", live.state_hash() == before)
+	check("Filtered-view policy returns a real legal command", bool(live.execute(real_command)["ok"]))
+	# Change hidden cards/order without changing the public observation.
+	var hand_count := secret.opponent.hand.size()
+	var deck_count := secret.opponent.deck.size()
+	secret.opponent.hand.clear()
+	secret.opponent.deck.clear()
+	for _i in hand_count:
+		secret.opponent.hand.append(CardDatabase.get_card("b_009").new_instance("private"))
+	for _i in deck_count:
+		secret.opponent.deck.append(CardDatabase.get_card("b_009"))
+	var other_view := secret.to_net_dict("host")
+	check("Different hidden cards produce the same observation", visible == other_view)
+	var plan_again := Bots.planning_state(other_view, "host", draft, 501)
+	check("Ranked beliefs do not depend on hidden card identities", plan.to_net_dict() == plan_again.to_net_dict())
 	print("MOON BOT TESTS: %s failed" % failures)
 	return failures

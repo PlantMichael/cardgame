@@ -151,4 +151,4 @@ if (require.main === module) {
       .catch(e => { console.error(e.message); process.exitCode = 1; }).finally(() => pool.end());
   }
 }
-module.exports = { jobAt, simulate, runWorker, readState, writeState };
+module.exports = { jobAt, simulate, runWorker, readState, writeState, killTree };

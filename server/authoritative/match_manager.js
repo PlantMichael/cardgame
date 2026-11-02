@@ -12,6 +12,7 @@
 const crypto = require('crypto');
 const { validateDeck, loadStarters } = require('./decks');
 const { validateClientMessage, publicReason, RateLimiter } = require('./protocol');
+const { normalizeBotParticipant, profiles } = require('../bot_matches');
 
 const DEFAULTS = {
   turnSeconds: 90,
@@ -68,6 +69,7 @@ class MatchManager {
     this.log = log;
     this.sessions = new Map();
     this.byPlayer = new Map(); // playerId -> matchId (their current server-run match)
+    this.creatingPlayers = new Set();
     if (host && host.on) {
       host.on('down', () => this._onHostDown());
       host.on('ready', () => this._onHostReady());
@@ -83,7 +85,7 @@ class MatchManager {
   }
 
   canStart() {
-    return this.host.ready && this.liveCount() < this.cfg.maxLiveMatches;
+    return this.host.ready && this.liveCount() + this.creatingPlayers.size / 2 < this.cfg.maxLiveMatches;
   }
 
   matchOf(playerId) {
@@ -114,6 +116,13 @@ class MatchManager {
    */
   async createMatch({ matchId, a, b }) {
     if (!this.canStart()) return { ok: false, error: this.host.ready ? 'busy' : 'unavailable' };
+    if (a.playerId === b.playerId || [a, b].some(p => this.byPlayer.has(p.playerId) || this.creatingPlayers.has(p.playerId))) return { ok: false, error: 'busy' };
+    this.creatingPlayers.add(a.playerId); this.creatingPlayers.add(b.playerId);
+    try { return await this._createMatch({ matchId, a, b }); }
+    finally { this.creatingPlayers.delete(a.playerId); this.creatingPlayers.delete(b.playerId); }
+  }
+
+  async _createMatch({ matchId, a, b }) {
     const decks = {};
     for (const [letter, p] of [['a', a], ['b', b]]) {
       const row = (await this.store.loadDeck(p.playerId, p.deckName)) || this.starters.get(p.deckName) || null;
@@ -125,9 +134,18 @@ class MatchManager {
     const seed = crypto.randomInt(0, 2 ** 47);
     const firstSeat = crypto.randomInt(0, 2) === 0 ? 'a' : 'b';
     const rulesVersion = this.host.rulesVersion;
+    const botProfiles = {};
+    for (const [letter, p] of [['a', a], ['b', b]]) {
+      const bot = await this.store.loadBot(p.playerId);
+      if (bot && !profiles.some(profile => profile.id === bot.id)) throw new Error('invalid ranked bot identity');
+      botProfiles[letter] = bot ? normalizeBotParticipant(bot, this.host.engineVersion, false) : null;
+    }
+    if ((botProfiles.a || botProfiles.b) && (!Number.isInteger(this.host.engineVersion) || this.host.engineVersion < 1 || this.host.engineVersion > 1000000)) return { ok: false, error: 'unavailable' };
     await this.store.createMatch({
       match_id: matchId, rules_version: rulesVersion, seed, first_seat: firstSeat,
       seat_a_player_id: a.playerId, seat_b_player_id: b.playerId, deck_a: decks.a, deck_b: decks.b,
+      mode: botProfiles.a || botProfiles.b ? 'ranked_bots' : 'authoritative',
+      bot_a: botProfiles.a, bot_b: botProfiles.b, engine_version: this.host.engineVersion,
     });
     const created = await this.host.request('create', {
       match_id: matchId, seed, first_seat: firstSeat, deck_a: decks.a, deck_b: decks.b, rules_version: rulesVersion,
@@ -227,6 +245,7 @@ class MatchManager {
     }
     this._send(conn, {
       type: 'match_view', match_id: sess.id, seq: view.seq, you: SEAT_ID[seat.letter], seat: seat.letter,
+      client_seq: seat.lastClientSeq,
       view: view.view, events: [], clock: this._clock(sess),
     });
     if (wasDisconnected) this._sendSeat(sess, other(seat.letter), { type: 'opponent_reconnected' });
@@ -472,8 +491,9 @@ class MatchManager {
     for (const sess of this.sessions.values()) if (sess.status === 'active' || sess.status === 'waiting') sess.hostDown = true;
   }
 
-  async _onHostReady() {
-    await this.resume();
+  _onHostReady() {
+    this.resuming = this.resume();
+    return this.resuming;
   }
 
   /**
