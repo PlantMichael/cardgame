@@ -65,6 +65,26 @@
   function clearSession() {
     try { localStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
   }
+  // Only these last-confirmed display fields may survive navigation. This is
+  // never an account snapshot and cannot authorize profile actions or the game.
+  function bannerOf(a, username) {
+    if (!a || typeof a.username !== 'string' || a.username !== username || !/^[A-Za-z0-9_]{3,20}$/.test(a.username) ||
+        typeof a.pfp_id !== 'string' || a.pfp_id.length > 200 || typeof a.rank_in_legend !== 'boolean') return null;
+    const fields = ['rank_bracket', 'rank_lp', 'rank_legend_rating', 'currency', 'dust'];
+    if (fields.some(key => !Number.isSafeInteger(a[key]) || a[key] < 0) || a.rank_bracket > 20 || a.rank_lp >= LP_PER_BRACKET) return null;
+    return { username: a.username, pfp_id: a.pfp_id, rank_in_legend: a.rank_in_legend,
+      ...Object.fromEntries(fields.map(key => [key, a[key]])) };
+  }
+  function rememberBanner(account) {
+    state.banner = bannerOf(account, account.username);
+    try {
+      const stored = readSession();
+      // Another tab may have switched sessions while this reply was in flight.
+      if (stored?.token === state.token && state.banner) {
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ token: state.token, username: account.username, banner: state.banner }));
+      }
+    } catch { /* Display caching is optional; authentication still uses the relay. */ }
+  }
 
   // ---- relay client: one socket, replies matched by type (and request id) ---
   const relay = {
@@ -114,15 +134,17 @@
 
   // ---- account state ---------------------------------------------------------
   // status: loading | signed-out | signed-in | offline | expired
-  const state = { status: 'loading', token: '', account: null, epoch: 0, notice: '' };
+  const state = { status: 'loading', token: '', account: null, banner: null, epoch: 0, notice: '' };
   let seq = 0;
   const listeners = new Set();
   const emit = () => { listeners.forEach((fn) => fn(state)); window.dispatchEvent(new CustomEvent('cardgame:account', { detail: state.account })); };
 
   function setIdentity(token) {
     state.epoch += 1;
+    if (token !== state.token) state.account = null;
     state.token = token;
-    if (!token) state.account = null;
+    const stored = token ? readSession() : null;
+    state.banner = stored?.token === token ? bannerOf(stored.banner, stored.username) : null;
   }
 
   async function refresh() {
@@ -135,13 +157,16 @@
       const reply = await relay.ask({ type: 'get_account_snapshot', token: state.token, request_id: requestId },
         'account_snapshot_result', (m) => m.request_id === requestId);
       if (epoch !== state.epoch) return; // the account changed while this was in flight
-      if (reply.success) { state.account = reply.account; state.status = 'signed-in'; state.notice = ''; }
+      if (reply.success) { state.account = reply.account; rememberBanner(reply.account); state.status = 'signed-in'; state.notice = ''; }
       else if (reply.unauthorized) { expire('Your session has expired. Please log in again.'); return; }
-      else { state.status = state.account ? 'signed-in' : 'offline'; }
+      else {
+        state.status = state.account ? 'signed-in' : 'offline';
+        if (state.account || state.banner) state.notice = 'Offline. Showing your last known account details.';
+      }
     } catch {
       if (epoch !== state.epoch) return;
       state.status = state.account ? 'signed-in' : 'offline';
-      if (state.account) state.notice = 'Offline. Showing your last known account details.';
+      if (state.account || state.banner) state.notice = 'Offline. Showing your last known account details.';
     }
     emit();
   }
@@ -370,7 +395,8 @@
   function renderBanner() {
     if (!slot) return;
     slot.replaceChildren();
-    const a = state.account;
+    slot.setAttribute('aria-busy', String(state.status === 'loading'));
+    const a = state.account || state.banner;
     if (state.status === 'loading' && !a) { slot.append(el('span', { className: 'account-loading', role: 'status', textContent: 'Loading account…' })); return; }
     if (state.status === 'offline' && !a) {
       const retry = el('button', { type: 'button', className: 'text-button', textContent: 'Retry' });
@@ -401,6 +427,10 @@
     out.addEventListener('click', logout);
     slot.append(toProfile, rankNode, money, out);
     if (state.status === 'offline' || state.notice) slot.append(el('span', { className: 'account-notice', role: 'status', textContent: state.notice || 'Offline.' }));
+    if (state.status === 'offline' && !state.account) {
+      const retry = el('button', { type: 'button', className: 'text-button', textContent: 'Retry' });
+      retry.addEventListener('click', refresh); slot.append(retry);
+    }
   }
 
   // ---- profile page -------------------------------------------------------------

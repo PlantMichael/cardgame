@@ -74,11 +74,12 @@
   .brand-word { font: 900 18px/1 var(--display); letter-spacing: .12em; color: var(--paper); }
   .brand-word b { font-weight: 900; color: var(--cyan); }
   .brand.small .brand-word { font-size: 16px; }
-  .header-inner nav { display: flex; gap: 6px; margin-left: auto; }
+  .header-inner nav { display: flex; gap: 6px; }
+  .header-inner > .brand, .header-inner nav, .nav-play { flex-shrink: 0; }
   .header-inner nav a { text-decoration: none; color: var(--muted); font: 700 11px/1 var(--display); letter-spacing: .16em; text-transform: uppercase; padding: 10px 12px; position: relative; }
   .header-inner nav a:hover, .header-inner nav a[aria-current] { color: var(--paper); }
   .header-inner nav a[aria-current]::after { content: ''; position: absolute; height: 2px; left: 12px; right: 12px; bottom: 0; background: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
-  .nav-play { font: 800 11px/1 var(--display); letter-spacing: .18em; text-transform: uppercase; text-decoration: none; color: #04101c; background: var(--cyan); padding: 10px 18px; clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); transition: filter .15s, background .15s; }
+  .nav-play { font: 800 11px/1 var(--display); letter-spacing: .18em; text-transform: uppercase; text-decoration: none; color: #04101c; background: var(--cyan); padding: 10px 18px; white-space: nowrap; clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); transition: filter .15s, background .15s; }
   .nav-play:hover { color: #04101c; filter: drop-shadow(0 0 12px #5ee6ffaa) brightness(1.1); }
   .nav-play[aria-current] { background: var(--violet); color: white; }
 
@@ -257,13 +258,13 @@
   .game-window { display: block; width: 100%; height: 100%; min-height: 0; border: 0; background: black; }
 }
 @layer components {
-  .account-slot { display: flex; align-items: center; gap: 14px; font-size: 14px; min-width: 0; }
-  .account-slot:empty { display: none; }
+  .account-slot { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; min-width: 0; min-height: 40px; margin-left: auto; }
   .account-link, .text-button { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 8px 4px; font-size: 14px; text-decoration: underline; text-underline-offset: 4px; }
   .account-link.strong { color: var(--gold); }
+  .account-slot .account-link { white-space: nowrap; }
   .account-link:hover, .text-button:hover { color: var(--paper); }
   .account-loading, .account-notice { color: var(--muted); font-size: 13px; }
-  .account-profile { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; min-width: 0; }
+  .account-profile { display: inline-flex; align-items: center; flex-shrink: 0; gap: 10px; text-decoration: none; min-width: 0; }
   .account-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 1px solid var(--line); background: var(--panel); }
   .account-name { max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--paper); font-weight: 600; }
   .account-rank { display: inline-flex; align-items: center; gap: 8px; }
@@ -318,6 +319,7 @@
   @media (max-width: 1240px) {
     .header-inner { flex-wrap: wrap; gap: 4px 20px; padding-block: 8px 6px; min-height: 0; }
     .header-inner nav { gap: 2px; }
+    .nav-play { margin-left: auto; }
     .account-slot { order: 3; flex-basis: 100%; justify-content: flex-end; flex-wrap: wrap; gap: 6px 18px; padding-bottom: 4px; }
   }
   @media (max-width: 1100px) {

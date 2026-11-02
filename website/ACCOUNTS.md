@@ -6,7 +6,7 @@ Browser login, registration, logout and the profile live on the website. The emb
 
 | Piece | Owner |
 |---|---|
-| Browser session (`localStorage` key `cardgame_session`, `{token, username}`) | `website/account.js`. The embedded game never reads, writes or clears it. |
+| Browser session (`localStorage` key `cardgame_session`, `{token, username, banner?}`) | `website/account.js`. The embedded game never reads, writes or clears it. |
 | Account truth (rank, balances, portrait, Google link) | The relay and PostgreSQL. The page only displays it. |
 | Banner, login/register dialogs, `/account/` profile, Google button | `website/account.js`, `website/pages.mjs`, `website/style.css` |
 | Game side of the hand-off | `scripts/game/site_bridge.gd` (+ `auth.gd`, `main.gd`) |
@@ -37,6 +37,8 @@ Same origin, exact window checks, no token in URLs or logs.
 The page accepts messages only when `event.origin === location.origin` and `event.source` is the game iframe. The game does the mirror check in JavaScript before Godot sees anything, queues messages in `window.__cgBridge.inbox` and polls it (no callbacks to keep alive). `Net` uses the relay named by the page's `<meta name="cg-relay">`, so a test or staging site and its game share a relay.
 
 Account change or logout removes the game iframe first (stopping the engine), then changes identity, so an old match can never report as a new account. Pending ranked reports stay under their original username in `cardgame_pending_ranked` and are untouched.
+
+The optional `banner` contains only the last confirmed username, portrait, visible rank and balances. It is a display cache inside the matching session record, restored synchronously during navigation while the relay checks the token. It never populates the verified account snapshot or enables profile editing/game mounting. Old records without it still work; malformed fields or mismatched names are ignored. Confirmed snapshots replace it, account switches clear the old in-memory snapshot, and logout/unauthorized replies clear the stored session. Storage failures only disable caching. Offline checks retain explicitly last-known banner details and offer Retry; the server remains authoritative. Navigation is anchored after the brand, with flexible spacing on the account area and a reserved row height to avoid loading shifts.
 
 A raw `/play/game.html` with no parent page shows "Sign in and play from the website" and a button to `/play/`. If the page does not answer within 10 seconds the game offers a retry; if the game does not start within 25 seconds the page offers one.
 
