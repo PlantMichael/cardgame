@@ -241,7 +241,7 @@ func to_net_dict(reveal_hand: bool = true) -> Dictionary:
 			"hand_size": get_hand_size(),
 			"board": board.map(func(m): return m.to_net_dict()),
 			"deck_size": deck.size(),
-			"graveyard": graveyard.map(func(c): return {"id": c.id, "uid": c.uid, "attack": c.attack, "health": c.health}),
+			"graveyard": graveyard.map(func(c): return {"id": c.id, "uid": c.uid, "attack": c.attack, "health": c.health, "cost_modifier": c.cost_modifier, "rummage_count": c.rummage_count}),
 		}
 	return {
 		"player_id": player_id,
@@ -252,7 +252,7 @@ func to_net_dict(reveal_hand: bool = true) -> Dictionary:
 		"hand": hand.map(func(c): return {"id": c.id, "uid": c.uid, "cost_modifier": c.cost_modifier, "rummage_count": c.rummage_count, "attack": c.attack, "health": c.health}),
 		"board": board.map(func(m): return m.to_net_dict()),
 		"deck_size": deck.size(),
-		"graveyard": graveyard.map(func(c): return {"id": c.id, "uid": c.uid, "attack": c.attack, "health": c.health}),
+		"graveyard": graveyard.map(func(c): return {"id": c.id, "uid": c.uid, "attack": c.attack, "health": c.health, "cost_modifier": c.cost_modifier, "rummage_count": c.rummage_count}),
 	}
 
 static func from_net_dict(d: Dictionary) -> PlayerState:
@@ -290,5 +290,7 @@ static func from_net_dict(d: Dictionary) -> PlayerState:
 			if g is Dictionary:
 				copy.attack = int(g.get("attack", card.attack))
 				copy.health = int(g.get("health", card.health))
+				copy.cost_modifier = int(g.get("cost_modifier", 0))
+				copy.rummage_count = int(g.get("rummage_count", 0))
 			ps.graveyard.append(copy)
 	return ps

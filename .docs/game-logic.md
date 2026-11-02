@@ -35,7 +35,7 @@ func can_attack() -> bool:
     return not is_location() and not has_attacked and not is_exhausted and current_attack > 0
 ```
 
-**Locations** (`CardData.CardType.LOCATION`, first one: Crypt Chapel) are `Minion` instances sharing the same `board` array as creatures. They're played from hand into a board slot, hold only health, can be attacked and destroyed (dealing no retaliation damage, since their attack is 0), and their passive abilities fire from the board like any other watcher. `can_attack()` refuses explicitly rather than relying on 0 attack, so a stray buff can't arm one. `CardData.occupies_board()` is what every "does this need a board slot / go to the board" check asks — hand plays, the drop zone, and the AI's action enumeration.
+**Locations** (`CardData.CardType.LOCATION`; Crypt Chapel was removed and generic behavior remains covered by a synthetic fixture) are `Minion` instances sharing the same `board` array as creatures. They're played from hand into a board slot, hold only health, can be attacked and destroyed (dealing no retaliation damage, since their attack is 0), and their passive abilities fire from the board like any other watcher. `can_attack()` refuses explicitly rather than relying on 0 attack, so a stray buff can't arm one. `CardData.occupies_board()` is what every "does this need a board slot / go to the board" check asks — hand plays, the drop zone, and the AI's action enumeration.
 
 ## player_state.gd
 
@@ -314,6 +314,6 @@ history; cleared one-off cost modifier; preserved remaining printed Reinforce;
 attachment/aura cleanup; no death trigger. The deck destination ignores hand
 capacity and shuffles with the match generator. Drawn returned instances keep
 their UID through `PlayerState.instantiate_drawn_card`; initial catalog entries
-still mint one. Per-card attack/health now enter hand/graveyard/board net views
+still mint one. Per-card attack/health now enter hand/graveyard/board net views; graveyard views also preserve existing discounts and Rummage history
 and the full replay hash. Opponent hands remain hidden, and older view fields
 default to printed stats. These incompatible card/rule changes use RulesVersion4.
