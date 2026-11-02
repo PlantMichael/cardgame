@@ -260,6 +260,7 @@ test('real relay records AI summaries atomically and preserves legacy settlement
   const humanBefore = (await pool.query('SELECT * FROM players WHERE id=$1', [player])).rows[0];
   const dry = await resetMatchData(pool);
   assert.equal(dry.applied, false); assert.ok(dry.before.ranked_settlements > 0);
+  assert.equal(Number((await pool.query('SELECT count(*) AS n FROM ranked_settlements')).rows[0].n), dry.before.ranked_settlements, 'default preview preserves recorded history');
   const lock = await pool.connect(); await lock.query('SELECT pg_advisory_lock(731204,2)');
   await assert.rejects(resetMatchData(pool, { apply: true }), /Stop all bot workers/);
   await lock.query('SELECT pg_advisory_unlock(731204,2)'); lock.release();
@@ -284,4 +285,11 @@ test('real relay records AI summaries atomically and preserves legacy settlement
   assert.equal((await pool.query('SELECT count(*) AS n FROM ranked_settlements')).rows[0].n, '0');
   assert.equal((await request(afterReset, { ...report, match_id: 'ai_1800000000_123' })).success, true);
   assert.equal((await pool.query('SELECT count(*) AS n FROM ranked_settlements')).rows[0].n, '1', 'fresh reports remain eligible');
+  await pool.query(`CREATE FUNCTION corrupt_reset_reward() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN IF NEW.username='Io' THEN NEW.currency := NEW.currency+1; END IF; RETURN NEW; END $$;
+    CREATE TRIGGER corrupt_reset_reward BEFORE UPDATE ON players FOR EACH ROW EXECUTE FUNCTION corrupt_reset_reward()`);
+  await assert.rejects(resetMatchData(pool, { apply: true }), /preservation check failed/);
+  assert.equal((await pool.query('SELECT count(*) AS n FROM ranked_settlements')).rows[0].n, '1', 'failed preservation rolls history deletion back');
+  assert.equal((await pool.query("SELECT count(*) AS n FROM ranked_result_tombstones WHERE match_id='ai_1800000000_123'")).rows[0].n, '0', 'failed reset rolls new replay keys back too');
+  assert.equal((await pool.query("SELECT currency FROM players WHERE username='Io'")).rows[0].currency, 123);
 });

@@ -37,9 +37,9 @@ Configure one worker replica per database, `Restart=on-failure`, a 30-second res
 
 Stopping or upgrading during games causes normal disconnect/timeout consequences. Drain matches before planned service/rules/release changes. `--matches=N` is for disposable tests: it stops after N distinct observed completions across the four clients and may interrupt other active games. Persistent accounts keep their ratings through restarts. Hosting consumes CPU/database resources; choose resource limits before activating the service.
 
-## Standalone simulation mode
-
 During local ranked-AI play, the ranked worker revalidates its existing admission every five seconds, with a ten-second response deadline. A liveness acknowledgment continues the same state and admitted profile; it never redrafts or begins another game. Session failure disconnects and resumes normally. Completing/canceling an admission invalidates pending lookups, so a late reply cannot recreate an AI game after the bot has moved on.
+
+## Standalone simulation mode
 
 Use the relay image (`server/Dockerfile`), which already includes the pinned Godot binary, imported project, catalog and Node dependencies. Run **one separate worker service**, using the repository root as build context and `node bot_worker.js` as its start command from `/app/server`. It does not need a public port. Leave the relay's existing start command unchanged.
 

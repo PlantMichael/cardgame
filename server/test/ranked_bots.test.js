@@ -392,7 +392,7 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   await assert.rejects(worker, /session or profile was refused/);
   const authRestart = events.length;
   stop = new AbortController(); startWorker();
-  await until(() => { if (workerFailure) throw workerFailure; return events.slice(authRestart).some(e => e.event === 'joined'); }, 'fresh sessions rejoin after revocation');
+  await until(() => { if (workerFailure) throw workerFailure; return events.slice(authRestart).some(e => ['joined','ai_started'].includes(e.event)); }, 'fresh sessions resume the next opponent after revocation');
   const owner = (await pool.query("SELECT pid FROM pg_locks WHERE locktype='advisory' AND classid=731204 AND objid=2 AND granted")).rows;
   assert.equal(owner.length, 1);
   const lockTransport = [...transports].find(pair => pair.backendPid === owner[0].pid);

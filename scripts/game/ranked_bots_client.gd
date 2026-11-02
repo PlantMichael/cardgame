@@ -211,6 +211,7 @@ func _receive(c: BotConnection, msg: Dictionary, now: int) -> void:
 			if c.stage == "ai_playing":
 				return # Liveness acknowledgment, not a second game or draft.
 			if c.ai_state == null:
+				randomize() # The saved personality draft is repeatable; opponents and games vary.
 				c.ai_deck = DeckManager.build_archetype_deck(randi_range(0, 4), -1, Bots.published_ids())
 				if c.ai_deck.size() != 40:
 					_fail("Ranked AI could not draft a public deck")
