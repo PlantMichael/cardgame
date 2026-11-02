@@ -98,6 +98,24 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   const { pool, url, cleanup } = await database(t, 'ranked_bots_live', false);
   await initSchema(pool);
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'ranked-bots-relay-test-'));
+  // Checked-out worker connections use this proxy. Target the held lock's
+  // actual backend port, leaving ordinary cleanup queries directly connected.
+  const transports = new Set();
+  const target = new URL(url);
+  const lockProxy = net.createServer(front => {
+    const back = net.connect(Number(target.port), target.hostname);
+    const pair = { front, back, blackholed: false };
+    transports.add(pair);
+    front.pipe(back); back.pipe(front);
+    front.on('error', () => back.destroy());
+    front.on('close', () => { back.destroy(); transports.delete(pair); });
+    back.on('error', () => { if (!pair.blackholed) front.destroy(); });
+    back.on('close', () => { if (!pair.blackholed) front.end(); });
+  });
+  await new Promise(resolve => lockProxy.listen(0, '127.0.0.1', resolve));
+  const lockUrl = new URL(url); lockUrl.hostname = '127.0.0.1'; lockUrl.port = String(lockProxy.address().port);
+  const lockPool = new Pool({ connectionString: lockUrl.href, ssl: false, query_timeout: 10000 });
+  const workerPool = { connect: () => lockPool.connect(), query: (...args) => pool.query(...args) };
   // Reject each bot's first queue lookup after the real DB read. This leaves
   // the socket healthy while exercising recovery before queue insertion.
   const queueFault = path.join(tmp, 'queue-fault.cjs');
@@ -134,6 +152,9 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   let worker;
   t.after(async () => {
     stop.abort(); if (worker) await worker.catch(() => {});
+    await lockPool.end();
+    for (const { front, back } of transports) { front.destroy(); back.destroy(); }
+    await new Promise(resolve => lockProxy.close(resolve));
     for (const c of clients) c.ws.terminate();
     if (relay.exitCode === null) { const ended = once(relay, 'exit'); killTree(relay); await ended; }
     assert.equal(path.dirname(tmp), path.resolve(os.tmpdir()));
@@ -155,7 +176,7 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   let workerFailure;
   const startWorker = () => {
     workerFailure = undefined;
-    worker = runRankedBots({ pool, godotBin: process.env.GODOT_BIN, relayUrl: wsUrl, signal: stop.signal,
+    worker = runRankedBots({ pool: workerPool, godotBin: process.env.GODOT_BIN, relayUrl: wsUrl, signal: stop.signal,
       onEvent: e => events.push(e), log: () => {} });
     worker.catch(e => { workerFailure = e; });
   };
@@ -276,9 +297,17 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   const authRestart = events.length;
   stop = new AbortController(); startWorker();
   await until(() => { if (workerFailure) throw workerFailure; return events.slice(authRestart).some(e => e.event === 'joined'); }, 'fresh sessions rejoin after revocation');
-  const owner = (await pool.query("SELECT pid FROM pg_locks WHERE locktype='advisory' AND classid=731204 AND objid=2 AND granted")).rows;
+  const owner = (await pool.query(`SELECT l.pid,a.client_port FROM pg_locks l
+    JOIN pg_stat_activity a ON a.pid=l.pid
+    WHERE l.locktype='advisory' AND l.classid=731204 AND l.objid=2 AND l.granted`)).rows;
   assert.equal(owner.length, 1);
-  await pool.query('SELECT pg_terminate_backend($1)', [owner[0].pid]);
+  const lockTransport = [...transports].find(pair => pair.back.localPort === owner[0].client_port);
+  assert.ok(lockTransport, 'fault targets the actual lock-owning DB transport');
+  lockTransport.blackholed = true;
+  lockTransport.front.unpipe(lockTransport.back); lockTransport.back.unpipe(lockTransport.front);
+  lockTransport.back.destroy();
+  await until(async () => !(await pool.query('SELECT 1 FROM pg_locks WHERE pid=$1 AND locktype=\'advisory\'', [owner[0].pid])).rowCount, 'blackholed connection releases actual DB lock');
+  await until(() => workerFailure, 'lock heartbeat stops worker despite silently open socket', 15000);
   await assert.rejects(worker, /database lock lost/);
   assert.equal((await pool.query('SELECT count(*) AS n FROM sessions s JOIN ranked_bot_accounts b ON b.player_id=s.player_id')).rows[0].n, '0');
   assert.equal((await pool.query('SELECT count(*) AS n FROM players')).rows[0].n, '5');

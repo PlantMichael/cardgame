@@ -15,8 +15,8 @@ async function runRankedBots({ pool, godotBin, relayUrl, signal = new AbortContr
   if (!['ws:', 'wss:'].includes(url.protocol) || url.username || url.password || url.hash || url.search) throw new Error('invalid ranked relay URL');
   const lock = await pool.connect();
   const controller = new AbortController();
-  let accounts = [], child, directory, lockError;
-  const stop = () => { controller.abort(); killTree(child); };
+  let accounts = [], child, directory, lockError, lockTimer;
+  const stop = () => { clearInterval(lockTimer); controller.abort(); killTree(child); };
   const lostLock = error => { lockError = error; stop(); };
   signal.addEventListener('abort', stop, { once: true });
   lock.on('error', lostLock);
@@ -25,6 +25,21 @@ async function runRankedBots({ pool, godotBin, relayUrl, signal = new AbortContr
     const owned = await lock.query('SELECT pg_try_advisory_lock(731204, 2) AS owned');
     if (!owned.rows[0].owned) throw new Error('another ranked bot worker is active');
     if (controller.signal.aborted) return 0;
+    // An idle TCP connection can stay silently open after the DB releases its
+    // lock. Bound that uncertainty rather than waiting for a socket error.
+    let probing = false;
+    lockTimer = setInterval(async () => {
+      if (probing) return;
+      probing = true;
+      try {
+        const result = await lock.query({ text: `SELECT EXISTS (
+          SELECT 1 FROM pg_locks WHERE locktype='advisory' AND classid=731204
+          AND objid=2 AND pid=pg_backend_pid() AND granted) AS owned`, query_timeout: 5000 });
+        if (!result.rows[0].owned) throw new Error('lock ownership lost');
+      } catch (error) {
+        if (!controller.signal.aborted) lostLock(error);
+      } finally { probing = false; }
+    }, 5000);
     accounts = await provisionRankedBots(pool);
     directory = await fs.mkdtemp(path.join(os.tmpdir(), 'cardgame-ranked-bots-'));
     const completed = new Set();
@@ -68,7 +83,7 @@ async function runRankedBots({ pool, godotBin, relayUrl, signal = new AbortContr
     stop(); signal.removeEventListener('abort', stop); lock.off('error', lostLock);
     if (accounts.length) await pool.query('DELETE FROM sessions WHERE token=ANY($1::text[])', [accounts.map(a => a.token)])
       .catch(() => log('Could not remove ranked worker sessions; operator cleanup may be needed'));
-    await lock.query('SELECT pg_advisory_unlock(731204, 2)').catch(() => {});
+    if (!lockError) await lock.query('SELECT pg_advisory_unlock(731204, 2)').catch(() => {});
     lock.release(true);
     if (directory) {
       if (path.dirname(directory) !== path.resolve(os.tmpdir()) || !path.basename(directory).startsWith('cardgame-ranked-bots-')) throw new Error('unsafe worker cleanup path');
@@ -87,6 +102,7 @@ async function main() {
   } else {
     const url = new URL(process.env.DATABASE_URL);
     const pool = new Pool({ connectionString: url.toString(), max: 4, connectionTimeoutMillis: 10000, query_timeout: 10000,
+      keepAlive: true, keepAliveInitialDelayMillis: 10000,
       ssl: ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) || url.hostname.endsWith('.railway.internal') ? false : { rejectUnauthorized: false } });
     await runRankedBots({ pool, godotBin: process.env.GODOT_BIN, relayUrl: process.env.RANKED_BOT_URL,
       signal: controller.signal, maxMatches: args[0] ? Number(args[0].split('=')[1]) : Infinity })
