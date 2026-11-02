@@ -407,9 +407,9 @@ function render() {
   const body = [];
   if (route.demo) body.push(h('p', { class: 'demo-banner', role: 'note' }, 'DEMO DATA: synthetic results for previewing the layout. These are not recorded games.', ' ', link({ demo: false }, 'Leave demo', { class: 'text-link' })));
   const heading = route.view === 'cards' ? 'Card statistics' : route.view === 'matrix' ? 'Deck matchups' : 'Deck results';
-  const intro = route.view === 'cards' ? 'See card popularity, deck win rates and recorded plays.' : route.view === 'matrix' ? 'Pick a deck to see which opponents it beats.' : 'See which decks are winning. Pick one to see its cards and what it beats.';
+  const intro = route.view === 'cards' ? 'See card popularity, deck win rates and recorded plays.' : route.view === 'matrix' ? 'Pick a deck to see which opponents it beats.' : null;
   body.push(h('header', { class: 'stats-head' }, h('p', { class: 'eyebrow' }, 'Playtest statistics'), h('h1', {}, heading),
-    h('p', { class: 'lede' }, intro)));
+    intro ? h('p', { class: 'lede' }, intro) : null));
   body.push(tabs());
   body.push(h('div', { class: 'stats-toolbar' }, resolvedLine(), cohortBar()));
   const status = statusPanel();
