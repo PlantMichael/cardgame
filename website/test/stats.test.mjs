@@ -136,6 +136,8 @@ test('archetype labels use compositions, share names without merging lists and c
   assert.equal(name, `${S.factionLabel(deck)} ${S.deckArchetype(deck, cards)}`);
   assert.equal(name, S.deckLabel(variant, labels));
   assert.equal(S.findDeck(labeledIndex, variant.id, variant.role), variant, 'same label preserves distinct exact lists');
+  assert.notEqual(labeledIndex.variants.get(deck.id), labeledIndex.variants.get(variant.id), 'exact-list choices retain distinct discriminators');
+  assert.deepEqual(S.indexSnapshot({ ...snapshot, decks: [...decks].reverse() }, cards).variants, labeledIndex.variants, 'list numbers ignore input order and duplicate roles');
   assert.equal(S.deckLabel({ ...deck, role: 'ai' }, labels), name);
   assert.equal(S.deckLabel(deck, S.deckLabels([...decks].reverse(), cards)), name, 'input order does not change the label');
   assert.ok(!name.includes(S.shortId(deck.id)));

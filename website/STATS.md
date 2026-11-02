@@ -17,6 +17,8 @@ Default mode=all pools eligible ranked-AI, human PvP and automated ranked-bot ga
 
 `stats-core.mjs` estimates Aggro, Combo, Control, Tempo or Midrange from copy-weighted printed costs, creature count and aggression/defense or complementary ability packages. These describe composition, not observed play or the original random draft choice, which historical results do not store. It uses the public catalog's existing abilities and printed stratagem descriptions; no new game/API metadata is required. Missing printed cards yield Unclassified, and the catalog arriving after results updates labels/search. Labels are searchable. The heuristic is intentionally approximate and may change with future card definitions; links and numerical results do not.
 
+When several exact lists share an archetype, a secondary List 1/List 2 discriminator and featured cards distinguish them in the explorer, matchup selector, opponent tables and comparison axes. These numbers are local to the returned results and may change with filters; they are not part of the archetype name or the stable deck ID. Both roles of one composition use the same discriminator.
+
 ## Configuration and build
 
 Every Statistics view links to **Check on the bots** at `/stats/bots/`. Its four cards show the current public profile, activity and visible rank/LP (or Legend band/points), using the existing ladder names and artwork. `bots.js` refreshes `/data/bots/status.json` every ten seconds while visible, supports manual refresh, and cancels superseded or hidden-page requests. Loading and errors keep all four names with unknown status/rank; Retry never substitutes offline or stale ranks. The timestamp identifies the last successful snapshot. No login is required.

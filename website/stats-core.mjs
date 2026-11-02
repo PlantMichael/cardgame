@@ -199,7 +199,15 @@ export function indexSnapshot(snapshot, cards = new Map()) {
   const matchByKey = new Map(snapshot.matchups.map((m) => [`${deckKey(m.deckId, m.role)}>${deckKey(m.opponentDeckId, m.opponentRole)}`, m]));
   // Share of recorded human seat-games: the denominator is every human deck row, before any local filtering.
   const humanSeatGames = snapshot.decks.filter((d) => d.role === 'human').reduce((n, d) => n + d.matches, 0);
-  return { byKey, matchByKey, humanSeatGames, labels: deckLabels(snapshot.decks, cards) };
+  const labels = deckLabels(snapshot.decks, cards), groups = new Map(), variants = new Map();
+  for (const [id, label] of labels) {
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(id);
+  }
+  // Only exact-list controls need a discriminator. Keep the archetype itself
+  // readable; these list numbers are local to the current result set.
+  for (const ids of groups.values()) if (ids.length > 1) ids.sort().forEach((id, i) => variants.set(id, i + 1));
+  return { byKey, matchByKey, humanSeatGames, labels, variants };
 }
 
 export function findDeck(index, id, role) {
