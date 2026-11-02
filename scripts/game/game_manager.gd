@@ -131,6 +131,10 @@ func _on_play_card(card_data: CardData, at_index: int) -> void:
 func _present(events: Array) -> void:
 	await EventPresenter.present(events, board, LOCAL_PLAYER_ID)
 
+# A freed Board must reach is_instance_valid rather than fail argument typing.
+func _is_current_match(expected_state: GameState, expected_board: Variant) -> bool:
+	return is_instance_valid(expected_board) and game_state == expected_state and board == expected_board
+
 ## Answers every decision the rules core has open, one at a time: the local
 ## player's by asking them, the opponent's by the AI policy. The rules decide
 ## what is legal and what happens; this only supplies the answers.
@@ -139,49 +143,54 @@ func _present(events: Array) -> void:
 ## (_run_player_on_play and the _process_pending_* family) - those decided
 ## outcomes here instead of in GameState.
 func _drive_choices(search_engine: MCTSEngine = null) -> void:
-	var engine := search_engine if search_engine != null else MCTSEngine.new(game_state.opponent.player_id, ai_controller.ai_level)
+	var match_state := game_state
+	var match_board := board
+	var engine := search_engine if search_engine != null else MCTSEngine.new(match_state.opponent.player_id, ai_controller.ai_level)
 	for _i in 64:
-		if not is_instance_valid(board) or game_state.current_phase == GameState.Phase.GAME_OVER:
+		if not _is_current_match(match_state, match_board) or match_state.current_phase == GameState.Phase.GAME_OVER:
 			return
-		game_state.resolve_to_quiescence()
-		if not game_state.has_pending_choice():
+		match_state.resolve_to_quiescence()
+		if not match_state.has_pending_choice():
 			return
-		var choice: Dictionary = game_state.pending_choice.duplicate(true)
+		var choice: Dictionary = match_state.pending_choice.duplicate(true)
 		var owner_id := str(choice["player_id"])
 		var selection: String
 		if owner_id == LOCAL_PLAYER_ID:
-			selection = await board.prompt_choice(choice)
+			selection = await match_board.prompt_choice(choice)
 		else:
 			await get_tree().create_timer(ai_controller.THINK_DELAY * 0.5).timeout
-			if not is_instance_valid(board):
+			if not _is_current_match(match_state, match_board):
 				return
-			var action := await engine.choose_action(game_state)
-			if not is_instance_valid(board):
-				return
-			# A restart or another command may have replaced this decision while
-			# search yielded. Never apply an answer to a different choice.
-			if not game_state.has_pending_choice() or str(game_state.pending_choice["id"]) != str(choice["id"]):
+			var action := await engine.choose_action(match_state)
+			if not _is_current_match(match_state, match_board):
 				return
 			selection = str(action.get("selection", choice["default"]))
-		if not is_instance_valid(board):
+		if not _is_current_match(match_state, match_board):
 			return
-		var result := game_state.execute({
+		# Choice IDs restart in each match; both match identity and owner matter.
+		if not match_state.has_pending_choice() or str(match_state.pending_choice["id"]) != str(choice["id"]) or str(match_state.pending_choice["player_id"]) != owner_id:
+			return
+		var result := match_state.execute({
 			"type": GameState.CMD_ANSWER_CHOICE, "actor": owner_id,
 			"choice_id": str(choice["id"]), "selection": selection,
 		})
 		if not result["ok"]:
 			# Never leave the match waiting: fall back to the choice's default.
-			result = game_state.execute({
+			result = match_state.execute({
 				"type": GameState.CMD_ANSWER_CHOICE, "actor": owner_id,
 				"choice_id": str(choice["id"]), "selection": str(choice["default"]),
 			})
 			if not result["ok"]:
-				game_state.cancel_pending_choice()
+				match_state.cancel_pending_choice()
 				return
-		engine.advance_after_real_action(game_state)
+		engine.advance_after_real_action(match_state)
 		await _present(result["events"])
-		board.refresh()
+		if not _is_current_match(match_state, match_board):
+			return
+		match_board.refresh()
 		await _announce_pending_draws()
+		if not _is_current_match(match_state, match_board):
+			return
 
 ## Works off whatever the last action left open. The rules core queues effects
 ## and turns the ones needing a decision into choices; there is nothing else
@@ -194,19 +203,25 @@ func _resolve_all_pending() -> void:
 ## Also announces fatigue damage (from GameState._begin_turn()'s draw step
 ## finding an empty deck) so every existing call site gets it for free.
 func _announce_pending_draws() -> void:
+	var drawing_state := game_state
+	var drawing_board := board
+	if not _is_current_match(drawing_state, drawing_board):
+		return
 	# Take the batch and empty the queue before awaiting: a second caller
 	# arriving mid-animation would otherwise replay the same draws.
-	var drawn: Array[CardData] = game_state.pending_drawn_cards.duplicate()
-	game_state.pending_drawn_cards.clear()
+	var drawn: Array[CardData] = drawing_state.pending_drawn_cards.duplicate()
+	drawing_state.pending_drawn_cards.clear()
 	for card_data in drawn:
-		board.log_action("Drew %s" % card_data.card_name)
-		await board.animate_draw()
-	for player_id in game_state.pending_fatigue_damage:
-		var p := game_state._get_player_by_id(player_id)
+		drawing_board.log_action("Drew %s" % card_data.card_name)
+		await drawing_board.animate_draw()
+		if not _is_current_match(drawing_state, drawing_board):
+			return
+	for player_id in drawing_state.pending_fatigue_damage:
+		var p := drawing_state._get_player_by_id(player_id)
 		var whose := "You" if player_id == LOCAL_PLAYER_ID else "Opponent"
-		board.log_action("%s took %d fatigue damage!" % [whose, p.fatigue_damage])
-		board.refresh()
-	game_state.pending_fatigue_damage.clear()
+		drawing_board.log_action("%s took %d fatigue damage!" % [whose, p.fatigue_damage])
+		drawing_board.refresh()
+	drawing_state.pending_fatigue_damage.clear()
 	# Deliberately not calling _handle_game_over() here even if fatigue just
 	# ended the game (GameState._begin_turn() -> _check_win_condition()
 	# already flips current_phase to GAME_OVER) — every call site of this

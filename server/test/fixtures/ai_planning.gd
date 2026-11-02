@@ -81,7 +81,50 @@ func live(gs: GameState, reactive: bool = false) -> void:
 	manager.queue_free()
 	board.queue_free()
 	await get_tree().process_frame
+func restart_during_choice(during_search: bool) -> void:
+	var old_state := state()
+	old_state.request_choice(A,GameState.CHOICE_DAMAGE_TARGET,1,null)
+	var old_board := BoardScene.instantiate()
+	add_child(old_board)
+	old_board.setup(old_state)
+	var replacement := state()
+	replacement.active_player_id = P
+	replacement.current_phase = GameState.Phase.PLAYER_TURN
+	replacement.request_choice(P,GameState.CHOICE_DAMAGE_TARGET,1,null)
+	var new_board := BoardScene.instantiate()
+	add_child(new_board)
+	new_board.setup(replacement)
+	var manager := Manager.new()
+	add_child(manager)
+	manager.game_state = old_state
+	manager.board = old_board
+	manager.ai_controller.ai_level = 10
+	var engine := MCTSEngine.new(A,10)
+	var finished := {"value":false}
+	var drive := func():
+		await manager._drive_choices(engine)
+		finished["value"] = true
+	drive.call_deferred()
+	await get_tree().process_frame
+	if during_search:
+		while engine.last_search_iterations == 0 and not finished["value"]:
+			await get_tree().process_frame
+		check(not finished["value"], "replacement test reaches an actual yielded search")
+	else:
+		check(engine.last_search_iterations==0 and not finished["value"], "replacement test reaches the pacing wait")
+	manager.game_state = replacement
+	manager.board = new_board
+	old_board.queue_free()
+	var before := replacement.state_hash()
+	while not finished["value"]:
+		await get_tree().process_frame
+	check(replacement.state_hash()==before and replacement.has_pending_choice(), "old driver preserves a new match's human choice during search=%s" % during_search)
+	manager.queue_free()
+	new_board.queue_free()
+	await get_tree().process_frame
 func _run() -> void:
+	await restart_during_choice(false)
+	await restart_during_choice(true)
 	# More friendly health must always help, and more enemy health must hurt.
 	var health_state := state()
 	for hp in range(1,30):
