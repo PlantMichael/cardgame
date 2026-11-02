@@ -77,12 +77,12 @@ const LP_LOSS := 20
 const MIN_AI_LEVEL := 3
 const MAX_AI_LEVEL := 10
 
-## Restore the ladder curve: Orbital III starts at 3, Cosmic I reaches 10,
-## and the three legend tiers stay at 10.
+## Each named tier has one level: Orbital 3 through Cosmic 9.
+## Sub-ranks share their tier level; all three Legend tiers use 10.
 static func get_ai_level(bracket_index: int, in_legend: bool) -> int:
 	if in_legend:
 		return MAX_AI_LEVEL
-	return clampi(MIN_AI_LEVEL + (bracket_index * (MAX_AI_LEVEL - MIN_AI_LEVEL)) / (BRACKET_COUNT - 1), MIN_AI_LEVEL, MAX_AI_LEVEL)
+	return MIN_AI_LEVEL + clampi(bracket_index, 0, BRACKET_COUNT - 1) / SUB_RANKS.size()
 
 ## e.g. "Orbital III", "Cosmic I", or "Superluminal (1240)". Doesn't include
 ## LP — see get_lp_string for the "62 / 100 LP" progress readout.
