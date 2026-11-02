@@ -98,12 +98,29 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   const { pool, url, cleanup } = await database(t, 'ranked_bots_live', false);
   await initSchema(pool);
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'ranked-bots-relay-test-'));
+  // Reject each bot's first queue lookup after the real DB read. This leaves
+  // the socket healthy while exercising recovery before queue insertion.
+  const queueFault = path.join(tmp, 'queue-fault.cjs');
+  await fs.writeFile(queueFault, `
+    const { Pool } = require(${JSON.stringify(require.resolve('pg'))});
+    const query = Pool.prototype.query;
+    const failed = new Set();
+    Pool.prototype.query = async function(sql, values, ...rest) {
+      const result = await query.call(this, sql, values, ...rest);
+      if (typeof sql === 'string' && sql.includes('p.rating, b.profile AS bot_profile') &&
+          result.rows[0]?.bot_profile && failed.size < 4 && !failed.has(values[0])) {
+        failed.add(values[0]);
+        throw new Error('synthetic first queue lookup failure');
+      }
+      return result;
+    };
+  `);
   const listener = net.createServer(); listener.listen(0, '127.0.0.1'); await once(listener, 'listening');
   const port = listener.address().port; await new Promise(r => listener.close(r));
   let relayLog = '';
   const launchRelay = authoritative => {
     relayLog = '';
-    const proc = spawn(process.execPath, [path.join(PROJECT_DIR, 'server/relay.js')], {
+    const proc = spawn(process.execPath, ['--require', queueFault, path.join(PROJECT_DIR, 'server/relay.js')], {
       env: { ...process.env, DATABASE_URL: url, PORT: String(port), RANKED_AUTHORITATIVE: authoritative,
         APPDATA: tmp, XDG_DATA_HOME: tmp, PROJECT_DIR }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
     });
@@ -143,7 +160,10 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
     worker.catch(e => { workerFailure = e; });
   };
   startWorker();
-  await until(() => { if (workerFailure) throw workerFailure; return new Set(events.filter(e => e.event === 'queued').map(e => e.bot)).size === 4; }, 'all four autoqueue');
+  await until(() => {
+    if (workerFailure) throw workerFailure;
+    return ['io', 'callisto', 'europa', 'ganymede'].every(id => events.filter(e => e.event === 'queued' && e.bot === id).length >= 2);
+  }, 'all four retry queue entry after transient database failure');
   const found = await human.take('ranked_match_found');
   assert.equal(found.server_run, true); assert.match(found.opponent_name, /\[Bot 1\.0\]/);
   assert.ok(['io', 'callisto', 'europa', 'ganymede'].includes(found.opponent_bot.id));

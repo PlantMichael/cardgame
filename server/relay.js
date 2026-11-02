@@ -990,6 +990,7 @@ async function main() {
             sweepRankedQueue();
           } catch (err) {
             console.error('queue_ranked error', err);
+            sendTo(ws, { type: 'ranked_refused', reason: 'ranked_busy' });
           }
           break;
         }
