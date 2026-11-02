@@ -85,6 +85,34 @@ static func planning_state(view: Dictionary, my_id: String, own_deck: Array[Card
 		gs._first_turn_taken = {"host": true, "guest": true}
 	return gs
 
+## Shared filtered-view decision path for server-ranked and local ranked-AI seats.
+static func choose_view_action(view: Dictionary, my_id: String, own_deck: Array[CardData], profile: Dictionary) -> Dictionary:
+	var planning_seed := absi(JSON.stringify(view).hash() + str(profile["id"]).hash())
+	var rng := RandomNumberGenerator.new()
+	rng.seed = planning_seed
+	var gs := planning_state(view, my_id, own_deck, planning_seed)
+	if gs.mulligan_pending.has(my_id):
+		var swaps := AIHeuristics.pick_mulligan_swaps(gs.find_player(my_id).hand)
+		return {"type": "mulligan", "card_uids": swaps.map(func(card): return card.uid)}
+	if not gs.mulligan_pending.is_empty():
+		return {}
+	if gs.has_pending_choice():
+		if str(gs.pending_choice.get("player_id", "")) != my_id:
+			return {}
+		var choice := gs.pending_choice
+		var selection := AIHeuristics.pick_choice_answer(gs, choice)
+		if str(profile["style"]) == "random":
+			var options: Array = choice["options"].duplicate()
+			if bool(choice["allow_none"]):
+				options.append("")
+			selection = str(options[rng.randi_range(0, options.size() - 1)])
+		return {"type": "answer_choice", "choice_id": choice["id"], "selection": selection}
+	if gs.active_player_id != my_id:
+		return {}
+	var engine := MCTSEngine.new(my_id, int(profile["level"]), str(profile["style"]))
+	engine._search_rng.seed = planning_seed
+	return await choose_action(gs, engine, profile, rng)
+
 static func play(a: Dictionary, b: Dictionary, faction_a: int, faction_b: int, first: String, game_seed: int) -> Dictionary:
 	var allowed := published_ids()
 	# One draft per profile/faction/release makes exact-deck samples accumulate.

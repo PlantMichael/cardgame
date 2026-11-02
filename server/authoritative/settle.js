@@ -45,11 +45,11 @@ class PgSettleRepo {
        FROM players WHERE id = $1 FOR UPDATE`, [id]);
     return rows[0] || null;
   }
-  async claim(matchId, playerId, won, outcome) {
+  async claim(matchId, playerId, won, outcome, aiMatch = null) {
     const { rows } = await this.client.query(
-      `INSERT INTO ranked_settlements (match_id, player_id, won, outcome)
-       VALUES ($1, $2, $3, $4) ON CONFLICT (match_id, player_id) DO NOTHING RETURNING match_id`,
-      [matchId, playerId, won, JSON.stringify(outcome)]);
+      `INSERT INTO ranked_settlements (match_id, player_id, won, outcome, ai_match)
+       VALUES ($1, $2, $3, $4, $5) ON CONFLICT (match_id, player_id) DO NOTHING RETURNING match_id`,
+      [matchId, playerId, won, JSON.stringify(outcome), aiMatch]);
     return rows.length > 0;
   }
   async storedOutcome(matchId, playerId) {

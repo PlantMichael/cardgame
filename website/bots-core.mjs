@@ -1,7 +1,7 @@
 import { TIERS, SUB_RANKS, LEGEND_TIERS, LP, divisionName } from './ranked-data.mjs';
 export const BOT_NAMES = { io: 'Io', callisto: 'Callisto', europa: 'Europa', ganymede: 'Ganymede' };
 export const ACTIVITIES = { queued: 'Queued for ranked', joining: 'Joining a match', playing: 'Playing ranked',
-  idle: 'Between matches', reconnecting: 'Reconnecting', offline: 'Offline', not_started: 'Not started' };
+  playing_ai: 'Playing ranked AI', idle: 'Between matches', reconnecting: 'Reconnecting', offline: 'Offline', not_started: 'Not started' };
 export function validStatus(data) {
   if (typeof data?.generatedAt !== 'string' || !Number.isFinite(Date.parse(data.generatedAt)) ||
       !Array.isArray(data.bots) || data.bots.length !== 4) return false;

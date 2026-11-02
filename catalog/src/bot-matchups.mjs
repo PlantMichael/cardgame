@@ -32,7 +32,7 @@ function statistics(row) {
 const names = { io: 'Io', callisto: 'Callisto', europa: 'Europa', ganymede: 'Ganymede', standard: 'Standard AI', human: 'Human players' };
 
 export function projectBotStats(data, catalog, days, mode = 'simulation') {
-  if ((data?.mode ?? 'simulation') !== mode || data?.methodology?.source !== (mode === 'ranked' ? 'server_verified' : 'bot_simulation') || data.methodology.metric !== 'exact_starting_deck_matchup' ||
+  if ((data?.mode ?? 'simulation') !== mode || !(mode === 'ranked' ? ['server_verified','mixed'] : ['bot_simulation']).includes(data?.methodology?.source) || data.methodology.metric !== 'exact_starting_deck_matchup' ||
       data.methodology.unit !== 'seat_game' || data.methodology.draws !== 'excluded_from_win_rate' || data.methodology.humanStats !== 'excluded' ||
       data.days !== days || typeof data.generatedAt !== 'string' || !Number.isFinite(Date.parse(data.generatedAt)) ||
       !count(data.games) || data.games > 50000) fail();
@@ -46,8 +46,8 @@ export function projectBotStats(data, catalog, days, mode = 'simulation') {
         !positive(row.rulesVersion) || !positive(row.engineVersion)) fail();
     const key = `${row.id}@${row.version}/L${row.level}/R${row.rulesVersion}/E${row.engineVersion}`;
     if (row.key !== key || botMap.has(key)) fail();
-    if (row.id === 'standard' && (row.version !== String(row.engineVersion) || row.level !== 10 || row.style !== '')) fail();
-    if (mode === 'ranked' && row.id === 'standard') fail();
+    if (row.id === 'standard' && (row.version !== String(row.engineVersion) || (mode === 'simulation' ? row.level !== 10 : row.level < 3) || row.style !== '')) fail();
+    if (mode === 'ranked' && row.id === 'standard' && data.methodology.source !== 'mixed') fail();
     const result = { key, id: row.id, name: row.name, version: row.version, level: row.level, style: row.style,
       rulesVersion: row.rulesVersion, engineVersion: row.engineVersion, ...statistics(row) };
     botMap.set(key, { ...result, deckMatches: 0, deckWins: 0, deckDraws: 0 });
@@ -86,7 +86,7 @@ export function projectBotStats(data, catalog, days, mode = 'simulation') {
       bots.reduce((n, r) => n + r.matches, 0) !== 2 * data.games ||
       bots.reduce((n, r) => n + r.wins + r.draws / 2, 0) !== data.games) fail();
   return { generatedAt: data.generatedAt, days, mode, games: data.games,
-    methodology: { source: mode === 'ranked' ? 'server_verified' : 'bot_simulation', metric: 'exact_starting_deck_matchup', unit: 'seat_game', draws: 'excluded_from_win_rate', humanStats: 'excluded' },
+    methodology: { source: data.methodology.source, metric: 'exact_starting_deck_matchup', unit: 'seat_game', draws: 'excluded_from_win_rate', humanStats: 'excluded' },
     bots, decks, matchups };
 }
 

@@ -21,6 +21,8 @@ When several exact lists share an archetype, a secondary List 1/List 2 discrimin
 
 ## Configuration and build
 
+The named bots alternate normal ranked queue games with AI games at their current tier's difficulty. Both feed the combined page; bot AI records remain client-reported and do not count as human testers. The bot page labels admitted local games **Playing ranked AI**. A history reset clears source records while preserving minimal private replay keys, so old client retries cannot resurrect recorded games or award ranks twice. See [bot operations](../server/MOON_BOTS.md#reset-recorded-history) for the destructive maintenance command and preserved account data.
+
 Every Statistics view links to **Check on the bots** at `/stats/bots/`. Its four cards show the current public profile, activity and visible rank/LP (or Legend band/points), using the existing ladder names and artwork. `bots.js` refreshes `/data/bots/status.json` every ten seconds while visible, supports manual refresh, and cancels superseded or hidden-page requests. Loading and errors keep all four names with unknown status/rank; Retry never substitutes offline or stale ranks. The timestamp identifies the last successful snapshot. No login is required.
 
 `CARDGAME_CATALOG_ORIGIN` (default `https://cardgame-catalog-production.up.railway.app`) is baked into the page as `<meta name="cg-catalog">` at build time. No key or login is needed.

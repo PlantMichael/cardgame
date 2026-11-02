@@ -48,13 +48,32 @@ async function load(pool, publicRoot, { days, mode }, now) {
         AND (m.bot_a IS NOT NULL OR m.bot_b IS NOT NULL) LIMIT 50001`,
       values: [since, until, [...SETTLING_REASONS]], query_timeout: 5000 })).rows;
   }
+  if (mode === 'ranked') {
+    const local = (await pool.query({ text: `SELECT won,ai_match FROM ranked_settlements
+      WHERE settled_at >= $1 AND settled_at <= $2 AND ai_match->>'mode'='ranked_ai'
+      AND ai_match->>'source'='client_reported' AND ai_match->'bot_profile' IS NOT NULL LIMIT 50001`,
+      values: [since, until], query_timeout: 5000 })).rows;
+    raw.push(...local);
+  }
   if (raw.length > 50000) throw new Error('too many matches');
   const bots = new Map(), decks = new Map(), matchups = new Map();
-  let games = 0;
+  let games = 0, localGames = 0;
   for (const row of raw) {
     let r;
     if (mode === 'simulation') r = normalizeBotMatch(row.result, { historical: true });
-    else {
+    else if (row.ai_match) {
+      const ai = row.ai_match;
+      if (!Number.isInteger(ai.ai_version) || ai.ai_version < 1 || ai.ai_version > 1000000 ||
+          !Number.isInteger(ai.ai_level) || ai.ai_level < 3 || ai.ai_level > 10 ||
+          !Number.isInteger(ai.rules_version) || ai.rules_version < 1 || ai.rules_version > 1000000 ||
+          !Number.isInteger(ai.turns) || ai.turns < 1 || ai.turns > 1000000 || !['player','opponent'].includes(ai.first_player)) continue;
+      r = { a: normalizeBotParticipant(ai.bot_profile, ai.ai_version, true),
+        b: { id: 'standard', name: 'Standard AI', version: String(ai.ai_version), level: ai.ai_level, style: '' },
+        deckA: ai.player_deck, deckB: ai.opponent_deck, winner: row.won ? 'a' : 'b',
+        first: ai.first_player === 'player' ? 'a' : 'b', turns: ai.turns,
+        rulesVersion: ai.rules_version, engineVersion: ai.ai_version };
+      if (r.a.id === 'standard') throw new Error('invalid named bot');
+    } else {
       if (!Number.isInteger(row.rules_version) || row.rules_version < 1 || row.rules_version > 1000000 ||
           !Number.isInteger(row.engine_version) || row.engine_version < 1 || row.engine_version > 1000000 ||
           !Number.isInteger(row.facts?.turns) || row.facts.turns < 1 || row.facts.turns > 1000000 || !['a', 'b'].includes(row.first_seat)) continue;
@@ -71,6 +90,7 @@ async function load(pool, publicRoot, { days, mode }, now) {
       throw new Error('unpublished result');
     }
     games++;
+    if (row.ai_match) localGames++;
     const participants = [r.a, r.b].map(p => ({ ...p, key: identity(p, r), rulesVersion: r.rulesVersion, engineVersion: r.engineVersion }));
     for (const side of [0, 1]) {
       const bot = participants[side], enemy = participants[1 - side];
@@ -87,7 +107,7 @@ async function load(pool, publicRoot, { days, mode }, now) {
   }
   const project = map => [...map].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, { value, ...row }]) => ({ ...row, ...finish(value) }));
   const result = { generatedAt: new Date(now).toISOString(), days, mode, games,
-    methodology: { source: mode === 'ranked' ? 'server_verified' : 'bot_simulation', metric: 'exact_starting_deck_matchup', unit: 'seat_game', draws: 'excluded_from_win_rate', humanStats: 'excluded' },
+    methodology: { source: mode === 'ranked' ? localGames ? 'mixed' : 'server_verified' : 'bot_simulation', metric: 'exact_starting_deck_matchup', unit: 'seat_game', draws: 'excluded_from_win_rate', humanStats: 'excluded' },
     bots: project(bots), decks: project(decks), matchups: project(matchups) };
   if (Buffer.byteLength(JSON.stringify(result)) > MAX_BYTES) throw new Error('too large');
   return result;
