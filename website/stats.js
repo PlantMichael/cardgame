@@ -124,7 +124,7 @@ const cardName = (id) => catalog.cards.get(id)?.name || id;
 const when = (iso) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const roleWord = (role) => (role === 'ai' ? 'AI' : 'Player');
 const small = (n) => n < 10;
-const deckName = (deck) => S.deckLabel(deck, load.snapshot?.decks);
+const deckName = (deck) => S.deckLabel(deck, load.index?.labels);
 const sampleNote = (row) => `Only ${row.matches} game${row.matches === 1 ? '' : 's'} recorded—results may change.`;
 
 function sampleCell(row) {
@@ -220,7 +220,7 @@ function statusPanel() {
 // ---- explorer ------------------------------------------------------------------------------------
 function explorer() {
   const snap = load.snapshot;
-  const rows = S.sortDecks(S.filterDecks(snap, catalog.cards, route), route.sort, route.dir);
+  const rows = S.sortDecks(S.filterDecks(snap, catalog.cards, route, load.index.labels), route.sort, route.dir);
   const factions = ['GREEN', 'CRIMSON', 'BLACK', 'ORANGE', 'TEAL'];
   const patch = (p) => go(p, { replace: true });
   const advancedActive = route.who !== 'human' || route.x || route.min > 1 || !['matches', 'winRate'].includes(route.sort);

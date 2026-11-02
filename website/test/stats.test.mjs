@@ -130,11 +130,12 @@ test('readable deck labels distinguish faction lists without exposing hashes and
   const deck = snapshot.decks.find((d) => d.role === 'human');
   const variant = { ...deck, id: 'different-list' };
   const decks = [...snapshot.decks, variant];
-  const name = S.deckLabel(deck, decks);
+  const labels = S.indexSnapshot({ ...snapshot, decks }).labels;
+  const name = S.deckLabel(deck, labels);
   assert.match(name, / deck [1-9][0-9]*$/);
-  assert.notEqual(name, S.deckLabel(variant, decks));
-  assert.equal(S.deckLabel({ ...deck, role: 'ai' }, decks), name);
-  assert.equal(S.deckLabel(deck, [...decks].reverse()), name, 'input order does not change the label');
+  assert.notEqual(name, S.deckLabel(variant, labels));
+  assert.equal(S.deckLabel({ ...deck, role: 'ai' }, labels), name);
+  assert.equal(S.deckLabel(deck, S.deckLabels([...decks].reverse())), name, 'input order does not change the label');
   assert.ok(!name.includes(S.shortId(deck.id)));
   const route = { ...S.routeFromSearch(''), q: name.toUpperCase() };
   assert.deepEqual(S.filterDecks({ ...snapshot, decks }, cards, route).map((d) => d.id), [deck.id]);

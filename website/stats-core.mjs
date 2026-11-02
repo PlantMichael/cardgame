@@ -110,11 +110,22 @@ export function factionLabel(deck) {
 }
 /** Public results omit saved deck names. Number distinct lists within a faction,
  * using the same label for the same list in either role. IDs still own links. */
-export function deckLabel(deck, decks = []) {
-  const faction = factionLabel(deck);
-  const variants = [...new Set(decks.filter((d) => factionLabel(d) === faction).map((d) => d.id))].sort();
-  const number = variants.length > 1 ? ` ${variants.indexOf(deck.id) + 1}` : '';
-  return `${faction} deck${number}`;
+export function deckLabels(decks) {
+  const groups = new Map();
+  for (const deck of decks) {
+    const faction = factionLabel(deck);
+    if (!groups.has(faction)) groups.set(faction, new Set());
+    groups.get(faction).add(deck.id);
+  }
+  const labels = new Map();
+  for (const [faction, ids] of groups) {
+    const variants = [...ids].sort();
+    variants.forEach((id, i) => labels.set(id, `${faction} deck${variants.length > 1 ? ` ${i + 1}` : ''}`));
+  }
+  return labels;
+}
+export function deckLabel(deck, labels) {
+  return labels?.get(deck.id) || `${factionLabel(deck)} deck`;
 }
 export const deckKey = (id, role) => `${id}/${role}`;
 export const cardCount = (deck) => deck.cards.reduce((n, c) => n + c.copies, 0);
@@ -144,7 +155,7 @@ export function indexSnapshot(snapshot) {
   const matchByKey = new Map(snapshot.matchups.map((m) => [`${deckKey(m.deckId, m.role)}>${deckKey(m.opponentDeckId, m.opponentRole)}`, m]));
   // Share of recorded human seat-games: the denominator is every human deck row, before any local filtering.
   const humanSeatGames = snapshot.decks.filter((d) => d.role === 'human').reduce((n, d) => n + d.matches, 0);
-  return { byKey, matchByKey, humanSeatGames };
+  return { byKey, matchByKey, humanSeatGames, labels: deckLabels(snapshot.decks) };
 }
 
 export function findDeck(index, id, role) {
@@ -181,7 +192,7 @@ export function manaCurve(deck, cards) {
 
 const names = (deck, cards) => deck.cards.map((c) => (cards.get(c.id)?.name || c.id).toLowerCase());
 
-export function filterDecks(snapshot, cards, route) {
+export function filterDecks(snapshot, cards, route, labels = deckLabels(snapshot.decks)) {
   const q = route.q.trim().toLowerCase();
   const x = route.x.trim().toLowerCase();
   return snapshot.decks.filter((d) => {
@@ -189,7 +200,7 @@ export function filterDecks(snapshot, cards, route) {
     if (d.matches < route.min) return false;
     if (route.faction && !(d.factions || []).includes(route.faction)) return false;
     const n = names(d, cards);
-    if (q && ![deckLabel(d, snapshot.decks).toLowerCase(), ...n].some((name) => name.includes(q))) return false;
+    if (q && ![deckLabel(d, labels).toLowerCase(), ...n].some((name) => name.includes(q))) return false;
     if (x && n.some((name) => name.includes(x))) return false;
     return true;
   });
