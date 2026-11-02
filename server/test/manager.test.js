@@ -112,7 +112,7 @@ test('ranked bot provenance is snapshotted at the same canonical match boundary'
   const match = await startedMatch(ctx);
   const row = ctx.store.matches.get(match.id);
   assert.equal(row.mode, 'ranked_bots'); assert.equal(row.bot_a.version, '1.0'); assert.equal(row.bot_b, null);
-  assert.equal(row.engine_version, 1);
+  assert.equal(row.engine_version, host.engineVersion, 'snapshot records the real host policy version');
   ctx.store.bots[1].version = '2.0';
   assert.equal(row.bot_a.version, '1.0');
 });
