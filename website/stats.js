@@ -392,7 +392,8 @@ function tabs() {
   const items = [['explorer', 'Decks'], ['matrix', 'Matchups'], ['cards', 'Cards']];
   const current = route.view === 'deck' ? 'explorer' : route.view;
   return h('nav', { class: 'stats-tabs', ariaLabel: 'Statistics views' }, items.map(([view, label]) =>
-    link({ view, deck: '', opp: '', q:'', sort:view==='cards'?'timesPlayed':'matches', dir:'desc' }, label, { ariaCurrent: current === view ? 'page' : undefined })));
+    link({ view, deck: '', opp: '', q:'', sort:view==='cards'?'timesPlayed':'matches', dir:'desc' }, label, { ariaCurrent: current === view ? 'page' : undefined })),
+    h('a', { href: '/stats/bots/' }, 'Check on the bots'));
 }
 
 function render() {

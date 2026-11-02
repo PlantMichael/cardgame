@@ -2,6 +2,8 @@
 
 A read-only copy of the game's printed card data for deck builders, bots and card browsers, plus live exact-deck matchup and card win-rate summaries. No API key or login. The catalog service needs no database credentials. Printed definitions are generated from the same six faction files the game loads (`data/cards/{green,crimson,black,orange,teal,generic}.json`); the game itself never reads from it.
 
+`/data/bots/status.json` provides current public activity and visible ranks for the four named ranked bots, powering Statistics → Check on the bots. See [the bot status contract](../server/MOON_BOTS.md#website-api) for fields, lifecycle meanings and privacy. It uses the same `CARD_WINRATES_ORIGIN` relay origin, with a five-second timeout, 32 KiB body limit and no redirects. GET/HEAD/OPTIONS need no login; query fields return 400, other methods 405, unavailable/malformed upstream data 503. Responses use `no-store`. Deploy the matching relay route before the page; no new environment variable or database access is required in the catalog.
+
 > Printed catalog origin: `https://cardgame-catalog-production.up.railway.app`. `public/` holds the 176 published cards. **Nothing is versioned:** there are no version numbers, release folders or `latest.json`; every export simply replaces `cards.json` and `keywords.json`. The live win-rate route requires deploying the updated relay AND catalog before it is available there.
 
 ## URLs
@@ -11,6 +13,7 @@ GET /data/cards.json
 GET /data/keywords.json
 GET /data/stats/card-winrates.json
 GET /data/stats/deck-matchups.json
+GET /data/bots/status.json
 GET /healthz                       (operator health check, not part of the data contract)
 ```
 

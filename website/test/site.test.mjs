@@ -23,7 +23,7 @@ test('built public pages, canonical keywords and unchanged Godot runtime work ov
   });
   const origin = `http://127.0.0.1:${server.address().port}`;
   const pages = [];
-  const routes = ['/', '/rulebook/', '/glossary/', '/play/', '/account/', '/stats/', '/ranked/'];
+  const routes = ['/', '/rulebook/', '/glossary/', '/play/', '/account/', '/stats/', '/ranked/', '/stats/bots/'];
   for (const route of routes) {
     const response = await fetch(origin + route);
     assert.equal(response.status, 200, route);
@@ -58,6 +58,12 @@ test('built public pages, canonical keywords and unchanged Godot runtime work ov
     assert.ok(html.includes('src="/account.js"'));
   }
   assert.ok(pages[4].includes('data-profile'), 'profile page');
+  const botPage = pages[7];
+  assert.ok(botPage.includes('data-bots-app') && botPage.includes('href="/stats/"'));
+  assert.ok(botPage.includes('src="/bots.js"') && !botPage.includes('src="/stats.js"'));
+  for (const asset of ['/bots-core.mjs','/ranked-data.mjs']) {
+    const response = await fetch(origin+asset); assert.equal(response.status,200); assert.match(response.headers.get('content-type'),/javascript/);
+  }
   assert.ok(!pages[3].includes('type="password"') && !pages[3].includes('Log out</'), 'no login form or logout control is baked into the page');
   const portraits = JSON.parse(pages[3].match(/data-portraits>([^<]*)</)[1]);
   assert.ok(portraits.length > 0);

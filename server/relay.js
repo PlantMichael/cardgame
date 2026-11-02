@@ -7,6 +7,7 @@ const { initLegacySchema } = require('./schema_legacy');
 const { initBotSchema } = require('./bot_matches');
 const { reservedBotName } = require('./ranked_bot_accounts');
 const { matchQueuedPlayers } = require('./ranked_queue');
+const { createBotPresence } = require('./bot_status');
 const { normalizeAIRecord } = require('./ranked_ai_record');
 const { createRelayServer } = require('./card_winrates');
 const { createGoogleAuthFromEnv } = require('./google_auth');
@@ -270,6 +271,7 @@ function lobbyList() {
 //
 // ws -> { id, username, rating, queuedAt }
 const rankedQueue = new Map();
+const botPresence = createBotPresence({ queue: rankedQueue, manager: () => auth?.manager });
 
 const RANKED_SWEEP_MS = 500;
 
@@ -413,7 +415,7 @@ async function main() {
     console.log('Ranked matches are server-authoritative (rules version', auth.rulesVersion + ')');
   }
 
-  const { server, wss } = createRelayServer({ pool });
+  const { server, wss } = createRelayServer({ pool, botActivity: botPresence.activity });
   google = createGoogleAuthFromEnv({
     pool, sendTo, makeToken, usernameRe: USERNAME_RE, profileOf, decksOf, accountSnapshotByToken,
   });
@@ -428,6 +430,9 @@ async function main() {
     ws.on('message', async (raw) => {
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
+      // These start a different sign-in rather than continuing the current
+      // session. Invalidate any older async presence binding on this socket.
+      if (['register', 'login', 'google_signin', 'google_register'].includes(msg?.type)) botPresence.forget(ws);
 
       // Messages for a server-run match: authenticated by the session token,
       // size-capped, validated and rate-limited before anything touches the rules.
@@ -440,14 +445,16 @@ async function main() {
         // flood of match frames from an unauthenticated socket is a flood of
         // database queries.
         if (!auth.allowFrame(ws)) { sendTo(ws, { type: 'match_error', reason: 'rate_limited' }); return; }
+        const presenceTicket = botPresence.begin(ws);
         try {
           let playerId = auth.cachedPlayer(ws, msg.token);
           if (!playerId) {
             const found = await pool.query('SELECT player_id FROM sessions WHERE token = $1', [msg.token]);
-            if (!found.rows[0]) { sendTo(ws, { type: 'match_error', reason: 'unknown_match' }); return; }
+            if (!found.rows[0]) { botPresence.reject(ws, presenceTicket); sendTo(ws, { type: 'match_error', reason: 'unknown_match' }); return; }
             playerId = found.rows[0].player_id;
             auth.rememberPlayer(ws, msg.token, playerId);
           }
+          botPresence.remember(ws, playerId, presenceTicket);
           const { token, ...frame } = msg; // the token never travels past authentication
           await auth.route(playerId, frame, ws, sendTo);
         } catch (err) {
@@ -526,6 +533,7 @@ async function main() {
 
         case 'resume_session': {
           const token = msg.token;
+          const presenceTicket = botPresence.begin(ws);
           try {
             const result = await pool.query(
               `SELECT p.id, p.username, p.wins, p.losses, p.rating,
@@ -537,14 +545,17 @@ async function main() {
             );
             const player = result.rows[0];
             if (!player) {
+              botPresence.reject(ws, presenceTicket);
               sendTo(ws, { type: 'login_result', success: false, message: 'Session expired.' });
               return;
             }
             const decks = await decksOf(player.id);
+            botPresence.remember(ws, player.id, presenceTicket);
             sendTo(ws, { type: 'login_result', success: true, token, ...profileOf(player), decks,
               ranked_authoritative: !!auth, rules_version: auth?.rulesVersion ?? null, bot_profile: player.bot_profile ?? null });
           } catch (err) {
             console.error('resume_session error', err);
+            botPresence.reject(ws, presenceTicket);
             sendTo(ws, { type: 'login_result', success: false, message: 'Server error, try again.' });
           }
           break;
@@ -941,6 +952,7 @@ async function main() {
           break;
         }
         case 'logout': {
+          botPresence.forget(ws);
           try {
             await pool.query('DELETE FROM sessions WHERE token = $1', [msg.token]);
           } catch (err) {
@@ -951,6 +963,7 @@ async function main() {
         }
 
         case 'queue_ranked': {
+          const presenceTicket = botPresence.begin(ws);
           try {
             const result = await pool.query(
               `SELECT p.id, p.username, p.rating, b.profile AS bot_profile
@@ -960,9 +973,11 @@ async function main() {
             );
             const player = result.rows[0];
             if (!player) {
+              botPresence.reject(ws, presenceTicket);
               sendTo(ws, { type: 'error', message: 'Session expired.' });
               return;
             }
+            botPresence.remember(ws, player.id, presenceTicket);
             const entry = { playerId: player.id, username: player.username, rating: player.rating, queuedAt: Date.now(), botProfile: player.bot_profile };
             if (auth) {
               // A client that cannot speak this server's rules must update
@@ -1099,6 +1114,7 @@ async function main() {
 }
 
 function _handleDisconnect(ws) {
+  botPresence.forget(ws);
   if (google) google.onClose(ws);
   rankedQueue.delete(ws);
   if (auth) auth.onClose(ws);

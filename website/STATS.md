@@ -17,6 +17,8 @@ Default mode=all pools eligible ranked-AI, human PvP and automated ranked-bot ga
 
 ## Configuration and build
 
+Every Statistics view links to **Check on the bots** at `/stats/bots/`. Its four cards show the current public profile, activity and visible rank/LP (or Legend band/points), using the existing ladder names and artwork. `bots.js` refreshes `/data/bots/status.json` every ten seconds while visible, supports manual refresh, and cancels superseded or hidden-page requests. Loading and errors keep all four names with unknown status/rank; Retry never substitutes offline or stale ranks. The timestamp identifies the last successful snapshot. No login is required.
+
 `CARDGAME_CATALOG_ORIGIN` (default `https://cardgame-catalog-production.up.railway.app`) is baked into the page as `<meta name="cg-catalog">` at build time. No key or login is needed.
 
 ## Demo data
@@ -26,7 +28,7 @@ Default mode=all pools eligible ranked-AI, human PvP and automated ranked-bot ga
 ## Tests
 
 ```sh
-node --test website/test/stats.test.mjs website/test/site.test.mjs
+node --test website/test/stats.test.mjs website/test/bots.test.mjs website/test/site.test.mjs
 ```
 
 `stats.test.mjs` covers the arithmetic and routing rules from the API contract against the synthetic fixture: the same deck in both roles, reversed matchup perspectives, a real 0% record against a missing matchup, null turns, 2 of 3 as 66.7%, AI keys removed for PvP, address round trips, filters and sorting, and rejection of malformed snapshots. The rendering and request-race code in `stats.js` was checked by hand in a browser at desktop and phone widths, not by automated DOM tests.

@@ -63,6 +63,12 @@ Roll out the relay and catalog from the same revision, then start the worker. Th
 
 ## Website API
 
+The Statistics page links to `/stats/bots/` for current activity and visible rank. Both relay and catalog serve anonymous `GET/HEAD/OPTIONS /data/bots/status.json` with `{ generatedAt, bots }`. Exactly four canonical rows contain `id`, `name`, `version`, `level`, `style`, `activity` and `rank`. A provisioned rank is `{ bracket, inLegend, legendRating, lp }`, using the ordinary visible ladder; an unprovisioned account has `activity: "not_started"` and `rank: null`.
+
+Activity is derived from verified open relay sockets and the existing queue/match manager: `queued`, `joining`, `playing`, `idle` (between matches), `reconnecting`, or `offline`. Finished sessions do not count as playing. Offline means no verified open socket; dead transports are detected by the existing 30-second ping/termination cycle, rather than instant worker-process telemetry. Successful snapshots share a five-second cache/query; errors return 503 rather than fabricated offline rows. This adds no heartbeat table, worker control or schema change.
+
+The status route accepts no query parameters (400), rejects other methods (405), and uses HTTP `no-store`. The catalog projects only public fields, refuses redirects and bounds upstream requests to five seconds and 32 KiB. It never publishes account/session IDs, tokens, hidden matchmaking Elo, opponents or match details. The existing `CARD_WINRATES_ORIGIN` config selects its relay just as for the other live APIs. Deploy the compatible relay and catalog before the website; the page reports unavailable until both routes are ready.
+
 ```js
 const response = await fetch(`${CATALOG_ORIGIN}/data/stats/bot-matchups.json?mode=ranked&days=30`);
 if (!response.ok) throw new Error('Simulation stats unavailable');
@@ -92,6 +98,7 @@ godot --headless --path . -- --bot-tests
 godot --headless --path . -- --core-tests
 node --test server/test/moon_bots.test.js server/test/deck_matchups.test.js server/test/card_winrates.test.js server/test/ranked_ai_record.test.js
 node --test server/test/ranked_bots.test.js server/test/manager.test.js server/test/settlement.test.js server/test/hidden_info.test.js
+node --test server/test/bot_status.test.js
 node --test 'catalog/test/*.test.mjs'
 ```
 

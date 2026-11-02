@@ -7,13 +7,13 @@ const button = (label, href, secondary = false) => `<a class="button${secondary 
 // Set by renderPages: where the relay is and which portraits the game offers.
 let siteConfig = { relayUrl: '', portraits: [], catalogOrigin: '' };
 
-function shell(title, active, content, description) {
+function shell(title, active, content, description, moduleSrc = active === 'Stats' ? '/stats.js' : null) {
   const nav = [['Home', '/'], ['Ranked', '/ranked/'], ['Glossary', '/glossary/'], ['Stats', '/stats/']];
   const playing = active === 'Play';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${title === 'Home' ? 'cardgame — Space-age card battles in your browser' : `${title} — cardgame`}</title>
   <meta name="description" content="${escapeHtml(description)}"><meta name="theme-color" content="#060814">
-  <link rel="icon" href="/media/logo.png" type="image/png"><meta name="cg-relay" content="${escapeHtml(siteConfig.relayUrl)}"><link rel="stylesheet" href="/style.css"><script type="application/json" data-portraits>${JSON.stringify(siteConfig.portraits).replace(/</g, '\\u003c')}</script><script src="/app.js" defer></script><script src="/account.js" defer></script>${active === 'Stats' ? `<meta name="cg-catalog" content="${escapeHtml(siteConfig.catalogOrigin)}"><script type="module" src="/stats.js"></script>` : ''}</head>
+  <link rel="icon" href="/media/logo.png" type="image/png"><meta name="cg-relay" content="${escapeHtml(siteConfig.relayUrl)}"><link rel="stylesheet" href="/style.css"><script type="application/json" data-portraits>${JSON.stringify(siteConfig.portraits).replace(/</g, '\\u003c')}</script><script src="/app.js" defer></script><script src="/account.js" defer></script>${active === 'Stats' ? `<meta name="cg-catalog" content="${escapeHtml(siteConfig.catalogOrigin)}">` : ''}${moduleSrc ? `<script type="module" src="${escapeHtml(moduleSrc)}"></script>` : ''}</head>
   <body${playing ? ' class="play-page"' : ''}><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="wrap header-inner">
   <a class="brand" href="/" aria-label="cardgame home"><img src="/media/logo.png" width="40" height="40" alt=""><span class="brand-word">CARD<b>GAME</b></span></a>
   <nav aria-label="Main navigation">${nav.map(([label, href]) => `<a href="${href}" ${active === label ? 'aria-current="page"' : ''}${playing && label !== 'Home' ? ' target="_blank" rel="noopener" aria-label="' + label + ' (opens in a new tab)"' : ''}>${label}</a>`).join('')}</nav>
@@ -121,5 +121,11 @@ export function renderPages({ featured, keywords, relayUrl = '', portraits = [],
     'play/index.html': shell('Play', 'Play', '<div id="play-area" class="game-mount" data-game-mount data-game-src="/play/game.html"><div class="game-message"><noscript><p>cardgame needs JavaScript to log you in and run the game.</p></noscript></div></div>', 'Play cardgame with the site navigation available above the game.'),
     'ranked/index.html': ranked(),
     'stats/index.html': shell('Stats', 'Stats', '<div class="wrap stats-page" data-stats-app><p class="state"><noscript>The statistics pages need JavaScript. </noscript>Loading…</p></div>', 'Exact-deck results from cardgame playtests: win rates, opponents and matchups, with sample sizes.'),
+    'stats/bots/index.html': shell('Check on the bots', 'Stats', `<section class="wrap stats-page bot-page" data-bots-app>
+      <header class="stats-head"><p class="eyebrow">The ranked regulars</p><h1>Check on the bots</h1><p class="lede">Four personalities. One ladder. See who's playing and where they've climbed.</p></header>
+      <div class="bot-toolbar"><a class="text-link" href="/stats/">← Back to statistics</a><div class="bot-controls"><p class="bot-update" data-bot-updated>Waiting for the first check</p><button class="button secondary small" type="button" data-bot-refresh>Refresh now</button></div></div>
+      <p class="bot-note">Updates every 10 seconds while this page is open. Activity reflects the relay's latest connection and match state.</p>
+      <p class="bot-error" role="status" data-bot-message></p><div class="bot-grid" aria-label="Ranked bots" aria-busy="true" data-bot-grid><p>Checking the four bots…</p></div>
+      <noscript><p>Enable JavaScript to see current bot activity and rank.</p></noscript></section>`, 'Check the current activity and ranked progress of Io, Callisto, Europa and Ganymede.', '/bots.js'),
     'account/index.html': shell('Account', 'Account', '<section class="wrap profile-page" data-profile><p class="profile-message"><noscript>Your profile needs JavaScript. </noscript>Loading your account…</p></section>', 'Your cardgame account: rank, balances, profile picture and sign-in methods.') };
 }

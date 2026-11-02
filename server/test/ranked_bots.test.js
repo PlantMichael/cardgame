@@ -189,6 +189,14 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
     if (workerFailure) throw workerFailure;
     return ['io', 'callisto', 'europa', 'ganymede'].every(id => events.filter(e => e.event === 'queued' && e.bot === id).length >= 2);
   }, 'all four retry queue entry after transient database failure');
+  const statusUrl = httpUrl + '/data/bots/status.json';
+  const fleet = await until(async () => {
+    const data = await (await fetch(statusUrl)).json();
+    return data.bots?.some(b => b.activity === 'playing') && data.bots.some(b => b.activity === 'queued') ? data : null;
+  }, 'public status reflects actual playing and queued worker sockets', 20000);
+  const { validStatus } = await import('../../website/bots-core.mjs');
+  assert.ok(validStatus(fleet));
+  assert.deepEqual(fleet.bots.map(b => b.id), ['io','callisto','europa','ganymede']);
   const found = await human.take('ranked_match_found');
   assert.equal(found.server_run, true); assert.match(found.opponent_name, /\[Bot 1\.0\]/);
   assert.ok(['io', 'callisto', 'europa', 'ganymede'].includes(found.opponent_bot.id));
@@ -229,6 +237,18 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   assert.ok(inFlight.length > 0);
   const restartIndex = events.length;
   stop.abort(); await worker;
+  scriptedBot.ws.terminate();
+  const offline = await until(async () => {
+    const data = await (await fetch(statusUrl)).json();
+    return data.bots?.every(b => b.activity === 'offline') ? data : null;
+  }, 'closed actual worker sockets leave offline status', 15000);
+  const savedRanks = (await pool.query(`SELECT b.bot_id,p.rank_bracket,p.rank_in_legend,p.rank_legend_rating,p.rank_lp
+    FROM ranked_bot_accounts b JOIN players p ON p.id=b.player_id`)).rows;
+  for (const bot of offline.bots) {
+    const saved = savedRanks.find(r => r.bot_id === bot.id);
+    assert.deepEqual(bot.rank, { bracket: saved.rank_bracket, inLegend: saved.rank_in_legend,
+      legendRating: saved.rank_legend_rating, lp: saved.rank_lp });
+  }
   stop = new AbortController(); startWorker();
   await until(() => { if (workerFailure) throw workerFailure; return inFlight.every(id => events.slice(restartIndex).some(e => e.event === 'joined' && e.match_id === id)); }, 'fresh worker rejoins existing matches');
 
