@@ -708,8 +708,8 @@ func _run_shop_test_cli() -> void:
 	print("RESULT: %s" % ("PASS" if ok else "FAIL"))
 	get_tree().quit()
 
-## Dev-only headless check for the LOCATION card type (Crypt Chapel is the
-## first one): locations are played from hand into a board slot like a
+## Dev-only headless check for the LOCATION card type using a synthetic card:
+## locations are played from hand into a board slot like a
 ## creature, never attack even if something buffs their attack, can be
 ## attacked and destroyed without dealing retaliation damage, and their
 ## passive fires from the board like any other watcher ability.
@@ -717,20 +717,12 @@ func _run_shop_test_cli() -> void:
 func _run_locations_test_cli() -> void:
 	var ok := true
 
-	var chapel_data := CardDatabase.get_card("cr_021")
-	if chapel_data == null:
-		print("FAIL: Crypt Chapel (cr_021) did not load at all")
-		print("RESULT: FAIL")
-		get_tree().quit()
-		return
-	if chapel_data.card_type != CardData.CardType.LOCATION:
-		print("FAIL: Crypt Chapel is not typed LOCATION")
-		ok = false
-	# The LOCATION enum value has to exist before card_database parses it -
-	# without it the whole rest of crimson.json silently fails to load.
-	if CardDatabase.get_card("cr_009t") == null or CardDatabase.get_card("cr_028") == null:
-		print("FAIL: cards after Crypt Chapel in crimson.json didn't load")
-		ok = false
+	var chapel_data := CardData.new()
+	chapel_data.id = "test_location"
+	chapel_data.card_name = "Test Location"
+	chapel_data.card_type = CardData.CardType.LOCATION
+	chapel_data.health = 8
+	chapel_data.abilities = [Abilities.ON_FRIENDLY_TRANSFORM_GIVE_AMBUSH]
 
 	# Played from hand into a board slot, like a creature.
 	var gs := GameState.new("a", "b", [], [])
@@ -739,10 +731,10 @@ func _run_locations_test_cli() -> void:
 	gs.player.hand.append(chapel)
 	var chapel_minion := gs.play_creature("a", chapel)
 	if chapel_minion == null or gs.player.board.size() != 1 or gs.player.board_slots_used() != 1:
-		print("FAIL: Crypt Chapel didn't land on the board as one slot")
+		print("FAIL: test location didn't land on the board as one slot")
 		ok = false
 	elif not chapel_minion.is_location() or chapel_minion.max_health != 8:
-		print("FAIL: Crypt Chapel should be a location with 8 health, got %d" % chapel_minion.max_health)
+		print("FAIL: test location should be a location with 8 health, got %d" % chapel_minion.max_health)
 		ok = false
 
 	# Never attacks - not even after something hands it attack power.
@@ -750,7 +742,7 @@ func _run_locations_test_cli() -> void:
 		chapel_minion.is_exhausted = false
 		chapel_minion.current_attack += 3
 		if chapel_minion.can_attack():
-			print("FAIL: a buffed Crypt Chapel was allowed to attack")
+			print("FAIL: a buffed test location was allowed to attack")
 			ok = false
 
 	# Passive fires from the board: a friendly creature that transforms gains
@@ -760,7 +752,7 @@ func _run_locations_test_cli() -> void:
 	gs.player.hand.append(runt)
 	var runt_minion := gs.play_creature("a", runt)
 	if runt_minion == null or not runt_minion.has_ability(Abilities.AMBUSH):
-		print("FAIL: Crypt Chapel didn't grant Ambush to a transforming friendly")
+		print("FAIL: test location didn't grant Ambush to a transforming friendly")
 		ok = false
 
 	# Attackable and destroyable, and it deals no damage back.
@@ -774,7 +766,7 @@ func _run_locations_test_cli() -> void:
 	var attacker_hp_before := attacker.current_health
 	gs2.attack(attacker, enemy_chapel)
 	if not gs2.opponent.board.is_empty():
-		print("FAIL: 8 damage should have destroyed the 8-health Crypt Chapel")
+		print("FAIL: 8 damage should have destroyed the 8-health test location")
 		ok = false
 	if gs2.opponent.graveyard.size() != 1:
 		print("FAIL: destroyed location didn't go to the graveyard")

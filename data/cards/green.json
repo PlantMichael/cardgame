@@ -532,5 +532,41 @@
 		"effect_value": 0,
 		"is_token": false,
 		"in_starter": false
+	},
+	{
+		"id": "g_029",
+		"card_name": "The Staller Mk3",
+		"cost": 6,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "LEGENDARY",
+		"tribe": "",
+		"description": "Guardian",
+		"attack": 1,
+		"health": 11,
+		"abilities": [
+			"guardian"
+		],
+		"art": "res://assets/green/bunker.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "g_030",
+		"card_name": "Beam Rifle Soldier",
+		"cost": 4,
+		"color": "GREEN",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Headshot: Deal 1 damage to a minion.",
+		"attack": 2,
+		"health": 2,
+		"abilities": [
+			"headshot_damage_1"
+		],
+		"art": "res://assets/green/flankingrifleman.png",
+		"effect": "",
+		"effect_value": 0
 	}
 ]

@@ -517,5 +517,42 @@
 		"art": "res://assets/orange/carbonmesh.png",
 		"effect": "give_mech_shielded_temp",
 		"effect_value": 3
+	},
+	{
+		"id": "o_027",
+		"card_name": "Morph Drones",
+		"cost": 1,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Headshot: Self-destruct and heal all friendly minions 2.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"headshot_self_destruct_heal"
+		],
+		"art": "res://assets/orange/scraprummager.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "o_028",
+		"card_name": "Morphling Flyer",
+		"cost": 3,
+		"color": "ORANGE",
+		"card_type": "CREATURE",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Pilot 3/3. On pilot: Heal the Mech to full.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"pilot_3_3",
+			"on_pilot_restore_health"
+		],
+		"art": "res://assets/orange/nervousflyer.png",
+		"effect": "",
+		"effect_value": 0
 	}
 ]

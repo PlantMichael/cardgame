@@ -59,7 +59,19 @@ const END_TURN_YETI_DISCOUNT          = "end_turn_yeti_discount"
 const TWO_SLOT                        = "two_slot"
 const TRAMPLE                         = "trample"
 
+const HEADSHOT_DAMAGE := "headshot_damage_1"
+const HEADSHOT_RUMMAGE := "headshot_rummage"
+const HEADSHOT_SHUFFLE_SELF := "headshot_shuffle_self"
+const HEADSHOT_SELF_DESTRUCT_HEAL := "headshot_self_destruct_heal"
+const HEADSHOT_CHALLENGE := "headshot_challenge"
+const DAMAGE_RUMMAGE := "damage_rummage"
+const ON_PLAY_GRAVEYARD_HEALTH := "on_play_graveyard_health"
+const ON_PILOT_RESTORE_HEALTH := "on_pilot_restore_health"
+
 const DEFINITIONS: Dictionary = {
+	DAMAGE_RUMMAGE: { "display": "On Damage: Rummage", "color": Color(0.30, 0.08, 0.42) },
+	ON_PLAY_GRAVEYARD_HEALTH: { "display": "On Play:", "color": Color(0.20, 0.55, 0.75) },
+	ON_PILOT_RESTORE_HEALTH: { "display": "On Pilot: Heal", "color": Color(0.20, 0.55, 0.75) },
 	GUARDIAN:              { "display": "Guardian",    "color": Color(0.55, 0.42, 0.08) },
 	RUSH:                  { "display": "Rush",        "color": Color(0.10, 0.42, 0.10) },
 	REINFORCE:             { "display": "Reinforce",   "color": Color(0.15, 0.55, 0.25) },
@@ -272,7 +284,10 @@ func get_deathrattle_damage_all_except_mech_value(ability: String) -> int:
 	return 0
 
 func is_keyword_tooltip(ability: String) -> bool:
-	return ability in KEYWORD_TOOLTIPS or is_pilot(ability) or is_shielded(ability) or is_enemy_damage_amp(ability) or is_rejuvenate(ability)
+	return ability in KEYWORD_TOOLTIPS or is_pilot(ability) or is_shielded(ability) or is_enemy_damage_amp(ability) or is_rejuvenate(ability) or is_headshot(ability)
+
+func is_headshot(ability: String) -> bool:
+	return ability.begins_with("headshot_")
 
 func get_tooltip_key(ability: String) -> String:
 	if is_pilot(ability):
@@ -301,6 +316,8 @@ const TRANSFORM_COLOR             := Color(0.80, 0.25, 0.10)
 const ON_PILOTED_GAIN_RUSH_COLOR  := Color(0.10, 0.42, 0.10)
 
 func get_display(ability: String) -> String:
+	if is_headshot(ability):
+		return "Headshot"
 	if is_on_play_damage(ability):
 		return "On Play: %d dmg" % get_on_play_damage_value(ability)
 	if is_on_play_aoe_enemy(ability):
@@ -328,6 +345,8 @@ func get_display(ability: String) -> String:
 	return DEFINITIONS[ability]["display"]
 
 func get_color(ability: String) -> Color:
+	if is_headshot(ability):
+		return Color(0.75, 0.30, 0.20)
 	if is_on_play_damage(ability):
 		return ON_PLAY_DAMAGE_COLOR
 	if is_on_play_aoe_enemy(ability):
@@ -418,6 +437,11 @@ func get_transform_health_threshold(ability: String) -> int:
 func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 	for ability in minion.abilities:
 		match ability:
+			ON_PLAY_GRAVEYARD_HEALTH:
+				if owner.graveyard.size() > 10:
+					minion.data = minion.data.clone_instance()
+					minion.data.health += 1
+					gs.gain_max_health(minion, 1)
 			RECON:
 				var drawn = owner.draw_card()
 				if drawn != null and owner.player_id == gs.player.player_id:
@@ -531,7 +555,7 @@ func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 			# GameState._remove_dead_minions).
 			var amp := gs._get_enemy_damage_amp(owner.player_id)
 			for m in enemy.board.duplicate():
-				m.take_damage(damage + amp)
+				gs.damage_minion(m, damage + amp)
 			gs._remove_dead_minions()
 			gs._check_win_condition()
 			break
@@ -579,6 +603,25 @@ func fire_on_attack(attacker: Minion, owner: PlayerState, gs: GameState) -> void
 			ATTACK_RUMMAGE:
 				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": attacker.data.cost, "type_filter": ""})
 
+## Once after a direct hero attack; never called by challenges or damage effects.
+func fire_headshot(attacker: Minion, owner: PlayerState, gs: GameState) -> void:
+	for ability in attacker.abilities.duplicate():
+		match ability:
+			HEADSHOT_DAMAGE:
+				gs.request_choice(owner.player_id, GameState.CHOICE_DAMAGE_TARGET, 1, attacker, {"creatures_only": true})
+			HEADSHOT_RUMMAGE:
+				gs.pending_rummages.append({"player_id": owner.player_id, "max_cost": attacker.data.cost, "type_filter": ""})
+			HEADSHOT_SHUFFLE_SELF:
+				gs.shuffle_minion_into_deck(attacker)
+			HEADSHOT_SELF_DESTRUCT_HEAL:
+				attacker.current_health = 0
+				gs._remove_dead_minions()
+				for friendly in owner.board.duplicate():
+					if friendly in owner.board and not friendly.is_dead() and not friendly.is_location():
+						gs.restore_health(friendly, 2)
+			HEADSHOT_CHALLENGE:
+				gs.request_choice(owner.player_id, GameState.CHOICE_CHALLENGE, 0, attacker)
+
 func fire_on_defend(defender: Minion, owner: PlayerState, gs: GameState) -> void:
 	for ability in defender.abilities:
 		match ability:
@@ -619,7 +662,7 @@ func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 					drawn.append(card)
 			DEATHRATTLE_DRAW_CARD:
 				if not owner.deck.is_empty() and owner.hand.size() < owner.MAX_HAND_SIZE:
-					var card: CardData = owner.deck.pop_back().new_instance(owner.mint_card_uid())
+					var card: CardData = owner.instantiate_drawn_card(owner.deck.pop_back())
 					owner.hand.append(card)
 					drawn.append(card)
 			RUMMAGE_ON_DEATH:
@@ -646,7 +689,7 @@ func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 				# made - see .docs/abilities.md, "damage amplification scope".
 				for p in [gs.player, gs.opponent]:
 					for m in p.board:
-						m.take_damage(1)
+						gs.damage_minion(m, 1)
 				if not minion.data.transform_into.is_empty():
 					var new_data = CardDatabase.get_card(minion.data.transform_into)
 					if new_data != null:
@@ -672,7 +715,7 @@ func fire_on_death(minion: Minion, owner: PlayerState, board_index: int, enemy: 
 				for m in p.board:
 					if m.has_ability(MECH):
 						continue
-					m.take_damage(damage)
+					gs.damage_minion(m, damage)
 			break
 	if YETI in minion.abilities:
 		for watcher in owner.board:
@@ -757,7 +800,7 @@ func _draw_by_tag(owner: PlayerState, tag: String, gs: GameState) -> CardData:
 		return null
 	var chosen: CardData = gs.rand_pick(matching)
 	owner.deck.erase(chosen)
-	var copy: CardData = chosen.new_instance(owner.mint_card_uid())
+	var copy: CardData = owner.instantiate_drawn_card(chosen)
 	owner.hand.append(copy)
 	return copy
 	return copy

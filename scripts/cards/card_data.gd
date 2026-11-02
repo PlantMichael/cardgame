@@ -6,9 +6,10 @@ extends Resource
 ##
 ## The `@export`-ed fields below are the *definition*: they come from
 ## data/cards/*.json via CardDatabase and are shared by every copy of that
-## card. Treat them as immutable at runtime - CardDatabase hands out the one
-## catalog instance per id, so writing to them edits every copy in every
-## match at once.
+## card. Catalog definitions are immutable: writing to CardDatabase's object
+## edits every copy in every match. A physical clone may carry permanent
+## attack/health changes (Salvager, Splinterkin Runt); these travel with it
+## through zone changes, simulation and network views.
 ##
 ## Everything under "Runtime instance state" belongs to one physical copy and
 ## is expected to differ between two copies of the same card. Those fields
@@ -93,7 +94,7 @@ func clone_instance() -> CardData:
 	c.uid = uid
 	return c
 
-## A NEW physical card - drawn from the deck, minted as a token, or copied by
+## A NEW physical card - an initial draw, minted as a token, or copied by
 ## an effect that creates a separate card. Takes its own identity, so it is
 ## never confused with the card it came from.
 func new_instance(new_uid: String) -> CardData:
@@ -104,7 +105,7 @@ func new_instance(new_uid: String) -> CardData:
 
 # Target semantics shared by human presentation and AI enumeration.
 func stratagem_needs_target() -> bool:
-	return effect not in ["destroy_all_creatures", "deal_damage_all_creatures", "deal_damage_all_enemy", "deal_damage_all_enemy_draw_yeti", "buff_all_friendly_attack", "buff_all_friendly_health", "eject_all_pilots", "sludge_spray"]
+	return effect not in ["destroy_all_creatures", "destroy_all_rummage_creature", "deal_damage_all_creatures", "deal_damage_all_enemy", "deal_damage_all_enemy_draw_yeti", "buff_all_friendly_attack", "buff_all_friendly_health", "eject_all_pilots", "sludge_spray"]
 
 func stratagem_needs_creature_target() -> bool:
 	return effect in ["give_ability", "buff_creature", "buff_health", "force_challenge", "poke_bear", "blood_transfusion", "sanguine", "heal", "eject_pilot", "give_mech_shielded_temp", "tainted_blood", "exsanguinate", "blood_boil", "return_friendly_to_hand"]

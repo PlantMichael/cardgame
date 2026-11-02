@@ -11,7 +11,7 @@ var deck: Array[CardData] = []
 var graveyard: Array[CardData] = []
 ## Fatigue: each draw attempted with an empty deck deals one more damage than
 ## the last (1, then 2, then 3, ...), same as Hearthstone. Never resets
-## mid-game — there's no deck-reshuffle mechanic here.
+## mid-game, even if a card is shuffled back into the deck.
 var fatigue_damage: int = 0
 const MAX_BOARD_SIZE = 7
 const MAX_HAND_SIZE = 10
@@ -73,14 +73,16 @@ func draw_card() -> CardData:
 		if log_draws:
 			draw_log.append({"owner": player_id, "uid": "", "card_id": burned.id, "burned": true})
 		return null
-	# A drawn card is a NEW physical card: it gets its own identity, and the
-	# deck entry it came from is a shared catalog definition that must not be
-	# mutated by whatever happens to the card in hand.
-	var card: CardData = deck.pop_back().new_instance(mint_card_uid())
+	var card := instantiate_drawn_card(deck.pop_back())
 	hand.append(card)
 	if log_draws:
 		draw_log.append({"owner": player_id, "uid": card.uid, "card_id": card.id})
 	return card
+
+## Initial deck definitions have no UID; returned physical cards already do.
+## Clone either way so the hand cannot alias the deck or shared catalog.
+func instantiate_drawn_card(entry: CardData) -> CardData:
+	return entry.new_instance(mint_card_uid()) if entry.uid.is_empty() else entry.clone_instance()
 
 func gain_mana_crystal() -> void:
 	max_mana = min(max_mana + 1, MAX_MANA)
@@ -239,7 +241,7 @@ func to_net_dict(reveal_hand: bool = true) -> Dictionary:
 			"hand_size": get_hand_size(),
 			"board": board.map(func(m): return m.to_net_dict()),
 			"deck_size": deck.size(),
-			"graveyard": graveyard.map(func(c): return {"id": c.id, "uid": c.uid}),
+			"graveyard": graveyard.map(func(c): return {"id": c.id, "uid": c.uid, "attack": c.attack, "health": c.health}),
 		}
 	return {
 		"player_id": player_id,
@@ -247,10 +249,10 @@ func to_net_dict(reveal_hand: bool = true) -> Dictionary:
 		"max_mana": max_mana,
 		"current_mana": current_mana,
 		"fatigue_damage": fatigue_damage,
-		"hand": hand.map(func(c): return {"id": c.id, "uid": c.uid, "cost_modifier": c.cost_modifier, "rummage_count": c.rummage_count}),
+		"hand": hand.map(func(c): return {"id": c.id, "uid": c.uid, "cost_modifier": c.cost_modifier, "rummage_count": c.rummage_count, "attack": c.attack, "health": c.health}),
 		"board": board.map(func(m): return m.to_net_dict()),
 		"deck_size": deck.size(),
-		"graveyard": graveyard.map(func(c): return {"id": c.id, "uid": c.uid}),
+		"graveyard": graveyard.map(func(c): return {"id": c.id, "uid": c.uid, "attack": c.attack, "health": c.health}),
 	}
 
 static func from_net_dict(d: Dictionary) -> PlayerState:
@@ -266,6 +268,8 @@ static func from_net_dict(d: Dictionary) -> PlayerState:
 			var c := card.new_instance(str(h.get("uid", "")))
 			c.cost_modifier = int(h.get("cost_modifier", 0))
 			c.rummage_count = int(h.get("rummage_count", 0))
+			c.attack = int(h.get("attack", card.attack))
+			c.health = int(h.get("health", card.health))
 			ps.hand.append(c)
 	ps.board.clear()
 	for bd in d["board"]:
@@ -282,5 +286,9 @@ static func from_net_dict(d: Dictionary) -> PlayerState:
 		var guid := str(g.get("uid", "")) if g is Dictionary else ""
 		var card = CardDatabase.get_card(gid)
 		if card != null:
-			ps.graveyard.append(card.new_instance(guid))
+			var copy := card.new_instance(guid)
+			if g is Dictionary:
+				copy.attack = int(g.get("attack", card.attack))
+				copy.health = int(g.get("health", card.health))
+			ps.graveyard.append(copy)
 	return ps

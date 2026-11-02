@@ -2208,6 +2208,212 @@ static func _test_player_views(card_id: String) -> void:
 
 # --- Entry point ----------------------------------------------------------
 
+static func _test_headshot_cards() -> void:
+	print("[Headshot cards]")
+	var gs := _fresh_match("g_001")
+	var beam := _put_on_board(gs, "a", "g_030")
+	var victim := _put_on_board(gs, "b", "b_009")
+	var shot := gs.execute({"type": "attack", "actor": "a", "attacker_instance_id": beam.instance_id, "target_player_id": "b"})
+	_check("Headshot follows an accepted direct player attack", shot["ok"] and gs.has_pending_choice())
+	_eq("Beam first deals its normal attack damage", gs.opponent.hero_health, 28)
+	if gs.has_pending_choice():
+		_check("Beam choice allows creatures but neither hero", victim.instance_id in gs.pending_choice["options"] and not GameState.hero_option("b") in gs.pending_choice["options"] and not GameState.hero_option("a") in gs.pending_choice["options"])
+		var sim := gs.duplicate_for_sim()
+		HeadlessTurn.answer_pending_choice(sim)
+		_check("AI resolves Headshot through the shared choice without touching live state", sim.find_minion(victim.instance_id) == null and victim in gs.opponent.board)
+		var choice_id := str(gs.pending_choice["id"])
+		var before := gs.state_hash()
+		_check("Headshot rejects a hero without changing state", not gs.execute({"type": "answer_choice", "actor": "a", "choice_id": choice_id, "selection": GameState.hero_option("b")})["ok"] and gs.state_hash() == before)
+		_check("Headshot target choice resolves through execute", gs.execute({"type": "answer_choice", "actor": "a", "choice_id": choice_id, "selection": victim.instance_id})["ok"])
+		_check("Beam's chosen one-health creature dies", victim not in gs.opponent.board)
+	var trade := _fresh_match("g_001")
+	var rifle := _put_on_board(trade, "a", "g_030")
+	var enemy := _put_on_board(trade, "b", "b_009")
+	var combat := trade.execute({"type": "attack", "actor": "a", "attacker_instance_id": rifle.instance_id, "target_instance_id": enemy.instance_id})
+	_check("attacking a creature does not trigger Headshot", combat["ok"] and not trade.has_pending_choice())
+	var lethal := _fresh_match("g_001")
+	var finisher := _put_on_board(lethal, "a", "g_030")
+	lethal.opponent.hero_health = 2
+	lethal.execute({"type": "attack", "actor": "a", "attacker_instance_id": finisher.instance_id, "target_player_id": "b"})
+	_check("lethal Headshot attack ends without a pending choice", lethal.winner_id == "a" and not lethal.has_pending_choice())
+	var salvage := _fresh_match("g_001")
+	var behemoth := _put_on_board(salvage, "a", "b_025")
+	salvage.player.graveyard.append(CardDatabase.get_card("b_002").new_instance(salvage.player.mint_card_uid()))
+	salvage.player.graveyard.append(CardDatabase.get_card("b_026").new_instance(salvage.player.mint_card_uid()))
+	salvage.execute({"type": "attack", "actor": "a", "attacker_instance_id": behemoth.instance_id, "target_player_id": "b"})
+	_check("Behemoth offers lesser-cost Rummage, excluding equal cost", salvage.has_pending_choice() and "b_002" in salvage.pending_choice["options"] and "b_026" not in salvage.pending_choice["options"])
+	if salvage.has_pending_choice():
+		_answer(salvage, "b_002")
+		var recovered: CardData = salvage.player.hand.back()
+		_check("Headshot uses normal Rummage history and discount", recovered.id == "b_002" and recovered.rummage_count == 1 and recovered.effective_cost() == recovered.cost - 1)
+	var no_salvage := _fresh_match("g_001")
+	var empty_behemoth := _put_on_board(no_salvage, "a", "b_025")
+	no_salvage.execute({"type": "attack", "actor": "a", "attacker_instance_id": empty_behemoth.instance_id, "target_player_id": "b"})
+	_check("Headshot with no Rummage options finishes without a prompt", not no_salvage.has_pending_choice())
+
+static func _test_damage_rummage_cards() -> void:
+	print("[damage-triggered Rummage and Rust Grenade]")
+	for variant in ["normal", "shielded", "fatal", "dual"]:
+		var gs := _fresh_match("g_001")
+		var courier := _put_on_board(gs, "a", "b_026")
+		var enemy := _put_on_board(gs, "b", "b_009")
+		enemy.current_health = 20
+		enemy.max_health = 20
+		enemy.current_attack = 1
+		gs.player.graveyard.append(CardDatabase.get_card("b_009").new_instance(gs.player.mint_card_uid()))
+		gs.player.graveyard.append(CardDatabase.get_card("g_001").new_instance(gs.player.mint_card_uid()))
+		if variant == "shielded": courier.abilities.append("shielded_1")
+		if variant == "fatal": courier.current_health = 1
+		if variant == "dual": courier.abilities.append(Abilities.DUAL_STRIKE)
+		var result := gs.execute({"type": "attack", "actor": "a", "attacker_instance_id": courier.instance_id, "target_instance_id": enemy.instance_id})
+		_check("Courier combat accepted: " + variant, result["ok"])
+		if variant == "shielded":
+			_check("prevented damage creates no Rummage", courier.current_health == 6 and not gs.has_pending_choice())
+		else:
+			_check("positive damage retains Rummage even on death: " + variant, gs.has_pending_choice() and "b_009" in gs.pending_choice["options"])
+			if gs.has_pending_choice(): _answer(gs, "b_009")
+			if variant == "dual":
+				_check("two positive hits produce two independent Rummages", gs.has_pending_choice() and courier.current_health == 4)
+				if gs.has_pending_choice(): _answer(gs, "g_001")
+			if variant == "fatal": _check("the fatal-hit source is already in its graveyard", courier not in gs.player.board and courier.data in gs.player.graveyard)
+			_check("Courier damage reactions finish", not gs.has_pending_choice())
+	var spells := _fresh_match("g_001")
+	spells.player.max_mana = 10
+	var target := _put_on_board(spells, "b", "b_026")
+	spells.opponent.graveyard.append(CardDatabase.get_card("b_009").new_instance(spells.opponent.mint_card_uid()))
+	_play(spells, "b_008")
+	_answer(spells, target.instance_id)
+	_check("on-play damage opens Rummage for the damaged opponent", target.current_health == 4 and spells.has_pending_choice() and spells.pending_choice["player_id"] == "b")
+	if spells.has_pending_choice(): _answer(spells, "")
+	for hit in 2:
+		var spell := _hand_add(spells, "a", "gen_str_001")
+		var damaged := _play_stratagem(spells, "a", spell, target.instance_id)
+		_check("stratagem damage retains Courier's reaction: " + str(hit), damaged["ok"] and spells.has_pending_choice() and spells.pending_choice["player_id"] == "b")
+		if spells.has_pending_choice(): _answer(spells, "")
+	_check("fatal spell damage also removes the Courier", target not in spells.opponent.board)
+	var wipe := _fresh_match("g_001")
+	wipe.player.max_mana = 10
+	var revive := _put_on_board(wipe, "a", "b_026")
+	_put_on_board(wipe, "b", "b_009")
+	wipe.player.graveyard.append(CardDatabase.get_card("g_str_001").new_instance(wipe.player.mint_card_uid()))
+	var grenade := _hand_add(wipe, "a", "b_str_004")
+	var blast := wipe.execute({"type": "play_stratagem", "actor": "a", "card_uid": grenade.uid})
+	_check("Rust Grenade wipes both boards before its Rummage", blast["ok"] and wipe.player.board.is_empty() and wipe.opponent.board.is_empty() and wipe.has_pending_choice())
+	if wipe.has_pending_choice():
+		_check("Grenade can select its newly destroyed creature but no stratagem", "b_026" in wipe.pending_choice["options"] and "g_str_001" not in wipe.pending_choice["options"] and "b_str_004" not in wipe.pending_choice["options"])
+		_answer(wipe, "b_026")
+		_check("Grenade revives the creature without inventing a damage trigger", wipe.player.board.size() == 1 and wipe.player.board[0].data.id == "b_026" and wipe.player.board[0].current_health == 6 and not wipe.has_pending_choice() and revive not in wipe.player.board)
+
+static func _test_headshot_returns_and_permanence() -> void:
+	print("[returned card identity and permanent health]")
+	for draw_mode in ["ordinary", "death"]:
+		var gs := _fresh_match("g_001")
+		gs.player.max_mana = 10
+		var lord := _put_on_board(gs, "a", "b_027")
+		lord.data.rummage_count = 2
+		while gs.player.hand.size() < PlayerState.MAX_HAND_SIZE:
+			_hand_add(gs, "a", "g_001")
+		var uid := lord.card_uid
+		var sim := gs.duplicate_for_sim()
+		var command := {"type": "attack", "actor": "a", "attacker_instance_id": lord.instance_id, "target_player_id": "b"}
+		gs.execute(command)
+		sim.execute(command)
+		_check("Knucklepunch shuffles deterministically even with a full hand", lord not in gs.player.board and gs.state_hash() == sim.state_hash())
+		var returned: CardData = null
+		for card in gs.player.deck:
+			if card.uid == uid: returned = card
+		_check("Knucklepunch returns the same card without a death", returned != null and not gs.player.graveyard.has(lord.data))
+		if returned == null: continue
+		# Arrange the next draw to exercise the returned entry rather than a definition.
+		gs.player.deck.erase(returned)
+		gs.player.deck.append(returned)
+		gs.player.hand.clear()
+		if draw_mode == "ordinary":
+			gs.player.draw_card()
+		else:
+			var hauler := _put_on_board(gs, "a", "b_015")
+			var enemy := _put_on_board(gs, "b", "b_009")
+			enemy.current_health = 10
+			gs.execute({"type": "attack", "actor": "a", "attacker_instance_id": hauler.instance_id, "target_instance_id": enemy.instance_id})
+		var drawn := gs.player.find_card_in_hand(uid)
+		_check("returned UID and runtime history survive redraw: " + draw_mode, drawn != null and drawn.rummage_count == 2)
+		if drawn != null:
+			var replay := gs.execute({"type": "play_creature", "actor": "a", "card_uid": uid})
+			_check("redrawn Knucklepunch replays with its identity and Ambush", replay["ok"] and replay["minion"].card_uid == uid and replay["minion"].has_ability(Abilities.AMBUSH))
+	for count in [10, 11]:
+		var gs := _fresh_match("g_001")
+		gs.player.max_mana = 10
+		for i in count:
+			gs.player.graveyard.append(CardDatabase.get_card("b_009").new_instance(gs.player.mint_card_uid()))
+		var result := _play(gs, "b_028")
+		var runt: Minion = result["minion"]
+		_eq("Runt's strict graveyard threshold: " + str(count), runt.max_health, 1 if count == 10 else 2)
+		_eq("Runt never changes its catalog definition", CardDatabase.get_card("b_028").health, 1)
+		if count == 10: continue
+		var body_mirror := PlayerState.from_net_dict(gs.player.to_net_dict(true))
+		_eq("permanent card health survives a board network round trip", body_mirror.board[0].data.health, 2)
+		_play(gs, "b_008")
+		_answer(gs, runt.instance_id)
+		var grave_mirror := PlayerState.from_net_dict(gs.player.to_net_dict(true))
+		_eq("permanent health survives death and graveyard serialization", grave_mirror.graveyard.back().health, 2)
+		_play(gs, "b_004")
+		_answer(gs, "b_028")
+		var recovered: CardData = gs.player.hand.back()
+		var hand_mirror := PlayerState.from_net_dict(gs.player.to_net_dict(true))
+		_eq("Rummaged hand card carries its health over the network", hand_mirror.hand.back().health, 2)
+		var replay := gs.execute({"type": "play_creature", "actor": "a", "card_uid": recovered.uid})
+		_check("qualifying replay retains and grows the permanent bonus", replay["ok"] and replay["minion"].max_health == 3 and replay["minion"].data.health == 3)
+		var another := _hand_add(gs, "a", "b_028")
+		gs.player.current_mana = 0
+		var before := gs.state_hash()
+		var sim := gs.duplicate_for_sim()
+		sim.execute({"type": "play_creature", "actor": "a", "card_uid": another.uid})
+		_check("simulating Runt cannot buff the live copy", another.health == 1 and gs.state_hash() == before)
+		var changed := gs.duplicate_for_sim()
+		changed.player.hand.back().health += 1
+		_check("permanent card stats participate in the replay hash", changed.state_hash() != gs.state_hash())
+		var legacy := gs.player.to_net_dict(true)
+		for entry in legacy["hand"]:
+			entry.erase("attack")
+			entry.erase("health")
+		var old_view := PlayerState.from_net_dict(legacy)
+		_eq("older hand payloads retain printed defaults", old_view.hand.back().health, 1)
+
+static func _test_headshot_support_cards() -> void:
+	print("[Headshot heal, Pilot, Challenge and Guardian]")
+	var drones := _fresh_match("g_001")
+	var drone := _put_on_board(drones, "a", "o_027")
+	var wounded := _put_on_board(drones, "a", "b_026")
+	var full := _put_on_board(drones, "a", "b_009")
+	wounded.current_health = wounded.max_health - 3
+	drones.execute({"type": "attack", "actor": "a", "attacker_instance_id": drone.instance_id, "target_player_id": "b"})
+	_check("Drones die after hitting the player, then heal friendly bodies", drone not in drones.player.board and drone.data in drones.player.graveyard and drones.opponent.hero_health == 29 and wounded.current_health == wounded.max_health - 1)
+	_eq("Drones healing stays capped at maximum", full.current_health, full.max_health)
+	var pilot_game := _fresh_match("g_001")
+	var flyer := _put_on_board(pilot_game, "a", "o_028")
+	var mech := _put_on_board(pilot_game, "a", "o_025")
+	mech.current_health = 1
+	var attack_before := mech.current_attack
+	var max_before := mech.max_health
+	var piloted := pilot_game.execute({"type": "pilot", "actor": "a", "pilot_instance_id": flyer.instance_id, "target_instance_id": mech.instance_id})
+	_check("Morphling Flyer uses the real Pilot action and heals the new maximum", piloted["ok"] and mech.is_piloted and flyer not in pilot_game.player.board and mech.current_attack == attack_before + 3 and mech.max_health == max_before + 3 and mech.current_health == mech.max_health)
+	var challenge := _fresh_match("g_001")
+	var patael := _put_on_board(challenge, "a", "t_028")
+	var enemy := _put_on_board(challenge, "b", "b_009")
+	enemy.current_attack = 20
+	challenge.execute({"type": "attack", "actor": "a", "attacker_instance_id": patael.instance_id, "target_player_id": "b"})
+	_check("Pa'tael's Headshot opens an enemy Challenge", challenge.has_pending_choice() and enemy.instance_id in challenge.pending_choice["options"])
+	if challenge.has_pending_choice(): _answer(challenge, enemy.instance_id)
+	_check("Pa'tael challenges without combat damage or recursive Headshot", enemy not in challenge.opponent.board and patael.current_health == 1 and not challenge.has_pending_choice())
+	var guardian := _fresh_match("g_001")
+	guardian.player.max_mana = 10
+	var stall := _play(guardian, "g_029")
+	var guard: Minion = stall["minion"]
+	var attacker := _put_on_board(guardian, "b", "b_009")
+	guardian.execute({"type": "end_turn", "actor": "a"})
+	var face := guardian.execute({"type": "attack", "actor": "b", "attacker_instance_id": attacker.instance_id, "target_player_id": "a"})
+	_check("Staller's 1/11 Guardian body protects its hero", guard.current_attack == 1 and guard.max_health == 11 and not face["ok"])
+
 static func run() -> int:
 	_failures = 0
 	_checks = 0
@@ -2259,6 +2465,10 @@ static func run() -> int:
 	_test_stray_ghost_cleanup()
 	_test_match_recorder()
 	_test_card_play_counts()
+	_test_headshot_cards()
+	_test_damage_rummage_cards()
+	_test_headshot_returns_and_permanence()
+	_test_headshot_support_cards()
 	_test_player_views(card_id)
 	print("CORE TESTS: %d checks, %d failed" % [_checks, _failures])
 	print("RESULT: %s" % ("PASS" if _failures == 0 else "FAIL"))

@@ -7,5 +7,12 @@
 	],
 	"Colossal": [
 		"two_slot"
+	],
+	"Headshot": [
+		"headshot_damage",
+		"headshot_rummage",
+		"headshot_shuffle_self",
+		"headshot_self_destruct_heal",
+		"headshot_challenge"
 	]
 }

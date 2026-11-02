@@ -493,5 +493,94 @@
 		"art": "res://assets/black/hotgarbage.png",
 		"effect": "sludge_spray",
 		"effect_value": 2
+	},
+	{
+		"id": "b_025",
+		"card_name": "Splinterkin Behemoth",
+		"cost": 7,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "",
+		"description": "Headshot: Rummage.",
+		"attack": 5,
+		"health": 7,
+		"abilities": [
+			"headshot_rummage"
+		],
+		"art": "res://assets/black/trashcolossus.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_026",
+		"card_name": "Scrap Courier",
+		"cost": 7,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "EPIC",
+		"tribe": "",
+		"description": "When this creature takes damage, Rummage.",
+		"attack": 6,
+		"health": 6,
+		"abilities": [
+			"damage_rummage"
+		],
+		"art": "res://assets/black/debrishauler.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_str_004",
+		"card_name": "Rust Grenade",
+		"cost": 9,
+		"color": "BLACK",
+		"card_type": "STRATAGEM",
+		"rarity": "RARE",
+		"tribe": "",
+		"description": "Destroy all minions, then Rummage a creature and put it on the battlefield.",
+		"attack": 0,
+		"health": 0,
+		"abilities": [],
+		"art": "res://assets/black/hotgarbage.png",
+		"effect": "destroy_all_rummage_creature",
+		"effect_value": 0
+	},
+	{
+		"id": "b_027",
+		"card_name": "Lord Knucklepunch",
+		"cost": 4,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "LEGENDARY",
+		"tribe": "",
+		"description": "Ambush. Headshot: Shuffle this creature into its owner's library.",
+		"attack": 7,
+		"health": 1,
+		"abilities": [
+			"ambush",
+			"headshot_shuffle_self"
+		],
+		"art": "res://assets/black/clutterpunk.png",
+		"effect": "",
+		"effect_value": 0
+	},
+	{
+		"id": "b_028",
+		"card_name": "Splinterkin Runt",
+		"cost": 2,
+		"color": "BLACK",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"tribe": "",
+		"description": "On play: If you have more than 10 cards in your graveyard, gain +0/+1 permanently.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"on_play_graveyard_health"
+		],
+		"art": "res://assets/black/trashrunt.png",
+		"effect": "",
+		"effect_value": 0
 	}
 ]

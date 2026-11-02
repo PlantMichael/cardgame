@@ -20,6 +20,7 @@ of these, not copying a four-line sequence:
 | `GameState.gain_max_health(target, n)` | +n to both current and maximum health (a buff) |
 | `GameState.restore_health(target, n)` | heal up to the existing maximum (no max change) |
 | `GameState.apply_on_play_damage(target, n, source_id)` | on-play / triggered damage, with amplification |
+| `GameState.damage_minion(target, n)` | actual damage after shield/immunity/amplify math; queues positive-damage Rummage before death cleanup |
 | `GameState.sanguine_recipients(actor_id, donor)` | legal Drain recipients |
 
 `gain_max_health()` runs Crypt Hunger's replacement, Apothecary's bonus and the
@@ -208,8 +209,18 @@ Abilities are plain strings stored on `CardData.abilities` and copied to `Minion
 | `ATTACK_RUMMAGE` | `"attack_rummage"` | When this minion attacks: rummage a card from your graveyard costing less than this card (queued via `fire_on_attack`) |
 | `ON_PLAY_TRANSFORM` | `"on_play_transform"` | On play: immediately transform into the card named by `CardData.transform_into`, with no player choice (displayed as "On Play: Morph"); the unprompted counterpart to `ON_PLAY_TRANSFORM_CHOICE` |
 | `DEATHRATTLE_DAMAGE_ALL_EXCEPT_MECH` | `"deathrattle_damage_all_except_mech_N"` (e.g. `"deathrattle_damage_all_except_mech_3"`) | On death: deal N damage to every creature on **both** boards except those with the `MECH` tag |
+| `HEADSHOT_DAMAGE` | `"headshot_damage_1"` | After a direct player attack: choose a creature to take 1 damage |
+| `HEADSHOT_RUMMAGE` | `"headshot_rummage"` | After a direct player attack: normal Rummage |
+| `HEADSHOT_SHUFFLE_SELF` | `"headshot_shuffle_self"` | After a direct player attack: return this physical card to its shuffled deck |
+| `HEADSHOT_SELF_DESTRUCT_HEAL` | `"headshot_self_destruct_heal"` | After a direct player attack: die, then heal friendly creatures 2 |
+| `HEADSHOT_CHALLENGE` | `"headshot_challenge"` | After a direct player attack: choose an enemy to Challenge |
+| `DAMAGE_RUMMAGE` | `"damage_rummage"` | Positive damage, including fatal damage, queues normal Rummage |
+| `ON_PLAY_GRAVEYARD_HEALTH` | `"on_play_graveyard_health"` | More than ten graveyard cards on play grants permanent +0/+1 |
+| `ON_PILOT_RESTORE_HEALTH` | `"on_pilot_restore_health"` | After Pilot bonuses: restore the Mech to its maximum health |
 
-The `Abilities` autoload holds all constants and their display metadata in `DEFINITIONS`. PILOT, ON_PLAY_DAMAGE, ON_PLAY_AOE_ENEMY, ON_REINFORCE_DAMAGE, ON_ANY_REINFORCE_SHOT, TRANSFORM, TRANSFORM_AT_MAX_HEALTH, SHIELDED, and ENEMY_DAMAGE_AMP are handled separately via helper functions (e.g. `is_pilot`, `is_on_play_damage`, `is_shielded`, `get_shield_value`, `is_enemy_damage_amp`, `get_enemy_damage_amp_value`) because their display strings or values are dynamic.
+The `Abilities` autoload holds all constants and their display metadata in `DEFINITIONS`. PILOT, ON_PLAY_DAMAGE, ON_PLAY_AOE_ENEMY, ON_REINFORCE_DAMAGE, ON_ANY_REINFORCE_SHOT, TRANSFORM, TRANSFORM_AT_MAX_HEALTH, SHIELDED, and ENEMY_DAMAGE_AMP are handled separately via helper functions (e.g. `is_pilot`, `is_on_play_damage`, `is_shielded`, `get_shield_value`, `is_enemy_damage_amp`, `get_enemy_damage_amp_value`) because their display strings or values are dynamic. Headshot keys share display/tooltip metadata through `is_headshot`.
+
+
 
 ## Tribes vs Keywords
 
@@ -225,3 +236,20 @@ To add a new tribe: add its constant to `TRIBES` in `abilities.gd`.
 1. Add a constant and entry in `DEFINITIONS` in `abilities.gd`
 2. Handle it in `trigger_death()` if it has a death effect
 3. If the AI needs to factor it into decisions, add scoring/target-pick logic to `AIHeuristics` and/or on-play/pending-resolution handling to `HeadlessTurn` (see `.docs/ai.md`) — not directly in `ai_controller.gd`, so both the greedy policy and the MCTS search see it consistently
+
+## Headshot and new triggers
+
+`fire_headshot()` runs once after a direct enemy-player attack, before attack
+transformation, and only if neither hero has died. Challenges and indirect damage
+do not invoke it. Its `headshot_*` effects use the existing creature-only damage
+choice, Rummage queue, physical-card return, self-death/heal pipeline and Challenge
+choice. They share Headshot tooltip/display mapping. Choices and their targets
+remain Core-owned, so the AI evaluates the same commands as a human.
+
+`damage_rummage` (Scrap Courier) queues once for each positive damage instance,
+even a fatal one; prevented/zero damage and destruction do not queue it.
+`on_play_graveyard_health` (Splinterkin Runt) gives its physical card +1 health
+when the graveyard has more than ten cards, then applies the live health buff.
+`on_pilot_restore_health` (Morphling Flyer) restores the Mech after Pilot bonuses.
+Rust Grenade resolves destruction/deaths, then queues normal lesser-cost
+creature-only Rummage with the existing put-into-play behavior.

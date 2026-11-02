@@ -15,5 +15,6 @@
 	"Ambush": "Cannot be targeted when played. Loses Ambush after it attacks.",
 	"Amplify": "While in play, all damage dealt to enemy creatures is increased by X.",
 	"Trample": "Damage beyond what was needed to kill the defending minion hits the enemy hero.",
-	"Colossal": "Takes up two of your seven board slots."
+	"Colossal": "Takes up two of your seven board slots.",
+	"Headshot": "After this creature attacks the enemy player, activate its Headshot effect."
 }

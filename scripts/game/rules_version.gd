@@ -11,4 +11,6 @@ extends RefCounted
 ##    text promised a conditional Recon that nothing implemented.
 ## 3: Sludgewalker Scout gains Recon; Ancient Abominable becomes 11/11
 ##    and Gate Yeti becomes 3/3.
-const RULES_VERSION := 3
+## 4: Headshot card batch, damage-triggered Rummage, permanent card stats,
+##    returned-card draw identity, and removal of Crypt Chapel.
+const RULES_VERSION := 4

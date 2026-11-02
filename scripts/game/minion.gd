@@ -115,6 +115,8 @@ func to_dict() -> Dictionary:
 	return {
 		"instance_id": instance_id,
 		"card_id": data.id,
+		"card_attack": data.attack,
+		"card_health": data.health,
 		"owner_id": owner_id,
 		"current_attack": current_attack,
 		"current_health": current_health,
@@ -129,6 +131,8 @@ func to_net_dict() -> Dictionary:
 	return {
 		"instance_id": instance_id,
 		"card_id": data.id,
+		"card_attack": data.attack,
+		"card_health": data.health,
 		"owner_id": owner_id,
 		"current_attack": current_attack,
 		"current_health": current_health,
@@ -151,6 +155,8 @@ static func from_net_dict(d: Dictionary) -> Minion:
 	if card == null:
 		return null
 	var m := Minion.new(card.new_instance(""), str(d["owner_id"]), str(d["instance_id"]))
+	m.data.attack = int(d.get("card_attack", card.attack))
+	m.data.health = int(d.get("card_health", card.health))
 	m.current_attack = int(d["current_attack"])
 	m.current_health = int(d["current_health"])
 	m.max_health = int(d["max_health"])

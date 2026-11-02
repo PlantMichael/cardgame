@@ -492,6 +492,87 @@
       "transformChoices": []
     },
     {
+      "id": "b_025",
+      "name": "Splinterkin Behemoth",
+      "color": "BLACK",
+      "type": "CREATURE",
+      "rarity": "EPIC",
+      "manaCost": 7,
+      "attack": 5,
+      "health": 7,
+      "tribe": null,
+      "description": "Headshot: Rummage.",
+      "abilities": [
+        "headshot_rummage"
+      ],
+      "collectible": true,
+      "isToken": false,
+      "isTransformForm": false,
+      "transformInto": null,
+      "transformChoices": []
+    },
+    {
+      "id": "b_026",
+      "name": "Scrap Courier",
+      "color": "BLACK",
+      "type": "CREATURE",
+      "rarity": "EPIC",
+      "manaCost": 7,
+      "attack": 6,
+      "health": 6,
+      "tribe": null,
+      "description": "When this creature takes damage, Rummage.",
+      "abilities": [
+        "damage_rummage"
+      ],
+      "collectible": true,
+      "isToken": false,
+      "isTransformForm": false,
+      "transformInto": null,
+      "transformChoices": []
+    },
+    {
+      "id": "b_027",
+      "name": "Lord Knucklepunch",
+      "color": "BLACK",
+      "type": "CREATURE",
+      "rarity": "LEGENDARY",
+      "manaCost": 4,
+      "attack": 7,
+      "health": 1,
+      "tribe": null,
+      "description": "Ambush. Headshot: Shuffle this creature into its owner's library.",
+      "abilities": [
+        "ambush",
+        "headshot_shuffle_self"
+      ],
+      "collectible": true,
+      "isToken": false,
+      "isTransformForm": false,
+      "transformInto": null,
+      "transformChoices": []
+    },
+    {
+      "id": "b_028",
+      "name": "Splinterkin Runt",
+      "color": "BLACK",
+      "type": "CREATURE",
+      "rarity": "COMMON",
+      "manaCost": 2,
+      "attack": 1,
+      "health": 1,
+      "tribe": null,
+      "description": "On play: If you have more than 10 cards in your graveyard, gain +0/+1 permanently.",
+      "abilities": [
+        "on_play_graveyard_health"
+      ],
+      "collectible": true,
+      "isToken": false,
+      "isTransformForm": false,
+      "transformInto": null,
+      "transformChoices": []
+    },
+    {
       "id": "b_str_001",
       "name": "Trash Pact",
       "color": "BLACK",
@@ -542,6 +623,24 @@
       "health": null,
       "tribe": null,
       "description": "Deal 2 damage to enemy creatures. Whenever this is rummaged, deal 1 more.",
+      "abilities": [],
+      "collectible": true,
+      "isToken": false,
+      "isTransformForm": false,
+      "transformInto": null,
+      "transformChoices": []
+    },
+    {
+      "id": "b_str_004",
+      "name": "Rust Grenade",
+      "color": "BLACK",
+      "type": "STRATAGEM",
+      "rarity": "RARE",
+      "manaCost": 9,
+      "attack": null,
+      "health": null,
+      "tribe": null,
+      "description": "Destroy all minions, then Rummage a creature and put it on the battlefield.",
       "abilities": [],
       "collectible": true,
       "isToken": false,
@@ -1060,26 +1159,6 @@
       "description": "On play: swap the healths of two friendly minions",
       "abilities": [
         "on_play_swap_friendly_health"
-      ],
-      "collectible": true,
-      "isToken": false,
-      "isTransformForm": false,
-      "transformInto": null,
-      "transformChoices": []
-    },
-    {
-      "id": "cr_021",
-      "name": "Crypt Chapel",
-      "color": "CRIMSON",
-      "type": "LOCATION",
-      "rarity": "COMMON",
-      "manaCost": 3,
-      "attack": null,
-      "health": 8,
-      "tribe": null,
-      "description": "When a friendly creature transforms, give it Ambush.",
-      "abilities": [
-        "on_friendly_transform_give_ambush"
       ],
       "collectible": true,
       "isToken": false,
@@ -1865,6 +1944,46 @@
       "description": "Reinforce 4.",
       "abilities": [
         "reinforce_4"
+      ],
+      "collectible": true,
+      "isToken": false,
+      "isTransformForm": false,
+      "transformInto": null,
+      "transformChoices": []
+    },
+    {
+      "id": "g_029",
+      "name": "The Staller Mk3",
+      "color": "GREEN",
+      "type": "CREATURE",
+      "rarity": "LEGENDARY",
+      "manaCost": 6,
+      "attack": 1,
+      "health": 11,
+      "tribe": null,
+      "description": "Guardian",
+      "abilities": [
+        "guardian"
+      ],
+      "collectible": true,
+      "isToken": false,
+      "isTransformForm": false,
+      "transformInto": null,
+      "transformChoices": []
+    },
+    {
+      "id": "g_030",
+      "name": "Beam Rifle Soldier",
+      "color": "GREEN",
+      "type": "CREATURE",
+      "rarity": "RARE",
+      "manaCost": 4,
+      "attack": 2,
+      "health": 2,
+      "tribe": null,
+      "description": "Headshot: Deal 1 damage to a minion.",
+      "abilities": [
+        "headshot_damage_1"
       ],
       "collectible": true,
       "isToken": false,
@@ -2816,6 +2935,47 @@
       "transformChoices": []
     },
     {
+      "id": "o_027",
+      "name": "Morph Drones",
+      "color": "ORANGE",
+      "type": "CREATURE",
+      "rarity": "RARE",
+      "manaCost": 1,
+      "attack": 1,
+      "health": 1,
+      "tribe": null,
+      "description": "Headshot: Self-destruct and heal all friendly minions 2.",
+      "abilities": [
+        "headshot_self_destruct_heal"
+      ],
+      "collectible": true,
+      "isToken": false,
+      "isTransformForm": false,
+      "transformInto": null,
+      "transformChoices": []
+    },
+    {
+      "id": "o_028",
+      "name": "Morphling Flyer",
+      "color": "ORANGE",
+      "type": "CREATURE",
+      "rarity": "RARE",
+      "manaCost": 3,
+      "attack": 1,
+      "health": 1,
+      "tribe": null,
+      "description": "Pilot 3/3. On pilot: Heal the Mech to full.",
+      "abilities": [
+        "pilot_3_3",
+        "on_pilot_restore_health"
+      ],
+      "collectible": true,
+      "isToken": false,
+      "isTransformForm": false,
+      "transformInto": null,
+      "transformChoices": []
+    },
+    {
       "id": "o_str_002",
       "name": "Nanotech",
       "color": "ORANGE",
@@ -3424,6 +3584,27 @@
       "tribe": "yeti",
       "description": "",
       "abilities": [],
+      "collectible": true,
+      "isToken": false,
+      "isTransformForm": false,
+      "transformInto": null,
+      "transformChoices": []
+    },
+    {
+      "id": "t_028",
+      "name": "Pa'tael",
+      "color": "TEAL",
+      "type": "CREATURE",
+      "rarity": "LEGENDARY",
+      "manaCost": 3,
+      "attack": 1,
+      "health": 1,
+      "tribe": null,
+      "description": "Ethereal. Headshot: Challenge.",
+      "abilities": [
+        "combat_immune",
+        "headshot_challenge"
+      ],
       "collectible": true,
       "isToken": false,
       "isTransformForm": false,

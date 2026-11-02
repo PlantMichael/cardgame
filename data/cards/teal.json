@@ -569,5 +569,24 @@
 		"effect_value": 0,
 		"is_token": false,
 		"in_starter": false
+	},
+	{
+		"id": "t_028",
+		"card_name": "Pa'tael",
+		"cost": 3,
+		"color": "TEAL",
+		"card_type": "CREATURE",
+		"rarity": "LEGENDARY",
+		"tribe": "",
+		"description": "Ethereal. Headshot: Challenge.",
+		"attack": 1,
+		"health": 1,
+		"abilities": [
+			"combat_immune",
+			"headshot_challenge"
+		],
+		"art": "res://assets/teal/iceologist.png",
+		"effect": "",
+		"effect_value": 0
 	}
 ]

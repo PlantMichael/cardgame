@@ -12,8 +12,12 @@ var rummage_count: int = 0  # how often this copy has been rummaged
 ```
 
 `CardDatabase` hands out one shared catalog object per id, so the exported
-fields must be treated as immutable at runtime — writing to them edits every
-copy in every match.
+fields on that shared object must be treated as immutable. Physical clones may
+carry permanent attack/health changes (Salvager and Splinterkin Runt); these stay
+on that copy through death, Rummage and replay within the match. Hand, graveyard
+and board network views carry those stats; simulation clones and replay hashes
+preserve the distinction. Rummage pickers display the first matching physical
+graveyard copy, rather than its unmodified catalog definition.
 
 **Never call `Resource.duplicate()` on a `CardData`.** It only copies
 properties with STORAGE usage, so it silently drops `uid`, `cost_modifier` and
@@ -22,8 +26,12 @@ original's array. Neither failure raises an error. Use instead:
 
 - `clone_instance()` — the SAME physical card in another state (a simulation
   copy, a deserialized mirror). Keeps `uid`.
-- `new_instance(uid)` — a NEW physical card (drawn, tokened, copied by an
-  effect). Takes its own identity.
+- `new_instance(uid)` — a NEW physical card (initial draw, token, created copy).
+  Takes its own identity.
+- `PlayerState.instantiate_drawn_card(entry)` — initial catalog deck entries get
+  a new UID; an already-instanced returned card keeps its UID and runtime state.
+  All four deck-to-hand paths share this distinction while retaining their
+  existing fatigue, search and hand-capacity rules.
 
 Identity is minted by `PlayerState.mint_card_uid()`, a per-player counter
 rather than `randi()`, so creating a card never consumes gameplay randomness.
@@ -107,3 +115,12 @@ func effective_cost() -> int:
 ## Public catalog
 
 A read-only, unversioned export of these definitions for third-party tools lives in [`catalog/`](../catalog/README.md): `catalog/src/export.mjs` projects an explicit release selection (`catalog/release-input.json`) from the same six faction files into `catalog/public/data/`, and `catalog/src/server.mjs` serves it statically. It is independent of the Godot game, `server/relay.js` and Postgres. `data/keyword_abilities.json` maps the few ability keys whose keyword has a different printed name (e.g. `combat_immune` → Ethereal). The first release is a candidate awaiting owner decisions (see the catalog README).
+
+## Headshot batch
+
+RulesVersion 4 adds ten cards and removes Crypt Chapel (`cr_021`) without reusing
+its ID. Requested uncommon cards use the existing internal `RARE` tier. New cards
+reuse faction artwork as placeholders and have no inferred tribes. The public
+catalog includes the new cards, while Emergency Extraction, Whiteout and Snowdrift
+Matriarch remain held back. Source data has 180 non-token cards plus eight forms;
+the selected public catalog has 177 collectible cards plus eight forms.

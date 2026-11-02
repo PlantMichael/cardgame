@@ -171,25 +171,6 @@
 		"effect_value": 0
 	},
 	{
-		"id": "cr_021",
-		"card_name": "Crypt Chapel",
-		"cost": 3,
-		"color": "CRIMSON",
-		"card_type": "LOCATION",
-		"rarity": "COMMON",
-		"tribe": "",
-		"description": "When a friendly creature transforms, give it Ambush.",
-		"attack": 0,
-		"health": 8,
-		"abilities": [
-			"on_friendly_transform_give_ambush"
-		],
-		"transform_into": "",
-		"art": "res://assets/crimson/fleshpriest.png",
-		"effect": "",
-		"effect_value": 0
-	},
-	{
 		"id": "cr_008",
 		"card_name": "Apothecary",
 		"cost": 4,

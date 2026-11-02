@@ -41,6 +41,11 @@
       "description": "Must be targeted before other minions."
     },
     {
+      "id": "headshot",
+      "name": "Headshot",
+      "description": "After this creature attacks the enemy player, activate its Headshot effect."
+    },
+    {
       "id": "null",
       "name": "Null",
       "description": "Removes a minion's abilities."
@@ -96,6 +101,7 @@
     "challenge_all": null,
     "cloaked": "cloaked",
     "combat_immune": "ethereal",
+    "damage_rummage": null,
     "deathrattle_aoe_transform": null,
     "deathrattle_damage_all_except_mech_3": null,
     "deathrattle_draw_card": null,
@@ -113,6 +119,11 @@
     "feast_attendant": null,
     "growvin_aura": null,
     "guardian": "guardian",
+    "headshot_challenge": "headshot",
+    "headshot_damage_1": "headshot",
+    "headshot_rummage": "headshot",
+    "headshot_self_destruct_heal": "headshot",
+    "headshot_shuffle_self": "headshot",
     "heal_to_draw": null,
     "mech": null,
     "mirror_transform": null,
@@ -123,8 +134,8 @@
     "on_friendly_pilot_draw": null,
     "on_friendly_tank_death_buff_tank": null,
     "on_friendly_transform_buff_self": null,
-    "on_friendly_transform_give_ambush": null,
     "on_friendly_yeti_death_buff": null,
+    "on_pilot_restore_health": null,
     "on_piloted_gain_cloaked": null,
     "on_piloted_gain_rush": null,
     "on_piloted_stat_boost": null,
@@ -140,6 +151,7 @@
     "on_play_damage_high_attack": null,
     "on_play_devour_all": null,
     "on_play_devour_friendly": null,
+    "on_play_graveyard_health": null,
     "on_play_health_per_friendly": null,
     "on_play_pilot_mech": null,
     "on_play_recon_if_fewer_cards": null,
@@ -156,6 +168,7 @@
     "on_yeti_death_challenge": null,
     "pilot_1_3": "pilot",
     "pilot_2_2": "pilot",
+    "pilot_3_3": "pilot",
     "pilot_3_4": "pilot",
     "pilot_4_1": "pilot",
     "pilot_4_3": "pilot",

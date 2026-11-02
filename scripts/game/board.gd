@@ -528,7 +528,18 @@ func prompt_choice(choice: Dictionary) -> String:
 	if str(choice["kind"]) == GameState.CHOICE_KIND_PICK_CARD_ID:
 		var cards: Array[CardData] = []
 		for cid in options:
-			var cd := CardDatabase.get_card(str(cid))
+			var cd: CardData = null
+			if effect == GameState.CHOICE_RUMMAGE:
+				# Match the rules resolver's first physical copy of this ID.
+				# Its permanent stats can differ from the printed definition.
+				var owner := game_state.find_player(str(choice["player_id"]))
+				if owner != null:
+					for candidate in owner.graveyard:
+						if candidate.id == str(cid):
+							cd = candidate
+							break
+			else:
+				cd = CardDatabase.get_card(str(cid))
 			if cd != null:
 				cards.append(cd)
 		if cards.is_empty():

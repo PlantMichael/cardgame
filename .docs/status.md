@@ -2,6 +2,8 @@
 
 ## What's Working
 
+- Headshot card batch: ten new cards, direct-player-attack effects, damage-triggered Rummage, permanent Runt health, Pilot healing and Knucklepunch's physical-card shuffle/redraw. Crypt Chapel is removed. RulesVersion4; new artwork remains faction-art placeholders.
+
 - The public `cardgame` website is implemented in `website/`: home and faction introduction, a source-checked rulebook, and a searchable glossary built from `data/keywords.json`. `/play/` keeps the site header above a same-origin frame running the unchanged Godot export; learning links open separately. The site uses the supplied logo and original in-game card frames, illustrations, symbols and font. See `website/README.md` for build, preview and verification. Hosted rollout must be confirmed on each website deployment.
 
 - Creature and stratagem frame assets for all nine colors use dark name and description boxes (plus dark stat boxes on creature frames). Existing white base lettering, keyword highlights, and Orbitron font are shared across factions; the temporary teal backplates and font override have been removed.

@@ -305,3 +305,15 @@ Stratagem effects handled in `_apply_stratagem()`:
 ## Observed card plays
 
 `GameState.card_play_counts(player_id)` returns a detached dictionary of actual play-event counts. The existing `_emit` owner increments only for `play` events while events are enabled, so real creature/stratagem plays and replays count; attacks, draws, transforms and direct summons do not. Counts are observations: they are excluded from simulation clones, replay hashes and player views. Each new GameState begins with empty counts. GameManager includes the two snapshots as optional `card_plays` in ranked-AI summaries; MatchRecorder includes per-seat full counts in new authoritative facts. Older deck-card facts retain their original starting-UID semantics.
+
+## Card returns and permanent stats
+
+`shuffle_minion_into_deck(minion)` shares `_return_minion` cleanup with
+`return_minion_to_hand`: same physical card/form, permanent card stats and Rummage
+history; cleared one-off cost modifier; preserved remaining printed Reinforce;
+attachment/aura cleanup; no death trigger. The deck destination ignores hand
+capacity and shuffles with the match generator. Drawn returned instances keep
+their UID through `PlayerState.instantiate_drawn_card`; initial catalog entries
+still mint one. Per-card attack/health now enter hand/graveyard/board net views
+and the full replay hash. Opponent hands remain hidden, and older view fields
+default to printed stats. These incompatible card/rule changes use RulesVersion4.

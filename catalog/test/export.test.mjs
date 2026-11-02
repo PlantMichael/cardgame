@@ -174,7 +174,6 @@ test('real current game data exports cleanly and every reference resolves', () =
   for (const x of cards) {
     for (const ref of [x.transformInto, ...x.transformChoices]) if (ref) assert.ok(ids.has(ref), `${x.id} -> ${ref}`);
   }
-  assert.ok(cards.some((x) => x.type === 'LOCATION' && x.attack === null && x.health > 0));
   assert.ok(cards.some((x) => x.type === 'STRATAGEM' && x.attack === null));
   assert.ok(cards.some((x) => x.isTransformForm && !x.collectible));
 });
