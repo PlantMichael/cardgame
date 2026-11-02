@@ -1,6 +1,12 @@
 extends RefCounted
 
 const Bots = preload("res://scripts/game/moon_bots.gd")
+const RankedClient = preload("res://scripts/game/ranked_bots_client.gd")
+class LocalDriver:
+	extends "res://scripts/game/ranked_bots_client.gd"
+	var sent: Array[Dictionary] = []
+	func _send(_c: BotConnection, message: Dictionary) -> void:
+		sent.append(message)
 static var failures := 0
 
 static func check(label: String, value: bool) -> void:
@@ -158,5 +164,15 @@ static func run() -> int:
 	check("Different hidden cards produce the same observation", visible == other_view)
 	var plan_again := Bots.planning_state(other_view, "host", draft, 501)
 	check("Ranked beliefs do not depend on hidden card identities", plan.to_net_dict() == plan_again.to_net_dict())
+	var driver := LocalDriver.new()
+	var capped := RankedClient.BotConnection.new()
+	capped.profile = profiles["io"]
+	capped.stage = "ai_playing"
+	capped.ai_state = live.duplicate_for_sim()
+	capped.ai_match_id = "ai_1_2"
+	capped.ai_started = Time.get_ticks_msec() - 600001
+	await driver._ai_step(capped)
+	check("Capped local AI attempt cancels without awarding or advancing rotation", capped.ai_state == null and capped.next_ai and capped.stage == "pause" and driver.sent.size() == 1 and driver.sent[0]["type"] == "ranked_bot_ai_cancel")
+	driver.free()
 	print("MOON BOT TESTS: %s failed" % failures)
 	return failures

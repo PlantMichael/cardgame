@@ -80,6 +80,12 @@ const LEGACY_DDL = [
     )`,
   // Nullable for old clients and PvP. ALTER also upgrades populated installs.
   'ALTER TABLE ranked_settlements ADD COLUMN IF NOT EXISTS ai_match JSONB',
+  // Reset keeps only replay keys; old client outboxes must never award twice.
+  `CREATE TABLE IF NOT EXISTS ranked_result_tombstones (
+    match_id TEXT NOT NULL,
+    player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    PRIMARY KEY (match_id, player_id)
+  )`,
   // Site accounts / Google sign-in (additive; safe to rerun, safe on populated
   // installs). A player may sign in with a password, with one linked Google
   // identity, or both. The Google `sub` is the identity key: it is unique, and

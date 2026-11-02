@@ -61,6 +61,13 @@ test('owned bot status crosses storage, presence, catalog and page without leaki
   const ws = { readyState: 1 };
   presence.remember(ws, a.player_id, presence.begin(ws));
   assert.equal((await io()).activity, 'idle');
+  presence.startAI(ws, { matchId: 'ai_1_2', playerId: a.player_id, level: 3 });
+  assert.equal((await io()).activity, 'playing_ai', 'catalog and page accept actual AI admission activity');
+  presence.endAI(ws, 'ai_1_1'); assert.equal((await io()).activity, 'playing_ai', 'stale cancellation cannot clear a newer game');
+  const lateAI = presence.begin(ws);
+  presence.endAI(ws, 'ai_1_2');
+  assert.equal(presence.remember(ws, a.player_id, lateAI), false, 'late liveness lookup cannot resurrect a completed/canceled admission');
+  assert.equal((await io()).activity, 'idle');
   queue.set(ws, { playerId: a.player_id }); assert.equal((await io()).activity, 'queued');
   queue.clear(); owner.creatingPlayers.add(a.player_id); assert.equal((await io()).activity, 'joining');
   owner.creatingPlayers.clear();

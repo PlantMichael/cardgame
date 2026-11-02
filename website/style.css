@@ -14,7 +14,7 @@
   .bot-version, .bot-personality { color: var(--muted); font-size: 13px; }
   .bot-personality { margin-top: 6px; text-transform: capitalize; }
   .bot-activity { margin-block: 12px; color: var(--muted); font-weight: 600; }
-  .bot-activity.playing, .bot-activity.queued, .bot-activity.joining { color: var(--cyan); }
+  .bot-activity.playing, .bot-activity.playing_ai, .bot-activity.queued, .bot-activity.joining { color: var(--cyan); }
   .bot-rank { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--line-soft); padding-top: 12px; }
   .bot-rank-icon { width: 48px; height: 48px; flex: 0 0 48px; }
   .bot-rank-icon img { width: 48px; height: 48px; }

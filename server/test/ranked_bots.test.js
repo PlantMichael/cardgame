@@ -15,6 +15,7 @@ const { computeOutcome } = require('../authoritative/settle');
 const { provisionRankedBots } = require('../ranked_bot_accounts');
 const { runRankedBots } = require('../ranked_bot_worker');
 const { ratingBandAt, matchQueuedPlayers } = require('../ranked_queue');
+const { rankedAILevel } = require('../ranked_bot_ai');
 const { disposableDatabase, PROJECT_DIR, killTree } = require('./helpers');
 
 async function until(predicate, label, timeout = 120000) {
@@ -40,8 +41,8 @@ class Client {
   constructor(ws) { this.ws = ws; this.messages = []; ws.on('message', raw => this.messages.push(JSON.parse(raw))); }
   static async open(url) { const ws = new WebSocket(url); const c = new Client(ws); await once(ws, 'open'); return c; }
   send(value) { this.ws.send(JSON.stringify({ token: this.token, ...value })); }
-  async take(type, matchId = null) {
-    return until(() => { const i = this.messages.findIndex(m => m.type === type && (!matchId || m.match_id === matchId)); return i < 0 ? null : this.messages.splice(i, 1)[0]; }, type, 15000);
+  async take(type, matchId = null, timeout = 15000) {
+    return until(() => { const i = this.messages.findIndex(m => m.type === type && (!matchId || m.match_id === matchId)); return i < 0 ? null : this.messages.splice(i, 1)[0]; }, type, timeout);
   }
 }
 
@@ -54,6 +55,13 @@ test('normal ranked bands widen without a cap and do not special-case bot rating
   matchQueuedPlayers(queue, (...p) => paired.push(p), 50000);
   assert.equal(paired.length, 1, 'even Ganymede and a much stronger account can pair after waiting');
   assert.equal(queue.size, 0);
+});
+
+test('ranked AI difficulty follows named tiers and Legend', () => {
+  for (let bracket = 0; bracket < 21; bracket++) {
+    assert.equal(rankedAILevel(bracket, false), [3,3,3,4,4,4,5,5,5,6,6,6,7,7,7,8,8,8,9,9,9][bracket]);
+    assert.equal(rankedAILevel(bracket, true), 10);
+  }
 });
 
 test('invalid worker URLs fail without logging connection credentials', async () => {
@@ -93,10 +101,11 @@ test('trusted bot provisioning is atomic, preserves ranks and never adopts a hum
 });
 
 test('four real ranked clients queue, play, settle normally, reconnect and publish a separate ranked cohort', {
-  skip: dbSkip || (!process.env.GODOT_BIN ? 'requires GODOT_BIN' : false), timeout: 300000,
+  skip: dbSkip || (!process.env.GODOT_BIN ? 'requires GODOT_BIN' : false), timeout: 480000,
 }, async t => {
   const { pool, url, cleanup } = await database(t, 'ranked_bots_live', false);
   await initSchema(pool);
+  const probeAccounts = await provisionRankedBots(pool);
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'ranked-bots-relay-test-'));
   // Checked-out worker connections use this proxy. Map protocol backend PIDs
   // through local loopback ports, which also works across Docker's DB-side NAT.
@@ -130,7 +139,7 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
     Pool.prototype.query = async function(sql, values, ...rest) {
       const result = await query.call(this, sql, values, ...rest);
       if (typeof sql === 'string' && sql.includes('p.rating, b.profile AS bot_profile') &&
-          result.rows[0]?.bot_profile && failed.size < 4 && !failed.has(values[0])) {
+          result.rows[0]?.bot_profile && values[0] !== process.env.QUEUE_FAULT_SKIP && failed.size < 4 && !failed.has(values[0])) {
         failed.add(values[0]);
         throw new Error('synthetic first queue lookup failure');
       }
@@ -144,7 +153,7 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
     relayLog = '';
     const proc = spawn(process.execPath, ['--require', queueFault, path.join(PROJECT_DIR, 'server/relay.js')], {
       env: { ...process.env, DATABASE_URL: url, PORT: String(port), RANKED_AUTHORITATIVE: authoritative,
-        APPDATA: tmp, XDG_DATA_HOME: tmp, PROJECT_DIR }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
+        APPDATA: tmp, XDG_DATA_HOME: tmp, PROJECT_DIR, QUEUE_FAULT_SKIP: probeAccounts[0].token }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
     });
     proc.stdout.on('data', d => { relayLog = (relayLog + d).slice(-12000); });
     proc.stderr.on('data', d => { relayLog = (relayLog + d).slice(-12000); });
@@ -176,6 +185,27 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   const registered = await human.take('register_result'); assert.equal(registered.success, true); human.token = registered.token;
   human.send({ type: 'save_deck', name: 'human', faction_idx: 0, card_ids: ['g_001', 'g_002'] });
   assert.equal((await human.take('save_deck_result')).success, true);
+  human.send({ type: 'ranked_bot_ai_start', match_id: 'ai_1_1' });
+  assert.equal((await human.take('ranked_bot_ai_ready')).success, false, 'a human token cannot enter the bot AI path');
+  const probe = await Client.open(wsUrl); clients.push(probe); probe.token = probeAccounts.find(a => a.id === 'io').token;
+  await pool.query("UPDATE players SET rank_bracket=20,rank_in_legend=true WHERE username='Io'");
+  probe.send({ type: 'ranked_bot_ai_start', match_id: 'ai_1_2' });
+  assert.equal((await probe.take('ranked_bot_ai_ready')).ai_level, 10, 'relay selects Legend difficulty from the persisted rank');
+  probe.send({ type: 'queue_ranked', deck_name: 'Sapiens Starter', rules_version: 3 });
+  assert.equal((await probe.take('ranked_refused')).reason, 'in_ai_match');
+  const starters = require('../../data/starters.json');
+  const probeSummary = { player_deck: starters[0].card_ids, opponent_deck: starters[1].card_ids,
+    ai_level: 10, ai_version: 2, rules_version: 3, turns: 1, first_player: 'player' };
+  for (const invalid of [{ ai_match: { ...probeSummary, ai_level: 3 } },
+    { ai_match: { ...probeSummary, player_deck: ['g_001'] } },
+    { token: probeAccounts.find(a => a.id === 'callisto').token, ai_match: probeSummary }]) {
+    probe.send({ type: 'report_ranked_result', match_id: 'ai_1_2', won: true, ...invalid });
+    assert.equal((await probe.take('ranked_result_ack')).success, false, 'wrong difficulty, invalid deck or different account cannot consume an AI admission');
+  }
+  assert.equal((await pool.query('SELECT count(*) AS n FROM ranked_settlements')).rows[0].n, '0');
+  probe.send({ type: 'ranked_bot_ai_cancel', match_id: 'ai_1_2' }); probe.ws.terminate();
+  await pool.query('DELETE FROM sessions WHERE token=ANY($1::text[])', [probeAccounts.map(a => a.token)]);
+  await pool.query("UPDATE players SET rank_bracket=0,rank_in_legend=false WHERE username='Io'");
   human.send({ type: 'queue_ranked', deck_name: 'human', rules_version: 3, bot_profile: { id: 'io', version: '1.0' } });
   let workerFailure;
   const startWorker = () => {
@@ -185,40 +215,54 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
     worker.catch(e => { workerFailure = e; });
   };
   startWorker();
-  await until(() => {
-    if (workerFailure) throw workerFailure;
-    return ['io', 'callisto', 'europa', 'ganymede'].every(id => events.filter(e => e.event === 'queued' && e.bot === id).length >= 2);
-  }, 'all four retry queue entry after transient database failure');
   const statusUrl = httpUrl + '/data/bots/status.json';
   const fleet = await until(async () => {
     const data = await (await fetch(statusUrl)).json();
-    return data.bots?.some(b => b.activity === 'playing') && data.bots.some(b => b.activity === 'queued') ? data : null;
-  }, 'public status reflects actual playing and queued worker sockets', 20000);
+    return data.bots?.every(b => b.activity === 'playing_ai') ? data : null;
+  }, 'fresh workers start with rank-matched AI and expose their actual activity', 20000);
   const { validStatus } = await import('../../website/bots-core.mjs');
   assert.ok(validStatus(fleet));
   assert.deepEqual(fleet.bots.map(b => b.id), ['io','callisto','europa','ganymede']);
-  const found = await human.take('ranked_match_found');
+  const found = await human.take('ranked_match_found', null, 180000);
   assert.equal(found.server_run, true); assert.match(found.opponent_name, /\[Bot 1\.0\]/);
   assert.ok(['io', 'callisto', 'europa', 'ganymede'].includes(found.opponent_bot.id));
   human.send({ type: 'match_join', match_id: found.match_id });
   const view = await human.take('match_view', found.match_id);
+  const first = (await pool.query('SELECT * FROM ranked_matches WHERE match_id=$1', [found.match_id])).rows[0];
+  const opponentId = first[view.seat === 'a' ? 'seat_b_player_id' : 'seat_a_player_id'];
+  const aiOutcome = (await pool.query(`SELECT match_id,won,outcome,ai_match FROM ranked_settlements WHERE player_id=$1 AND ai_match IS NOT NULL ORDER BY settled_at LIMIT 1`, [opponentId])).rows[0];
+  const aiOnly = await (await fetch(httpUrl + '/data/stats/deck-matchups.json?mode=all&days=29')).json();
+  assert.ok(aiOnly.games > 0 && aiOnly.decks.every(d => d.testers === 0), 'bot AI games feed pooled results without inventing human testers');
+  assert.equal((await (await fetch(httpUrl + '/data/stats/deck-matchups.json?mode=ranked_ai&aiLevel=3&rulesVersion=3&aiVersion=2')).json()).games, 0, 'the human-only AI filter excludes bot-controlled games');
+  const retriedAI = await Client.open(wsUrl); clients.push(retriedAI);
+  retriedAI.token = (await pool.query('SELECT token FROM sessions WHERE player_id=$1 ORDER BY created_at DESC LIMIT 1', [opponentId])).rows[0].token;
+  retriedAI.send({ type: 'ranked_bot_ai_start', match_id: aiOutcome.match_id });
+  assert.equal((await retriedAI.take('ranked_bot_ai_ready')).settled, true, 'completed admission can reconnect after a lost acknowledgment');
+  retriedAI.send({ type: 'report_ranked_result', match_id: aiOutcome.match_id, won: !aiOutcome.won });
+  const replayedAI = await retriedAI.take('ranked_result_ack');
+  assert.equal(replayedAI.replayed, true);
+  assert.equal((await pool.query('SELECT count(*) AS n FROM ranked_settlements WHERE match_id=$1', [aiOutcome.match_id])).rows[0].n, '1');
+  assert.deepEqual((await pool.query('SELECT outcome FROM ranked_settlements WHERE match_id=$1', [aiOutcome.match_id])).rows[0].outcome, aiOutcome.outcome);
+  retriedAI.ws.terminate();
   human.send({ type: 'match_concede', match_id: found.match_id });
   const lost = await human.take('match_over', found.match_id);
   assert.equal(lost.ranked_outcome.success, true);
   assert.equal(lost.ranked_outcome.rank_lp, 0); assert.equal(lost.ranked_outcome.ranked_losses, 1);
   assert.equal(lost.ranked_outcome.rating, 984, 'human takes the normal equal-rating Elo loss');
   const humanId = (await pool.query("SELECT id FROM players WHERE username='ranked_human'")).rows[0].id;
-  const first = (await pool.query('SELECT * FROM ranked_matches WHERE match_id=$1', [found.match_id])).rows[0];
   assert.equal(first.mode, 'ranked_bots');
   assert.equal(first[view.seat === 'a' ? 'bot_a' : 'bot_b'], null, 'client-supplied bot fields cannot change identity');
   assert.equal(first[view.seat === 'a' ? 'bot_b' : 'bot_a'].version, '1.0');
-  const opponentId = first[view.seat === 'a' ? 'seat_b_player_id' : 'seat_a_player_id'];
+  assert.ok(aiOutcome.ai_match.bot_profile, 'the actual AI completion precedes normal queue entry');
+  assert.equal(aiOutcome.ai_match.ai_level, 3);
+  assert.equal(aiOutcome.outcome.rating, 1000, 'local ranked AI never moves matchmaking Elo');
+  const expectedBot = computeOutcome(aiOutcome.outcome, true, 1000);
   const wonRow = (await pool.query('SELECT rating,rank_lp,ranked_wins FROM players WHERE id=$1', [opponentId])).rows[0];
-  assert.deepEqual(wonRow, { rating: 1016, rank_lp: 34, ranked_wins: 1 }, 'bot receives normal full ranked win');
+  assert.deepEqual(wonRow, { rating: expectedBot.rating, rank_lp: expectedBot.rank_lp, ranked_wins: expectedBot.ranked_wins }, 'bot receives normal full ranked win after its AI game');
 
   // A human win receives ordinary rewards too, through a canonical concede.
   human.send({ type: 'queue_ranked', deck_name: 'human', rules_version: 3 });
-  const secondFound = await human.take('ranked_match_found');
+  const secondFound = await human.take('ranked_match_found', null, 180000);
   human.send({ type: 'match_join', match_id: secondFound.match_id });
   const secondView = await human.take('match_view', secondFound.match_id);
   const secondMatch = (await pool.query('SELECT * FROM ranked_matches WHERE match_id=$1', [secondFound.match_id])).rows[0];
@@ -227,14 +271,34 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   const beforeOpp = (await pool.query('SELECT rating FROM players WHERE id=$1', [secondOpponentId])).rows[0];
   const botToken = (await pool.query('SELECT token FROM sessions WHERE player_id=$1 ORDER BY created_at DESC LIMIT 1', [secondOpponentId])).rows[0].token;
   const scriptedBot = await Client.open(wsUrl); clients.push(scriptedBot); scriptedBot.token = botToken;
+  scriptedBot.send({ type: 'ranked_bot_ai_start', match_id: 'ai_1_3' });
+  const activeRefusal = await scriptedBot.take('ranked_bot_ai_ready');
+  assert.equal(activeRefusal.success, false); assert.equal(activeRefusal.active_match_id, secondFound.match_id);
   scriptedBot.send({ type: 'match_join', match_id: secondFound.match_id }); await scriptedBot.take('match_view', secondFound.match_id);
   scriptedBot.send({ type: 'match_concede', match_id: secondFound.match_id });
   const win = await human.take('match_over', secondFound.match_id);
   const expected = computeOutcome(before, true, beforeOpp.rating);
   for (const key of ['rating', 'rank_lp', 'ranked_wins', 'ranked_losses']) assert.equal(win.ranked_outcome[key], expected[key]);
 
-  const inFlight = (await pool.query("SELECT match_id FROM ranked_matches WHERE status='active' AND mode='ranked_bots'")).rows.map(r => r.match_id);
-  assert.ok(inFlight.length > 0);
+  await until(() => {
+    if (workerFailure) throw workerFailure;
+    return ['io', 'callisto', 'europa', 'ganymede'].every(id => events.filter(e => e.event === 'queued' && e.bot === id).length >= 2);
+  }, 'all four retry queue entry after transient database failure', 180000);
+  for (const id of ['io','callisto','europa','ganymede']) {
+    const own = events.filter(e => e.bot === id);
+    assert.equal(own.find(e => e.event === 'ai_started').ai_level, 3);
+    const aiDone = own.findIndex(e => e.event === 'completed' && e.opponent === 'ranked_ai');
+    assert.ok(aiDone >= 0 && aiDone < own.findIndex(e => e.event === 'queued'));
+  }
+  await until(() => ['io','callisto','europa','ganymede'].some(id => {
+    const own = events.filter(e => e.bot === id), done = own.findIndex(e => e.event === 'completed' && !e.opponent);
+    return done >= 0 && own.slice(done + 1).some(e => e.event === 'ai_started');
+  }), 'queue completion returns to AI', 180000);
+
+  const inFlight = await until(async () => {
+    const ids = (await pool.query("SELECT match_id FROM ranked_matches WHERE status='active' AND mode='ranked_bots'")).rows.map(r => r.match_id);
+    return ids.length ? ids : null;
+  }, 'an actual queue match is available for restart recovery', 180000);
   const restartIndex = events.length;
   stop.abort(); await worker;
   scriptedBot.ws.terminate();
@@ -284,7 +348,8 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   const response = await fetch(route + '?mode=ranked');
   const body = await response.text(); assert.equal(response.status, 200, body);
   const ranked = JSON.parse(body);
-  assert.equal(ranked.mode, 'ranked'); assert.equal(ranked.methodology.source, 'server_verified');
+  assert.equal(ranked.mode, 'ranked'); assert.equal(ranked.methodology.source, 'mixed');
+  assert.ok(ranked.bots.some(b => b.id === 'standard' && b.level === 3));
   assert.ok(ranked.games >= 3); assert.ok(ranked.bots.some(b => b.id === 'human' && b.level === null));
   assert.ok(!body.includes('ranked_human') && !body.includes('player_id') && !body.includes('match_id'));
   const { projectBotStats } = await import('../../catalog/src/bot-matchups.mjs');
@@ -308,15 +373,18 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   await pool.query("UPDATE ranked_bot_accounts SET profile=jsonb_set(profile,'{version}','\"2.0\"')");
   assert.deepEqual((await pool.query('SELECT bot_a,bot_b FROM ranked_matches WHERE match_id=$1', [first.match_id])).rows[0], snapshots);
   const historical = await (await fetch(route + '?mode=ranked&days=31')).json();
-  assert.ok(historical.bots.filter(b => b.id !== 'human').every(b => b.version === '1.0'), 'fresh HTTP read uses historical snapshots rather than current registry');
+  assert.ok(historical.bots.filter(b => !['human','standard'].includes(b.id)).every(b => b.version === '1.0'), 'fresh HTTP read uses historical snapshots rather than current registry');
   await pool.query('UPDATE ranked_settlements SET won=NOT won WHERE match_id=$1 AND player_id=$2', [first.match_id, humanId]);
   const contradictory = await (await fetch(route + '?mode=ranked&days=32')).json();
   assert.equal(contradictory.bots.filter(b => b.id === 'human').reduce((n, b) => n + b.matches, 0), 1, 'contradictory settlements exclude the whole match');
   await pool.query('UPDATE ranked_settlements SET won=NOT won WHERE match_id=$1 AND player_id=$2', [first.match_id, humanId]);
   await pool.query("UPDATE ranked_bot_accounts SET profile=jsonb_set(profile,'{version}','\"1.0\"')");
-  await until(async () => (await pool.query("SELECT 1 FROM ranked_matches WHERE mode='ranked_bots' AND status='active' LIMIT 1")).rowCount, 'active game for lock-loss proof');
+  const playingAI = await until(async () => {
+    const status = await (await fetch(statusUrl)).json();
+    return status.bots?.find(b => b.activity === 'playing_ai');
+  }, 'local AI game for session revocation proof', 180000);
   const expired = (await pool.query(`SELECT s.token FROM sessions s JOIN ranked_bot_accounts b ON b.player_id=s.player_id
-    WHERE EXISTS (SELECT 1 FROM ranked_matches m WHERE m.status='active' AND s.player_id IN (m.seat_a_player_id,m.seat_b_player_id)) LIMIT 1`)).rows[0];
+    WHERE b.bot_id=$1 ORDER BY s.created_at DESC LIMIT 1`, [playingAI.id])).rows[0];
   assert.ok(expired);
   await pool.query('DELETE FROM sessions WHERE token=$1', [expired.token]);
   const authFailure = await until(() => workerFailure, 'revoked session forces supervised recovery', 25000);

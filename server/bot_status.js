@@ -1,21 +1,31 @@
 'use strict';
 const { profiles } = require('./bot_matches');
 const BOT_STATUS_PATH = '/data/bots/status.json';
-const ACTIVITIES = new Set(['queued', 'joining', 'playing', 'idle', 'reconnecting', 'offline']);
+const ACTIVITIES = new Set(['queued', 'joining', 'playing', 'playing_ai', 'idle', 'reconnecting', 'offline']);
 
 // Only authenticated relay paths can bind a socket. Tickets prevent an older
 // async lookup from resurrecting a closed socket or replacing a newer identity.
 function createBotPresence({ queue, manager = () => null }) {
-  const sockets = new Map(), tickets = new WeakMap();
+  const sockets = new Map(), tickets = new WeakMap(), aiGames = new Map();
   function begin(ws) {
     const ticket = (tickets.get(ws) || 0) + 1;
     tickets.set(ws, ticket); return ticket;
   }
   function remember(ws, playerId, ticket) {
-    if (ws.readyState === 1 && Number.isInteger(ticket) && tickets.get(ws) === ticket) sockets.set(ws, playerId);
+    if (ws.readyState !== 1 || !Number.isInteger(ticket) || tickets.get(ws) !== ticket) return false;
+    if (sockets.get(ws) !== playerId) aiGames.delete(ws);
+    sockets.set(ws, playerId); return true;
   }
-  function reject(ws, ticket) { if (tickets.get(ws) === ticket) sockets.delete(ws); }
-  function forget(ws) { begin(ws); sockets.delete(ws); }
+  function reject(ws, ticket) { if (tickets.get(ws) === ticket) { sockets.delete(ws); aiGames.delete(ws); } }
+  function forget(ws) { begin(ws); sockets.delete(ws); aiGames.delete(ws); }
+  function aiFor(playerId) {
+    return [...aiGames].find(([ws]) => sockets.get(ws) === playerId && ws.readyState === 1)?.[1] ?? null;
+  }
+  function startAI(ws, game) { aiGames.set(ws, game); }
+  function aiOf(ws) { return aiGames.get(ws); }
+  function endAI(ws, matchId) {
+    if (aiGames.get(ws)?.matchId === matchId) { begin(ws); aiGames.delete(ws); }
+  }
   function activity(playerId) {
     if (![...sockets].some(([ws, id]) => id === playerId && ws.readyState === 1)) return 'offline';
     const owner = manager();
@@ -28,10 +38,11 @@ function createBotPresence({ queue, manager = () => null }) {
       return match.status === 'waiting' ? 'joining' : 'playing';
     }
     if (owner?.creatingPlayers.has(playerId)) return 'joining';
+    if (aiFor(playerId)) return 'playing_ai';
     if ([...queue].some(([ws, entry]) => entry.playerId === playerId && ws.readyState === 1)) return 'queued';
     return 'idle';
   }
-  return { begin, remember, reject, forget, activity };
+  return { begin, remember, reject, forget, activity, aiFor, aiOf, startAI, endAI };
 }
 
 function visibleRank(row) {

@@ -1,7 +1,7 @@
 import { DEFAULT_ORIGIN } from './card-winrates.mjs';
 export const BOT_STATUS_PATH = '/data/bots/status.json';
 const NAMES = { io: 'Io', callisto: 'Callisto', europa: 'Europa', ganymede: 'Ganymede' };
-const STATES = ['queued', 'joining', 'playing', 'idle', 'reconnecting', 'offline', 'not_started'];
+const STATES = ['queued', 'joining', 'playing', 'playing_ai', 'idle', 'reconnecting', 'offline', 'not_started'];
 const count = n => Number.isSafeInteger(n) && n >= 0;
 const fail = () => { throw new Error('invalid bot status'); };
 

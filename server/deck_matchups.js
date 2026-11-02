@@ -162,8 +162,8 @@ async function loadRows(pool, publicRoot, query, now) {
   if (query.mode === 'ranked_ai') {
     raw = (await pool.query({ text: `SELECT player_id, won, ai_match FROM ranked_settlements
       WHERE settled_at >= $1 AND settled_at <= $2 AND ai_match->>'mode' = 'ranked_ai'
-      AND ai_match->>'source' = 'client_reported' LIMIT $3`,
-      values: [since, new Date(now).toISOString(), MAX_MATCHES + 1], query_timeout: 5000 })).rows;
+      AND ai_match->>'source' = 'client_reported' AND ($4 OR ai_match->'bot_profile' IS NULL) LIMIT $3`,
+      values: [since, new Date(now).toISOString(), MAX_MATCHES + 1, !!query.includeRankedBots], query_timeout: 5000 })).rows;
   } else {
     const available = await pool.query("SELECT to_regclass('ranked_matches') IS NOT NULL AS available");
     if (!available.rows[0].available) return { rows: [], sourceCount: 0 };
@@ -191,7 +191,7 @@ async function loadRows(pool, publicRoot, query, now) {
     rows.push({ decks: [a, b], rulesVersion, aiVersion, aiLevel: ai ? ai.ai_level : null,
       plays: ai ? ['player', 'opponent'].map(role => observedPlays(ai.card_plays?.[role], null, a, catalog))
         : ['a', 'b'].map((seat, i) => observedPlays(row.facts?.seats?.[seat]?.card_plays, row.facts?.seats?.[seat]?.deck_cards, i === 0 ? a : b, catalog)),
-      won: ai ? row.won : row.a_won, people: ai ? [row.player_id]
+      won: ai ? row.won : row.a_won, people: ai ? (ai.bot_profile ? [] : [row.player_id])
         : [row.bot_a ? null : row.seat_a_player_id, row.bot_b ? null : row.seat_b_player_id].filter(id => id !== null),
       first: ai ? (ai.first_player === undefined ? null : ai.first_player === 'player' ? 0 : 1) : row.first_seat === 'a' ? 0 : row.first_seat === 'b' ? 1 : null,
       turns: ai ? ai.turns : row.facts?.turns });
