@@ -22,7 +22,9 @@ function createBotPresence({ queue, manager = () => null }) {
     const match = owner?.matchOf(playerId);
     if (match && ['waiting', 'active'].includes(match.status)) {
       const seat = Object.values(match.seats).find(s => s.playerId === playerId);
-      if (match.hostDown || owner.host?.ready === false || !seat?.conn || seat.disconnectedAt !== null) return 'reconnecting';
+      if (match.hostDown || owner.host?.ready === false) return 'reconnecting';
+      if (match.status === 'waiting' && seat?.epoch === 0) return 'joining';
+      if (!seat?.conn || seat.disconnectedAt !== null) return 'reconnecting';
       return match.status === 'waiting' ? 'joining' : 'playing';
     }
     if (owner?.creatingPlayers.has(playerId)) return 'joining';

@@ -5,6 +5,8 @@ const path = require('node:path');
 const { Pool } = require('pg');
 const { initLegacySchema } = require('../schema_legacy');
 const { initSchema, PgStore } = require('../authoritative/schema');
+const { MatchManager } = require('../authoritative/match_manager');
+const { loadCards } = require('../authoritative/decks');
 const { settleRankedMatch, PgSettleRepo } = require('../authoritative/settle');
 const { provisionRankedBots } = require('../ranked_bot_accounts');
 const { createBotPresence, BOT_STATUS_PATH } = require('../bot_status');
@@ -26,8 +28,11 @@ test('owned bot status crosses storage, presence, catalog and page without leaki
     await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end();
   });
   await initLegacySchema(pool); await initSchema(pool);
-  let clock = Date.now(), match = null;
-  const queue = new Map(), owner = { matchOf: () => match, creatingPlayers: new Set(), host: { ready: true } };
+  let clock = Date.now();
+  const store = new PgStore(pool);
+  const host = { ready: true, rulesVersion: 3, engineVersion: 2,
+    request: async () => ({ ok: true, views: {}, state_hash: '', seq: 0, view: {} }) };
+  const queue = new Map(), owner = new MatchManager({ store, host, cards: loadCards(), now: () => clock });
   const presence = createBotPresence({ queue, manager: () => owner });
   let reads = 0; const query = pool.query.bind(pool);
   pool.query = (...args) => { if (args[0]?.text?.includes('SELECT b.bot_id,p.id')) reads++; return query(...args); };
@@ -59,14 +64,24 @@ test('owned bot status crosses storage, presence, catalog and page without leaki
   queue.set(ws, { playerId: a.player_id }); assert.equal((await io()).activity, 'queued');
   queue.clear(); owner.creatingPlayers.add(a.player_id); assert.equal((await io()).activity, 'joining');
   owner.creatingPlayers.clear();
-  match = { status: 'waiting', hostDown: false, seats: { a: { playerId: a.player_id, conn: {}, disconnectedAt: null } } };
+  const matchId = 'status_presence';
+  assert.equal((await owner.createMatch({ matchId, a: { playerId: a.player_id, deckName: 'Sapiens Starter' },
+    b: { playerId: b.player_id, deckName: 'Sapiens Starter' } })).ok, true);
+  const match = owner.matchOf(a.player_id);
+  assert.equal((await io()).activity, 'joining', 'newly paired seats have not joined yet');
+  const conn = { send() {} }, otherConn = { send() {} };
+  await owner.handleMessage(a.player_id, { type: 'match_join', match_id: matchId }, conn);
   assert.equal((await io()).activity, 'joining');
-  match.status = 'active'; assert.equal((await io()).activity, 'playing');
+  owner.onClose(conn);
+  assert.equal((await io()).activity, 'reconnecting', 'previously joined waiting seats are recovering');
+  await owner.handleMessage(a.player_id, { type: 'match_join', match_id: matchId }, conn);
+  await owner.handleMessage(b.player_id, { type: 'match_join', match_id: matchId }, otherConn);
+  assert.equal((await io()).activity, 'playing');
   match.hostDown = true; assert.equal((await io()).activity, 'reconnecting');
-  match.hostDown = false; match.seats.a.disconnectedAt = clock;
+  match.hostDown = false; owner.onClose(conn);
   assert.equal((await io()).activity, 'reconnecting');
   match.status = 'finished'; assert.equal((await io()).activity, 'idle', 'finished tombstones are not playing');
-  match = null;
+  owner.byPlayer.clear();
   const old = presence.begin(ws), newer = presence.begin(ws);
   presence.remember(ws, b.player_id, newer); presence.remember(ws, a.player_id, old);
   assert.equal((await io()).activity, 'offline', 'late authentication cannot replace a newer identity');
@@ -78,7 +93,6 @@ test('owned bot status crosses storage, presence, catalog and page without leaki
   ws.readyState = 3; presence.remember(ws, a.player_id, presence.begin(ws));
   assert.equal((await io()).activity, 'offline');
 
-  const store = new PgStore(pool);
   for (let i = 0; i < 3; i++) {
     const id = `status_rank_${i}`;
     await store.createMatch({ match_id: id, rules_version: 3, seed: 1, first_seat: 'a', mode: 'ranked_bots',
