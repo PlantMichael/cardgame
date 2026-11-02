@@ -125,6 +125,10 @@ test('a new Google identity picks a username; a returning one signs in; no passw
   assert.equal(await playerCount(h), 0, 'nothing is created before a username is chosen');
 
   assert.equal((await h.call(ws, { type: 'google_register', setup_token: first.setup_token, username: 'a!' })).code, 'invalid_username');
+  for (const username of ['CALLISTO', 'eUrOpA', 'Ganymede']) {
+    assert.equal((await h.call(ws, { type: 'google_register', setup_token: first.setup_token, username })).code, 'username_taken');
+  }
+  assert.equal(await playerCount(h), 0, 'reserved bot names cannot create Google-backed players');
   await h.pool.query(`INSERT INTO players (username, password_hash, salt) VALUES ('taken_name', 'h', 's')`);
   assert.equal((await h.call(ws, { type: 'google_register', setup_token: first.setup_token, username: 'taken_name' })).code, 'username_taken');
   assert.equal(await playerCount(h), 1, 'a refused username creates nothing');

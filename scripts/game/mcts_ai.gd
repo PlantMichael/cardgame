@@ -298,7 +298,7 @@ func _order_actions(node: _MCTSNode) -> void:
 		var after := node.state.duplicate_for_sim()
 		var value := -INF
 		if HeadlessTurn.apply_action(after, action):
-			value = AIHeuristics.evaluate_state(after, ai_player_id)
+			value = AIHeuristics.evaluate_state(after, ai_player_id, style)
 		scored.append({"action": action, "value": value, "tie": _search_rng.randf()})
 	scored.sort_custom(func(a, b): return a["value"] > b["value"] if a["value"] != b["value"] else a["tie"] > b["tie"])
 	node.untried_actions.clear()
@@ -370,5 +370,7 @@ func _simulate(state: GameState, depth_plies: int) -> float:
 	if state.current_phase == GameState.Phase.GAME_OVER:
 		return (0.9 if value > 0 else -0.9) / (1.0 + plies_done * 0.1)
 	if not style.is_empty():
-		value = value * 0.65 + immediate * 0.35
+		# Neutral rollouts can postpone setup and erase the personality's
+		# preference for building its combo or pressure on this turn.
+		value = value * 0.35 + immediate * 0.65
 	return value / (absf(value) + 100.0)
