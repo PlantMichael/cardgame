@@ -101,3 +101,25 @@ func new_instance(new_uid: String) -> CardData:
 	_carry_runtime_state_into(c)
 	c.uid = new_uid
 	return c
+
+# Target semantics shared by human presentation and AI enumeration.
+func stratagem_needs_target() -> bool:
+	return effect not in ["destroy_all_creatures", "deal_damage_all_creatures", "deal_damage_all_enemy", "deal_damage_all_enemy_draw_yeti", "buff_all_friendly_attack", "buff_all_friendly_health", "eject_all_pilots", "sludge_spray"]
+
+func stratagem_needs_creature_target() -> bool:
+	return effect in ["give_ability", "buff_creature", "buff_health", "force_challenge", "poke_bear", "blood_transfusion", "sanguine", "heal", "eject_pilot", "give_mech_shielded_temp", "tainted_blood", "exsanguinate", "blood_boil", "return_friendly_to_hand"]
+
+func stratagem_needs_friendly_yeti() -> bool:
+	return effect in ["force_challenge", "poke_bear"]
+
+func stratagem_needs_enemy_creature_only() -> bool:
+	return effect in ["blood_transfusion", "exsanguinate"]
+
+func stratagem_needs_friendly_creature_only() -> bool:
+	return effect in ["sanguine", "heal", "give_ability", "tainted_blood", "blood_boil", "return_friendly_to_hand"]
+
+func stratagem_needs_friendly_piloted_mech() -> bool:
+	return effect == "eject_pilot"
+
+func stratagem_needs_friendly_mech() -> bool:
+	return effect == "give_mech_shielded_temp"

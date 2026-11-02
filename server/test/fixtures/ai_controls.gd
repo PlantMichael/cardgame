@@ -50,11 +50,18 @@ func _run() -> void:
 	var saved_rank := [Auth.rank_bracket, Auth.rank_in_legend]
 	_canvas = CanvasLayer.new()
 	add_child(_canvas)
-	for rank in [[0, false], [10, false], [20, false], [20, true]]:
+	var expected_levels := [3,3,3,4,4,4,5,5,5,6,6,6,7,7,7,8,8,8,9,9,9]
+	var ranks: Array = []
+	for i in 21:
+		ranks.append([i, false])
+	ranks.append([20, true])
+	for rank in ranks:
 		Auth.rank_bracket = rank[0]
 		Auth.rank_in_legend = rank[1]
 		_on_ranked_search_timeout(_ranked_search_id)
-		_check(_started_level == 10, "ranked fallback uses level 10 at rank %s" % [rank])
+		var expected: int = 10 if rank[1] else expected_levels[rank[0]]
+		_check(_started_level == expected, "ranked fallback uses level %d at rank %s, got %d" % [expected, rank, _started_level])
+	_check(RankedProgress.get_ai_level(-5, false) == 3 and RankedProgress.get_ai_level(50, false) == 9, "non-Legend rank difficulty clamps to 3..9")
 	Auth.rank_bracket = saved_rank[0]
 	Auth.rank_in_legend = saved_rank[1]
 	await get_tree().process_frame
@@ -79,7 +86,7 @@ func _run() -> void:
 	var controller := AIController.new()
 	add_child(controller)
 	# Piloting grants Rush and 9 attack. Passing instead loses to the threat.
-	var engine := MCTSEngine.new("b", RankedProgress.get_ai_level(0, false))
+	var engine := MCTSEngine.new("b", 10)
 	engine._search_rng.seed = 10
 	var action := await engine.choose_action(gs)
 	_check(action["type"] == "pilot", "ranked search finds the Pilot move that enables lethal")

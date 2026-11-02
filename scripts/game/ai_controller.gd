@@ -3,7 +3,7 @@ extends Node
 
 const THINK_DELAY = 0.6
 ## Increment when AI policy/search changes, independently of card/rules versions.
-const POLICY_VERSION := 1
+const POLICY_VERSION := 2
 
 ## How long the AI sits on a turn it cannot do anything with (no affordable
 ## card, nothing able to attack) before passing it back. Every other turn is
@@ -53,16 +53,16 @@ func take_turn(game_state: GameState, board: Board) -> void:
 		if not is_instance_valid(board):
 			return
 		acted = true
+		engine.advance_after_real_action(game_state)
 		# A targeted on-play effect opens a choice that blocks every further
 		# command until it is answered - by whoever owns it.
 		if drive_choices.is_valid():
-			await drive_choices.call()
+			await drive_choices.call(engine)
 			if not is_instance_valid(board):
 				return
 		board.refresh()
 		if game_state.current_phase == GameState.Phase.GAME_OVER:
 			return
-		engine.advance_after_real_action(game_state)
 
 ## The engine returns actions as plain values naming entities by uid /
 ## instance_id (see GameState.validate). They are resolved against the real
@@ -72,6 +72,14 @@ func take_turn(game_state: GameState, board: Board) -> void:
 func _apply_action(action: Dictionary, game_state: GameState, board: Board) -> void:
 	var ai: PlayerState = game_state.opponent
 	match action["type"]:
+		GameState.CMD_ANSWER_CHOICE:
+			if str(action.get("actor", "")) != ai.player_id:
+				return
+			var result := game_state.execute(action)
+			if result["ok"]:
+				await EventPresenter.present(result["events"], board, game_state.player.player_id)
+				if is_instance_valid(board):
+					board.refresh()
 		"pilot":
 			await get_tree().create_timer(THINK_DELAY).timeout
 			if not is_instance_valid(board):
