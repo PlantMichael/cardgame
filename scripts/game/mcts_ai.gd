@@ -53,6 +53,8 @@ var last_search_iterations: int = 0
 var last_search_msec: int = 0
 var _turn_anchor: int = 0
 var _rollout_winning_line: Array[Dictionary] = []
+## Simulation personalities are opt-in; ordinary opponents keep the existing policy.
+var style: String = ""
 
 ## Persists across choose_action() calls within the same AIController.take_
 ## turn() loop so a turn's search tree is built once and walked forward one
@@ -100,9 +102,10 @@ class _MCTSNode:
 ## match itself rolls. Kept off the global stream for the same reason.
 var _search_rng := RandomNumberGenerator.new()
 
-func _init(p_ai_player_id: String, p_ai_level: int = 5) -> void:
+func _init(p_ai_player_id: String, p_ai_level: int = 5, p_style: String = "") -> void:
 	ai_player_id = p_ai_player_id
 	ai_level = clampi(p_ai_level, 1, 10)
+	style = p_style
 
 ## Runs a search rooted at (a clone of) `game_state` — or continues the tree
 ## left behind by the previous call if advance_after_real_action() reused it
@@ -345,6 +348,8 @@ func _simulate(state: GameState, depth_plies: int) -> float:
 	_rollout_winning_line.clear()
 	if state.current_phase == GameState.Phase.GAME_OVER:
 		return 1.0 if state.winner_id == ai_player_id else -1.0
+	# Preserve personality pressure at the current position as well as the rollout.
+	var immediate := AIHeuristics.evaluate_state(state, ai_player_id, style) if not style.is_empty() else 0.0
 	if state.active_player_id == ai_player_id:
 		var trace: Array = []
 		var complete := HeadlessTurn.play_full_turn_greedy(state, ai_player_id, true, trace)
@@ -358,10 +363,12 @@ func _simulate(state: GameState, depth_plies: int) -> float:
 	while plies_done < depth_plies and state.current_phase != GameState.Phase.GAME_OVER:
 		HeadlessTurn.play_full_turn_greedy(state, state.active_player_id)
 		plies_done += 1
-	var value := AIHeuristics.evaluate_state(state, ai_player_id)
+	var value := AIHeuristics.evaluate_state(state, ai_player_id, style)
 	# A rollout is a prediction, not an executed winning line. Prefer earlier
 	# wins and keep a forecast win below a win actually reached by the tree;
 	# otherwise end_turn can monopolize visits on a cooperative future rollout.
 	if state.current_phase == GameState.Phase.GAME_OVER:
 		return (0.9 if value > 0 else -0.9) / (1.0 + plies_done * 0.1)
+	if not style.is_empty():
+		value = value * 0.65 + immediate * 0.35
 	return value / (absf(value) + 100.0)

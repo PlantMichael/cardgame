@@ -43,7 +43,7 @@ function statistics(row) {
     testers: row.testers, averageTurns: row.averageTurns, turnSamples: row.turnSamples, first, second, unknownFirst };
 }
 
-function composition(row, catalog) {
+export function composition(row, catalog) {
   if (!Array.isArray(row.cards) || !row.cards.length || row.cards.length > 40) fail();
   const pairs = [], factions = new Set();
   let total = 0, previous = '';

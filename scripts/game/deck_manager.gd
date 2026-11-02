@@ -26,10 +26,12 @@ func max_copies_for(card: CardData) -> int:
 
 # ── Deck builders ──────────────────────────────────────────────────────
 
-func build_random_faction_deck(faction_color: CardData.CardColor) -> Array[CardData]:
+func build_random_faction_deck(faction_color: CardData.CardColor, allowed_ids: Dictionary = {}) -> Array[CardData]:
 	var pool: Array[CardData] = []
 	for card in CardDatabase.get_all_cards():
 		if card.is_token:
+			continue
+		if not allowed_ids.is_empty() and not allowed_ids.has(card.id):
 			continue
 		if card.color != faction_color and card.color != CardData.CardColor.GENERIC:
 			continue
@@ -144,15 +146,17 @@ func _tag_weight(archetype: int, ability: String) -> float:
 			return float(prefixes[prefix])
 	return 0.0
 
-func build_archetype_deck(faction_color: CardData.CardColor) -> Array[CardData]:
-	return _build_deck_for_archetype(faction_color, pick_archetype_for(faction_color))
+func build_archetype_deck(faction_color: CardData.CardColor, archetype: int = -1, allowed_ids: Dictionary = {}) -> Array[CardData]:
+	if archetype < 0:
+		archetype = pick_archetype_for(faction_color, allowed_ids)
+	return _build_deck_for_archetype(faction_color, archetype, allowed_ids)
 
 ## Chooses an archetype weighted by how much the faction's own cards (generic
 ## excluded) actually support it, so a color without real tribal identity
 ## won't get pushed into a hollow Tribal deck. Midrange is always a fallback
 ## option so the pick isn't deterministic even for lopsided colors.
-func pick_archetype_for(faction_color: CardData.CardColor) -> int:
-	var pool := _faction_pool(faction_color, false)
+func pick_archetype_for(faction_color: CardData.CardColor, allowed_ids: Dictionary = {}) -> int:
+	var pool := _faction_pool(faction_color, false, allowed_ids)
 	var candidates: Array[int] = [Archetype.MIDRANGE]
 	var weights: Array[float] = [MIDRANGE_BASE_WEIGHT]
 	for archetype in ARCHETYPE_TAG_WEIGHTS:
@@ -179,8 +183,8 @@ func _archetype_support(pool: Array[CardData], archetype: int) -> float:
 		total += _card_tag_score(card, archetype)
 	return total
 
-func _build_deck_for_archetype(faction_color: CardData.CardColor, archetype: int) -> Array[CardData]:
-	var pool := _faction_pool(faction_color, true)
+func _build_deck_for_archetype(faction_color: CardData.CardColor, archetype: int, allowed_ids: Dictionary = {}) -> Array[CardData]:
+	var pool := _faction_pool(faction_color, true, allowed_ids)
 	var entries: Array[CardData] = []
 	var weights: Array[float] = []
 	for card in pool:
@@ -203,10 +207,12 @@ func _score_card(card: CardData, archetype: int) -> float:
 		stat_quality = maxf(1.0, float(card.attack + card.health) / float(card.cost))
 	return (stat_quality + tag_score) * curve_weight
 
-func _faction_pool(faction_color: CardData.CardColor, include_generic: bool) -> Array[CardData]:
+func _faction_pool(faction_color: CardData.CardColor, include_generic: bool, allowed_ids: Dictionary = {}) -> Array[CardData]:
 	var pool: Array[CardData] = []
 	for card in CardDatabase.get_all_cards():
 		if card.is_token:
+			continue
+		if not allowed_ids.is_empty() and not allowed_ids.has(card.id):
 			continue
 		if card.color == faction_color:
 			pool.append(card)

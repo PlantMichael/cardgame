@@ -14,6 +14,8 @@ const ShopScreenScript = preload("res://scripts/ui/shop_screen.gd")
 const PackOpenScreenScript = preload("res://scripts/ui/pack_open_screen.gd")
 const CoreTestsScript = preload("res://scripts/game/core_tests.gd")
 const ConnectionWaitScript = preload("res://scripts/game/connection_wait.gd")
+const MoonBotsScript = preload("res://scripts/game/moon_bots.gd")
+const MoonBotTestsScript = preload("res://scripts/game/moon_bot_tests.gd")
 
 var _canvas: CanvasLayer
 var _player_deck_ids: Array[String] = []
@@ -73,6 +75,12 @@ var _campaign_pvp_role: String = ""
 const CAMPAIGN_OPPONENT_NAME := "Rival Warlord"
 
 func _ready() -> void:
+	if "--bot-tests" in OS.get_cmdline_user_args():
+		_run_bot_tests()
+		return
+	if "--bot-match" in OS.get_cmdline_user_args():
+		MoonBotsScript.run_cli(get_tree())
+		return
 	# Set explicitly here (the actual game entry point) rather than relying
 	# solely on the project.godot mouse_cursor/custom_image setting - that
 	# setting doesn't reliably take effect on every export target (notably
@@ -953,6 +961,9 @@ func _run_newcards_test_cli() -> void:
 
 	print("RESULT: %s" % ("PASS" if ok else "FAIL"))
 	get_tree().quit()
+
+func _run_bot_tests() -> void:
+	get_tree().quit(await MoonBotTestsScript.run())
 
 func _run_mcts_benchmark_cli() -> void:
 	print("Running MCTS benchmark...")

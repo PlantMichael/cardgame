@@ -4,6 +4,7 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 const { initLegacySchema } = require('./schema_legacy');
+const { initBotSchema } = require('./bot_matches');
 const { normalizeAIRecord } = require('./ranked_ai_record');
 const { createRelayServer } = require('./card_winrates');
 const { createGoogleAuthFromEnv } = require('./google_auth');
@@ -33,6 +34,7 @@ const pool = new Pool({
 // create the same schema without starting this server.
 async function initDb() {
   await initLegacySchema(pool);
+  await initBotSchema(pool);
 }
 
 async function decksOf(playerId) {

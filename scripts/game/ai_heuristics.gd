@@ -315,7 +315,7 @@ static func pick_choice_answer(gs: GameState, choice: Dictionary) -> String:
 			best = str(selection)
 	return best
 
-static func evaluate_state(gs: GameState, ai_player_id: String) -> float:
+static func evaluate_state(gs: GameState, ai_player_id: String, style: String = "") -> float:
 	if gs.current_phase == GameState.Phase.GAME_OVER and gs.winner_id != "":
 		return 100000.0 if gs.winner_id == ai_player_id else -100000.0
 
@@ -339,6 +339,54 @@ static func evaluate_state(gs: GameState, ai_player_id: String) -> float:
 	if gs.active_player_id == me.player_id:
 		score -= (me.max_mana - me.current_mana) * 0.5
 
+	match style:
+		"tempo":
+			# Board advantage and using the current turn's mana outrank chip damage.
+			score += (my_board_power - enemy_board_power) * 0.9
+			if gs.active_player_id == me.player_id:
+				score -= (me.max_mana - me.current_mana) * 1.5
+		"aggro":
+			# Race the opposing hero; tolerate damage to our own hero to keep pressure.
+			score += (30 - enemy.hero_health) * 3.5 - (30 - me.hero_health) * 0.25
+			for m in me.board:
+				score += m.current_attack * 0.8
+		"combo":
+			score += _combo_value(me) - _combo_value(enemy) * 0.35
+	return score
+
+## Reward supported pairs, not merely a hand full of expensive cards. A live
+## payoff is more valuable than holding it; a held enabler still has option value.
+static func _combo_value(p: PlayerState) -> float:
+	var bodies: Array[Minion] = p.board
+	var score := 0.0
+	for i in bodies.size():
+		for j in range(i + 1, bodies.size()):
+			score += _combo_pair(bodies[i], bodies[j]) * 12.0
+	for card in p.hand:
+		for body in bodies:
+			score += _combo_pair(card, body) * 4.0
+	return score
+
+static func _combo_pair(a, b) -> float:
+	return _combo_direction(a, b) + _combo_direction(b, a)
+
+static func _combo_direction(enabler, payoff) -> float:
+	var tags: Array[String] = enabler.abilities.duplicate()
+	if enabler is CardData and not enabler.effect.is_empty():
+		tags.append(enabler.effect)
+	var health_gain := tags.any(func(t): return "buff" in t and "health" in t or t in ["heal", "blood_boil", "blood_transfusion", "sanguine"])
+	var score := 0.0
+	for ability in payoff.abilities:
+		if health_gain and (ability == Abilities.HEAL_TO_DRAW or Abilities.is_transform_at_max_health(ability)):
+			score += 1.0
+		if ability.begins_with("on_friendly_") and ability.contains("mech") and Abilities.MECH in tags:
+			score += 0.7
+		if ability.begins_with("on_friendly_") and ability.contains("yeti") and Abilities.YETI in tags:
+			score += 0.7
+		if ability.begins_with("on_piloted_") and tags.any(func(t): return Abilities.is_pilot(t)):
+			score += 1.0
+		if ability.begins_with("on_friendly_transform") and tags.any(func(t): return t.contains("transform")):
+			score += 1.0
 	return score
 
 ## Losing health matters little from full to ~half; a lot in lethal range, so

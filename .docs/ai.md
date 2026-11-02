@@ -1,5 +1,11 @@
 # AI
 
+## Versioned simulation bots
+
+`data/bot_profiles.json` defines Io 1.0 (level 10 tempo), Callisto 1.0 (level 8 combo), Europa 1.0 (level 8 aggro), and Ganymede 1.0 (level 1 random mistakes). `MoonBots` drafts published decks through DeckManager and plays UI-free games with GameState/HeadlessTurn. MCTS accepts an optional style: named search bots score both the immediate position and neutral-greedy future; empty style preserves the ordinary opponent's existing search/evaluation. Ganymede uses random legal actions rather than running a clever search at a lower budget. Named search bots take immediate wins before applying style preferences. These are simulation participants, not human ranked accounts.
+
+The independent Node worker rotates bot pairings and Standard AI, checkpoints completed games and stores them in a separate simulation table. Bot, rules and engine versions stay distinct in the public aggregate. Human ranked stats and rewards do not include simulations. See [Moon bots operations and website contract](../server/MOON_BOTS.md) for running, rollout, tests and limits. Run `--bot-tests` with isolated user storage for deterministic style/deck scenarios; `--bot-match` is the bounded worker entrypoint.
+
 `AIController.POLICY_VERSION` versions the ranked AI policy independently of card/rules changes. New ranked-AI summaries snapshot this version and the actual first-player choice, allowing the deck matchup API to separate playtest cohorts. Increment the policy version when future AI behavior changes; historical reports without a version remain unknown rather than being inferred from difficulty.
 
 The opponent AI is a heuristic-guided Monte Carlo Tree Search (MCTS), not a hand-coded priority list. `AIController` (`scripts/game/ai_controller.gd`) still owns turn pacing and Board/animation glue, but its decisions come from `MCTSEngine` (`scripts/game/mcts_ai.gd`), which searches over `HeadlessTurn` (`scripts/game/headless_turn.gd`) — a UI-free, cloneable turn executor built on the same `GameState` used by the real game.

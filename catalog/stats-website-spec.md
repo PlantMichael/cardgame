@@ -1,5 +1,7 @@
 # Deck matchup API: website developer contract
 
+The separate [Moon bots API](../server/MOON_BOTS.md#website-api), `/data/stats/bot-matchups.json?days=30`, supplies Io, Callisto, Europa and Ganymede simulations. Their initial release is `1.0`; results include bot/rules/engine versions, exact decks, draws and opponent records. Display these in a **Bot simulations** view. The human routes below do not include their games. The bot route requires the updated relay/catalog and a separately activated worker; it does not fabricate data before activation.
+
 Build the stats site around exact starting decks and their opponent records. Exact deck lists and aggregate results are public. Player identities, match IDs and individual histories are not returned. This contract describes the implemented API; hosted availability requires deploying the updated relay and catalog.
 
 ## Origins and routes

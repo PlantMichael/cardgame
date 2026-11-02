@@ -221,4 +221,4 @@ function createDeckMatchups({ pool, publicRoot, now = Date.now }) {
   };
 }
 
-module.exports = { DECK_STATS_PATH, MAX_BYTES, parseQuery, createDeckMatchups };
+module.exports = { DECK_STATS_PATH, MAX_BYTES, parseQuery, createDeckMatchups, deckOf };
