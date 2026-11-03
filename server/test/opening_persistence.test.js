@@ -53,11 +53,21 @@ test('human and named-bot opening choices survive PostgreSQL reload and administ
     assert.equal((await replay(pool, id)).ok, true, 'actual administrative replay preserves the mode and hash');
     await host.request('drop', { match_id: id });
     // Only reload this fixture's active match; prior iterations are finished.
-    const resumed = new MatchManager({ store: saved, host, cards: loadCards(), log: { warn() {}, error() {} } });
+    const settled = [];
+    const resumed = new MatchManager({ store: saved, host, cards: loadCards(), settle: async (_sess, result) => { settled.push(result); return {}; }, log: { warn() {}, error() {} } });
     await resumed.resume();
     assert.equal(resumed.sessions.get(id).status, 'active');
     assert.equal(resumed.sessions.get(id).lastHash, expected);
-    await saved.setStatus(id, { status: 'finished' });
+    if (bot) {
+      await pool.query('UPDATE ranked_matches SET engine_version=$1 WHERE match_id=$2', [host.engineVersion - 1, id]);
+      await host.request('drop', { match_id: id });
+      await resumed.resume();
+      const old = (await pool.query('SELECT status,end_reason,engine_version FROM ranked_matches WHERE match_id=$1', [id])).rows[0];
+      assert.deepEqual(old, { status: 'voided', end_reason: 'voided_fault', engine_version: host.engineVersion - 1 });
+      assert.equal(resumed.byPlayer.has(players[0]), false);
+      assert.equal(resumed.byPlayer.has(players[1]), false);
+      assert.equal(settled.length, 0, 'persisted old-policy games cannot award a result');
+    } else await saved.setStatus(id, { status: 'finished' });
     await host.request('drop', { match_id: id });
   }
 });

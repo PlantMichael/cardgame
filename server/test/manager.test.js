@@ -327,6 +327,30 @@ test('resume after a host restart replays the log and the match continues', { sk
   assert.equal(ctx.store.actions.get(m.id).length, seqBefore + 1);
 });
 
+test('policy upgrades void old-engine bot games without settling and preserve human replays', { skip }, async () => {
+  for (const namedBot of [true, false]) {
+    const ctx = setup(namedBot ? {} : { bots: {} });
+    const m = await startedMatch(ctx);
+    await doMulligans(ctx, m);
+    const hash = ctx.manager.sessions.get(m.id).lastHash;
+    ctx.store.matches.get(m.id).engine_version = host.engineVersion - 1;
+    await host.request('drop', { match_id: m.id });
+    await ctx.manager.resume();
+    assert.equal(ctx.settled.length, 0, 'an upgrade never invents a settlement');
+    if (namedBot) {
+      assert.equal(ctx.store.matches.get(m.id).status, 'voided');
+      assert.equal(m.ca.last('match_voided').reason, 'no_rank_change');
+      assert.equal(ctx.manager.byPlayer.has(1), false, 'bot seat released');
+      assert.equal(ctx.manager.byPlayer.has(2), false, 'opponent seat released');
+      assert.equal((await ctx.manager.createMatch({ matchId: m.id + '_new', a: { playerId: 1, deckName: 'green' }, b: { playerId: 2, deckName: 'crimson' } })).ok, true);
+    } else {
+      assert.equal(ctx.manager.sessions.get(m.id).status, 'active');
+      assert.equal(ctx.manager.sessions.get(m.id).lastHash, hash);
+      assert.equal(m.ca.last('match_voided'), undefined);
+    }
+  }
+});
+
 test('a log that does not replay to its last hash voids the match with no rank change', { skip }, async () => {
   const ctx = setup();
   const m = await startedMatch(ctx);

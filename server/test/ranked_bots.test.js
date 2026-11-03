@@ -222,7 +222,7 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   assert.equal((await probe.take('ranked_refused')).reason, 'in_ai_match');
   const starters = require('../../data/starters.json');
   const probeSummary = { player_deck: starters[0].card_ids, opponent_deck: starters[1].card_ids,
-    ai_level: 10, ai_version: 2, rules_version: liveRulesVersion, turns: 1, first_player: 'player' };
+    ai_level: 10, ai_version: 3, rules_version: liveRulesVersion, turns: 1, first_player: 'player' };
   for (const invalid of [{ ai_match: { ...probeSummary, ai_level: 3 } },
     { ai_match: { ...probeSummary, player_deck: ['g_001'] } },
     { token: probeAccounts.find(a => a.id === 'callisto').token, ai_match: probeSummary }]) {

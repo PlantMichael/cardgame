@@ -524,6 +524,11 @@ class MatchManager {
         this.byPlayer.set(row.seat_b_player_id, row.match_id);
       }
       await this._exclusive(sess, async () => {
+        if ((row.bot_a || row.bot_b) && row.engine_version != null && row.engine_version !== this.host.engineVersion) {
+          await this._audit('resume_engine_mismatch', sess, null, { recorded: row.engine_version, current: this.host.engineVersion });
+          await this._void(sess, 'voided_fault');
+          return;
+        }
         const actions = row.actions.map((a) => ({ seat: a.seat, kind: a.kind === 'timeout_default' ? 'timeout_default' : 'command', cmd: a.command }));
         const rep = await this.host.request('replay', {
           match_id: row.match_id, seed: row.seed, first_seat: row.first_seat, rules_version: row.rules_version,

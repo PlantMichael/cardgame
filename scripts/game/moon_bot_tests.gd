@@ -96,6 +96,37 @@ static func test_opening(profiles: Dictionary) -> void:
 		check("Filtered Moon bot executes its Coin sequence", lethal.execute(command)["ok"])
 	check("Io converts Coin into Rush lethal", types == ["play_stratagem", "play_creature", "attack"] and lethal.winner_id == "host")
 
+static func coin_position(followup: String) -> GameState:
+	var empty: Array[CardData] = []
+	var gs := GameState.new("host", "guest", empty, empty, 81)
+	gs.start_game("host")
+	gs.player.hero_health = 30
+	gs.opponent.hero_health = 30
+	for id in [GameState.OPENING_COIN_ID, followup]:
+		gs.player.hand.append(CardDatabase.get_card(id).new_instance(gs.player.mint_card_uid()))
+	return gs
+
+static func test_coin_rollout() -> void:
+	var gs := coin_position("gen_013")
+	var coin_uid := gs.player.hand[0].uid
+	var before := gs.state_hash()
+	var action := HeadlessTurn.greedy_pick_action(gs, "host")
+	check("Greedy policy uses Coin to unlock a two-cost creature", action.get("card_uid") == coin_uid)
+	check("Coin follow-up evaluation preserves the original state", gs.state_hash() == before)
+	var trace: Array = []
+	check("A real rollout spends Coin and develops the board", HeadlessTurn.play_full_turn_greedy(gs, "host", true, trace)
+		and gs.player.board.size() == 1 and gs.player.hand.is_empty()
+		and trace[0].get("card_uid") == coin_uid)
+	for id in ["gen_009", "g_str_002"]: # Too expensive, or a health buff with no target.
+		var held := coin_position(id)
+		var pick := HeadlessTurn.greedy_pick_action(held, "host")
+		check("Coin is held when %s has no useful legal follow-up" % id, pick.get("card_uid", "") != held.player.hand[0].uid)
+	var full := coin_position("gen_013")
+	for i in PlayerState.MAX_BOARD_SIZE:
+		body(full, "host", 1, 1).is_exhausted = true
+	check("A full board does not waste Coin on an unplayable creature",
+		HeadlessTurn.greedy_pick_action(full, "host").get("card_uid", "") != full.player.hand[0].uid)
+
 static func run() -> int:
 	failures = 0
 	var profiles := Bots.roster()
@@ -304,6 +335,7 @@ static func run() -> int:
 	await driver._ai_step(capped)
 	check("Capped local AI attempt cancels without awarding or advancing rotation", capped.ai_state == null and capped.next_ai and capped.stage == "pause" and driver.sent.size() == 1 and driver.sent[0]["type"] == "ranked_bot_ai_cancel")
 	driver.free()
+	test_coin_rollout()
 	await test_opening(profiles)
 	print("MOON BOT TESTS: %s failed" % failures)
 	return failures

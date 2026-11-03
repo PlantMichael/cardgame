@@ -413,7 +413,7 @@ async function main() {
   if (authoritativeEnabled()) {
     auth = new Authoritative({ pool });
     await auth.start();
-    console.log('Ranked matches are server-authoritative (rules version', auth.rulesVersion + ')');
+    console.log('Ranked matches are server-authoritative (rules version', auth.rulesVersion + ', AI policy', auth.manager.host.engineVersion + ')');
   }
 
   const { server, wss } = createRelayServer({ pool, botActivity: botPresence.activity });
