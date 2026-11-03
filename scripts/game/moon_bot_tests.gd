@@ -34,6 +34,68 @@ static func body(gs: GameState, owner: String, attack: int, hp: int, tags: Array
 	p.place_minion(m)
 	return m
 
+static func opening_state(first: String) -> GameState:
+	var cards: Array[CardData] = []
+	for _i in 20: cards.append(CardDatabase.get_card("gen_013"))
+	var gs := GameState.new("host", "guest", cards, cards, 77)
+	gs.start_game(first)
+	gs.begin_mulligan(true)
+	return gs
+
+static func test_opening(profiles: Dictionary) -> void:
+	for first in ["host", "guest"]:
+		var second := "guest" if first == "host" else "host"
+		for id in ["io", "callisto", "europa", "ganymede"]:
+			var gs := opening_state(first)
+			var before := gs.state_hash()
+			var waiting := await Bots.choose_view_action(gs.to_net_dict(first), first, [], profiles[id])
+			check("%s waits before opponent opening" % id, waiting.is_empty() and gs.state_hash() == before)
+			var command := await Bots.choose_view_action(gs.to_net_dict(second), second, [], profiles[id])
+			command["actor"] = second
+			check("%s answers opening before mulligan" % id, command.get("type") == "answer_choice" and gs.execute(command)["ok"])
+			check("%s can select Coin from its known hand" % id, gs.opening_bonus["selection"] == "coin")
+			for pid in [first, second]:
+				var mulligan := await Bots.choose_view_action(gs.to_net_dict(pid), pid, [], profiles[id])
+				mulligan["actor"] = pid
+				check("%s submits valid mulligan afterward" % id, mulligan.get("type") == "mulligan" and gs.execute(mulligan)["ok"])
+		var driver := LocalDriver.new()
+		var local := RankedClient.BotConnection.new()
+		local.profile = profiles["io"]
+		local.stage = "ai_playing"
+		local.ai_state = opening_state(first)
+		local.ai_started = Time.get_ticks_msec()
+		local.ai_level = 3
+		for _i in 3: await driver._ai_step(local)
+		check("Local bot/Standard AI opening finishes in either orientation", not local.ai_state.opening_choice_pending() and local.ai_state.mulligan_pending.is_empty() and local.stage == "ai_playing" and driver.sent.is_empty())
+		var network := RankedClient.BotConnection.new()
+		network.profile = profiles["io"]
+		network.stage = "playing"
+		network.my_id = first
+		network.view = opening_state(first).to_net_dict(first)
+		await driver._think(network)
+		check("Network first seat sends no premature mulligan", driver.sent.is_empty())
+		network.my_id = second
+		network.view = opening_state(first).to_net_dict(second)
+		await driver._think(network)
+		check("Network second seat sends opening answer", driver.sent.size() == 1 and driver.sent[0]["cmd"]["type"] == "answer_choice")
+		driver.free()
+	# Real filtered policy can use the generated Coin, not just choose its option.
+	var lethal := opening_state("guest")
+	lethal.execute({"type": "answer_choice", "actor": "host", "choice_id": "choice-1", "selection": "coin"})
+	for pid in ["host", "guest"]: lethal.execute({"type": "mulligan", "actor": pid, "card_uids": []})
+	lethal.execute({"type": "end_turn", "actor": "guest"})
+	lethal.opponent.hero_health = 3
+	# Keep the real generated Coin, replacing only the unrelated hand fixture.
+	var coin: CardData = lethal.player.hand.back()
+	lethal.player.hand = [coin, CardDatabase.get_card("cr_016").new_instance(lethal.player.mint_card_uid())]
+	var types := []
+	for _i in 3:
+		var command := await Bots.choose_view_action(lethal.to_net_dict("host"), "host", [], profiles["io"])
+		command["actor"] = "host"
+		types.append(command.get("type"))
+		check("Filtered Moon bot executes its Coin sequence", lethal.execute(command)["ok"])
+	check("Io converts Coin into Rush lethal", types == ["play_stratagem", "play_creature", "attack"] and lethal.winner_id == "host")
+
 static func run() -> int:
 	failures = 0
 	var profiles := Bots.roster()
@@ -229,5 +291,6 @@ static func run() -> int:
 	await driver._ai_step(capped)
 	check("Capped local AI attempt cancels without awarding or advancing rotation", capped.ai_state == null and capped.next_ai and capped.stage == "pause" and driver.sent.size() == 1 and driver.sent[0]["type"] == "ranked_bot_ai_cancel")
 	driver.free()
+	await test_opening(profiles)
 	print("MOON BOT TESTS: %s failed" % failures)
 	return failures

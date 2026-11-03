@@ -232,7 +232,7 @@ func _receive(c: BotConnection, msg: Dictionary, now: int) -> void:
 				c.ai_state = GameState.new("host", "guest", c.deck, c.ai_deck, randi() & 0x7fffffff)
 				c.ai_state.set_events_enabled(true)
 				c.ai_state.start_game(c.ai_first)
-				c.ai_state.begin_mulligan()
+				c.ai_state.begin_mulligan(true)
 				c.ai_started = now
 				print("RANKED_BOT_EVENT " + JSON.stringify({"event": "ai_started", "bot": c.profile["id"], "ai_level": level, "match_id": c.ai_match_id}))
 			c.stage = "ai_playing"
@@ -346,7 +346,9 @@ func _ai_step(c: BotConnection) -> void:
 		_ai_failed(c)
 		return
 	var actor := gs.active_player_id
-	if not gs.mulligan_pending.is_empty():
+	if gs.opening_choice_pending():
+		actor = str(gs.opening_bonus["player_id"])
+	elif not gs.mulligan_pending.is_empty():
 		actor = str(gs.mulligan_pending.keys()[0])
 	elif gs.has_pending_choice():
 		actor = str(gs.pending_choice["player_id"])
@@ -392,7 +394,11 @@ func _think(c: BotConnection) -> void:
 	if c.view.is_empty() or int(c.view.get("phase", 0)) == GameState.Phase.GAME_OVER:
 		return
 	var mulligan: Dictionary = c.view.get("mulligan_pending", {})
-	if not mulligan.has(c.my_id):
+	var opening: Dictionary = c.view.get("opening_bonus", {})
+	if not opening.is_empty() and str(opening.get("selection", "")).is_empty():
+		if str(opening["player_id"]) != c.my_id:
+			return
+	elif not mulligan.has(c.my_id):
 		if not mulligan.is_empty() or str(c.clock.get("responsible", c.seat)) != c.seat:
 			return
 		var choice: Dictionary = c.view.get("pending_choice", {})

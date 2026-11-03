@@ -46,8 +46,7 @@ test.after(async () => { if (host) await host.stop(); });
 function setup(overrides = {}) {
   let clock = 1_000_000;
   const store = new MemoryStore({
-    // Existing general manager cases use the supported named-bot baseline.
-    // The human-only experiment and its lifecycle are exercised separately below.
+    // General cases include an actual named bot; all ranked seats now choose.
     bots: overrides.bots ?? { 1: { id: 'io', name: 'Io', version: '1.0', level: 10, style: 'tempo' } },
     decks: {
       '1:green': { faction_idx: 0, card_ids: legalDeck('GREEN') },
@@ -62,11 +61,11 @@ function setup(overrides = {}) {
     settle: async (sess, result) => { settled.push({ id: sess.id, ...result }); return { 1: { rank: 'moved' }, 2: { rank: 'moved' } }; },
     log: { warn() {}, error() {} },
   });
-  return { store, manager, settled, advance: (s) => { clock += s * 1000; }, now: () => clock };
+  return { store, manager, settled, offsets: new Map(), advance: (s) => { clock += s * 1000; }, now: () => clock };
 }
 
 let n = 0;
-async function startedMatch(ctx) {
+async function startedMatch(ctx, chooseOpening = true) {
   const id = `rk_t${++n}`;
   const made = await ctx.manager.createMatch({ matchId: id, a: { playerId: 1, deckName: 'green' }, b: { playerId: 2, deckName: 'crimson' } });
   assert.equal(made.ok, true, JSON.stringify(made));
@@ -74,9 +73,15 @@ async function startedMatch(ctx) {
   const cb = new FakeConn('b');
   await ctx.manager.handleMessage(1, { type: 'match_join', match_id: id }, ca);
   await ctx.manager.handleMessage(2, { type: 'match_join', match_id: id }, cb);
+  if (chooseOpening) {
+    const second = made.firstSeat === 'a' ? [2, cb, 'b'] : [1, ca, 'a'];
+    const choice = ctx.manager.sessions.get(id).views[second[2]].pending_choice;
+    await cmd(ctx, second[0], second[1], id, 1, { type: 'answer_choice', choice_id: choice.id, selection: 'five_cards' });
+    ctx.offsets.set(second[0], 1);
+  }
   return { id, ca, cb, first: made.firstSeat };
 }
-const cmd = (ctx, player, conn, id, seq, c) => ctx.manager.handleMessage(player, { type: 'match_command', match_id: id, client_seq: seq, cmd: c }, conn);
+const cmd = (ctx, player, conn, id, seq, c) => ctx.manager.handleMessage(player, { type: 'match_command', match_id: id, client_seq: seq + (ctx.offsets.get(player) || 0), cmd: c }, conn);
 
 async function doMulligans(ctx, m) {
   await cmd(ctx, 1, m.ca, m.id, 1, { type: 'mulligan', card_uids: [] });
@@ -130,8 +135,8 @@ test('join gives each seat only its own view; both seated -> active', { skip }, 
   assert.ok(va.view.host_state.hand.length > 0 && va.view.guest_state.hand.length === 0);
   assert.ok(vb.view.guest_state.hand.length > 0 && vb.view.host_state.hand.length === 0);
   assert.equal(ctx.store.matches.get(m.id).status, 'active');
-  assert.ok(m.ca.last('match_clock').clock.mulligan_remaining_s > 0, 'both seats are told the mulligan clock when the match starts');
-  assert.ok(m.cb.last('match_clock').clock.mulligan_remaining_s > 0);
+  assert.ok(m.ca.last('match_view').clock.mulligan_remaining_s > 0, 'both seats are told the mulligan clock after the opening choice');
+  assert.ok(m.cb.last('match_view').clock.mulligan_remaining_s > 0);
 });
 
 test('commands are logged BEFORE they are acknowledged or shown', { skip }, async () => {
@@ -140,13 +145,14 @@ test('commands are logged BEFORE they are acknowledged or shown', { skip }, asyn
   const orig = ctx.store.appendAction.bind(ctx.store);
   ctx.store.appendAction = async (a) => { order.push(`log:${a.seq}`); return orig(a); };
   const m = await startedMatch(ctx);
+  order.length = 0;
   const send = m.ca.send.bind(m.ca);
-  m.ca.send = (o) => { if (o.type === 'match_ack') order.push(`ack:${o.client_seq}`); if (o.type === 'match_view') order.push('view'); send(o); };
+  m.ca.send = (o) => { if (o.type === 'match_ack') order.push('ack'); if (o.type === 'match_view') order.push('view'); send(o); };
   await cmd(ctx, 1, m.ca, m.id, 1, { type: 'mulligan', card_uids: [] });
   const i = (s) => order.indexOf(s);
-  assert.ok(i('log:1') >= 0 && i('ack:1') > i('log:1'), `order was ${order}`);
-  assert.equal(ctx.store.actions.get(m.id).length, 1);
-  assert.match(ctx.store.actions.get(m.id)[0].state_hash, /^[0-9a-f]{64}$/);
+  assert.ok(i('log:2') >= 0 && i('ack') > i('log:2'), `order was ${order}`);
+  assert.equal(ctx.store.actions.get(m.id).length, 2, 'opening and mulligan are each logged');
+  assert.match(ctx.store.actions.get(m.id).at(-1).state_hash, /^[0-9a-f]{64}$/);
 });
 
 test('refusals: illegal, duplicate, wrong player, wrong match - all generic, none logged', { skip }, async () => {
@@ -335,7 +341,7 @@ test('a log that does not replay to its last hash voids the match with no rank c
 
 test('human opening choice owns its clock, reconnect, log and replay before mulligan', { skip }, async () => {
   const ctx = setup({ bots: {}, config: { graceSeconds: 60 } });
-  const m = await startedMatch(ctx);
+  const m = await startedMatch(ctx, false);
   const sess = ctx.manager.sessions.get(m.id);
   const [pid, conn] = m.first === 'a' ? [2, m.cb] : [1, m.ca];
   const choice = sess.views[m.first === 'a' ? 'b' : 'a'].pending_choice;
@@ -365,7 +371,7 @@ test('human opening choice owns its clock, reconnect, log and replay before mull
 
 test('human choice timeout chooses five then allows a full mulligan window', { skip }, async () => {
   const ctx = setup({ bots: {}, config: { graceSeconds: 60 } });
-  const m = await startedMatch(ctx);
+  const m = await startedMatch(ctx, false);
   ctx.advance(11);
   await ctx.manager.tick();
   const sess = ctx.manager.sessions.get(m.id);

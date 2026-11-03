@@ -1,6 +1,6 @@
 # AI
 
-Normal human ranked-AI fallback participates in the opening-bonus experiment. If AI goes second, it chooses Coin when its opening hand has at least two two-cost cards, otherwise Recruit when it has at least two one-cost cards, otherwise five cards. The ordinary search can play the Coin and spend its temporary mana; it may save the Coin when there is no immediate payoff. Named Moon bot games retain baseline openings.
+Normal ranked-AI fallback and all four Moon bots use the same opening-bonus system. If AI goes second, it chooses Coin when its opening hand has at least two two-cost cards, otherwise Recruit when it has at least two one-cost cards, otherwise five cards. The ordinary search can play the Coin and spend its temporary mana; it may save the Coin when there is no immediate payoff. Filtered bot policy answers the opening before either mulligan; the other seat waits. Current profile versions, styles, levels and saved drafts are unchanged; rules version 8 identifies the new opening environment.
 
 ## Versioned Moon bots
 

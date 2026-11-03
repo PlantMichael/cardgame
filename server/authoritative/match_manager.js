@@ -149,7 +149,7 @@ class MatchManager {
     });
     const created = await this.host.request('create', {
       match_id: matchId, seed, first_seat: firstSeat, deck_a: decks.a, deck_b: decks.b, rules_version: rulesVersion,
-      opening_choice: !botProfiles.a && !botProfiles.b,
+      opening_choice: true,
     });
     if (!created.ok) {
       await this.store.setStatus(matchId, { status: 'voided', end_reason: 'voided_fault' });
@@ -527,7 +527,7 @@ class MatchManager {
         const actions = row.actions.map((a) => ({ seat: a.seat, kind: a.kind === 'timeout_default' ? 'timeout_default' : 'command', cmd: a.command }));
         const rep = await this.host.request('replay', {
           match_id: row.match_id, seed: row.seed, first_seat: row.first_seat, rules_version: row.rules_version,
-          opening_choice: row.mode === 'authoritative' && !row.bot_a && !row.bot_b,
+          opening_choice: true,
           deck_a: row.deck_a, deck_b: row.deck_b, actions,
         });
         const expected = row.actions.length ? row.actions[row.actions.length - 1].state_hash : null;

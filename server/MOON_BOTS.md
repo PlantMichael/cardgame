@@ -1,5 +1,7 @@
 # Moon bots
 
+With rules 8, both workers use the ranked second-player opening choice before either mulligan, including bot-v-bot, human-v-bot and bot-v-rank-matched-AI games. The chooser uses the existing hand-curve policy; ordinary level/style policy can then use Coin's temporary mana. Current bot profiles and saved drafts are preserved. Rules-6/7 history and ranks are not reset; Statistics remains combined with its existing latest-rules default.
+
 Moon bots have two independent modes. The **ranked worker** controls four persistent accounts, alternating normal authoritative queue matches and local ranked-AI games with ordinary ladder results. The **simulation worker** plays isolated headless games in `bot_matches` without accounts or ladder rewards. Both use the profiles below; neither uses a paid AI service.
 
 | Bot | Release | Level | Drafting and decisions |

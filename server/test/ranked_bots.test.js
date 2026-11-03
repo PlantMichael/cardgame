@@ -257,6 +257,7 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   human.send({ type: 'match_join', match_id: found.match_id });
   const view = await human.take('match_view', found.match_id);
   const first = (await pool.query('SELECT * FROM ranked_matches WHERE match_id=$1', [found.match_id])).rows[0];
+  assert.equal(view.view.opening_bonus.player_id, first.first_seat === 'a' ? 'guest' : 'host', 'human/bot ranked match has the same second-player opening');
   const opponentId = first[view.seat === 'a' ? 'seat_b_player_id' : 'seat_a_player_id'];
   const aiOutcome = (await pool.query(`SELECT match_id,won,outcome,ai_match FROM ranked_settlements WHERE player_id=$1 AND ai_match IS NOT NULL ORDER BY settled_at LIMIT 1`, [opponentId])).rows[0];
   const aiOnly = await (await fetch(httpUrl + '/data/stats/deck-matchups.json?mode=all&days=29')).json();
@@ -351,6 +352,10 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
     return rows.length ? rows : null;
   }, 'autonomous bot-v-bot completion', 210000);
   assert.ok(finished[0].facts.turns > 1);
+  const initialActions = (await pool.query('SELECT kind,command FROM ranked_match_actions WHERE match_id=$1 ORDER BY seq LIMIT 3', [finished[0].match_id])).rows;
+  assert.equal(initialActions[0].kind, 'command', 'bot answers its opening rather than timing out');
+  assert.equal(initialActions[0].command.type, 'answer_choice');
+  assert.ok(initialActions.slice(1).every(a => a.command.type === 'mulligan'), 'both mulligans follow the bot opening answer');
   const active = (await pool.query("SELECT * FROM ranked_matches WHERE status='active' AND mode='ranked_bots' LIMIT 1")).rows[0];
   if (active) {
     const playerId = active.bot_a ? active.seat_a_player_id : active.seat_b_player_id;

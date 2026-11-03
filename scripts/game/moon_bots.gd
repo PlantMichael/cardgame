@@ -91,6 +91,12 @@ static func choose_view_action(view: Dictionary, my_id: String, own_deck: Array[
 	var rng := RandomNumberGenerator.new()
 	rng.seed = planning_seed
 	var gs := planning_state(view, my_id, own_deck, planning_seed)
+	if gs.opening_choice_pending():
+		if str(gs.opening_bonus["player_id"]) != my_id:
+			return {}
+		var opening := gs.pending_choice
+		return {"type": "answer_choice", "choice_id": opening["id"],
+			"selection": AIHeuristics.pick_choice_answer(gs, opening)}
 	if gs.mulligan_pending.has(my_id):
 		var swaps := AIHeuristics.pick_mulligan_swaps(gs.find_player(my_id).hand)
 		return {"type": "mulligan", "card_uids": swaps.map(func(card): return card.uid)}
@@ -128,8 +134,16 @@ static func play(a: Dictionary, b: Dictionary, faction_a: int, faction_b: int, f
 		"first": first, "seed": game_seed, "rulesVersion": RulesVersion.RULES_VERSION, "engineVersion": AIController.POLICY_VERSION}
 	var gs := GameState.new("a", "b", deck_a, deck_b, game_seed)
 	gs.start_game(first)
+	gs.begin_mulligan(true)
+	var opening := gs.pending_choice
+	if not gs.execute({"type": GameState.CMD_ANSWER_CHOICE, "actor": str(opening["player_id"]),
+		"choice_id": opening["id"], "selection": AIHeuristics.pick_choice_answer(gs, opening)})["ok"]:
+		return {}
 	for p in [gs.player, gs.opponent]:
-		gs.mulligan_swap(p.player_id, AIHeuristics.pick_mulligan_swaps(p.hand))
+		var swaps := AIHeuristics.pick_mulligan_swaps(p.hand)
+		if not gs.execute({"type": GameState.CMD_MULLIGAN, "actor": p.player_id,
+			"card_uids": swaps.map(func(card): return card.uid)})["ok"]:
+			return {}
 	HeadlessTurn._resolve_pending(gs)
 	var policy_rng := RandomNumberGenerator.new()
 	policy_rng.seed = game_seed + 123
