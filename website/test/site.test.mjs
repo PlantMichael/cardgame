@@ -23,7 +23,7 @@ test('built public pages, canonical keywords and unchanged Godot runtime work ov
   });
   const origin = `http://127.0.0.1:${server.address().port}`;
   const pages = [];
-  const routes = ['/', '/rulebook/', '/glossary/', '/play/', '/account/', '/stats/', '/ranked/'];
+  const routes = ['/', '/rulebook/', '/glossary/', '/play/', '/account/', '/stats/', '/ranked/', '/patch-notes/'];
   for (const route of routes) {
     const response = await fetch(origin + route);
     assert.equal(response.status, 200, route);
@@ -58,6 +58,7 @@ test('built public pages, canonical keywords and unchanged Godot runtime work ov
     assert.ok(html.includes('src="/account.js"'));
   }
   assert.ok(pages[4].includes('data-profile'), 'profile page');
+  assert.match(pages[7], /href="\/patch-notes\/" aria-current="page"/, 'patch notes are reachable through active navigation');
   assert.ok(!pages[3].includes('type="password"') && !pages[3].includes('Log out</'), 'no login form or logout control is baked into the page');
   const portraits = JSON.parse(pages[3].match(/data-portraits>([^<]*)</)[1]);
   assert.ok(portraits.length > 0);
@@ -101,4 +102,23 @@ test('untrusted keyword content is escaped in the generated public HTML', () => 
   assert.ok(!html.includes('<script>alert(2)</script>'));
   assert.ok(!html.includes('<img src=x'));
   assert.ok(html.includes('A &amp; B &lt;script&gt;alert(2)&lt;/script&gt;'));
+});
+
+test('published patch notes render newest first with escaped titles and changes', () => {
+  const featured = ['GREEN','CRIMSON','TEAL'].map(color => ({ color, card_name: 'Example', cost: 1, attack: 1, health: 1,
+    card_type: 'CREATURE', description: 'Example', image: '/example.png' }));
+  const patchNotes = [
+    { date: '2026-10-31', title: 'Older release', changes: ['First change'] },
+    { date: '2026-11-03', title: 'Newest <release>', changes: ['A & B <script>alert(1)</script>'] },
+    { date: '2026-11-01', title: 'Middle release', changes: ['Second change'] },
+  ];
+  const html = renderPages({featured, keywords: {}, patchNotes})['patch-notes/index.html'];
+  assert.ok(html.indexOf('Newest &lt;release&gt;') < html.indexOf('Middle release'));
+  assert.ok(html.indexOf('Middle release') < html.indexOf('Older release'));
+  assert.ok(html.includes('November 3, 2026'));
+  assert.ok(html.includes('A &amp; B &lt;script&gt;alert(1)&lt;/script&gt;'));
+  assert.ok(!html.includes('<script>alert(1)</script>'));
+  assert.ok(!html.includes('No patch notes yet.'));
+  const empty = renderPages({featured, keywords: {}, patchNotes: []})['patch-notes/index.html'];
+  assert.ok(empty.includes('No patch notes yet.'));
 });

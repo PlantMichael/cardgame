@@ -29,7 +29,8 @@ export function buildSite(destination = outputRoot, { relayUrl = process.env.CAR
   // Portraits the game offers (small copies; see website/tools/make-thumbs.py). The id is the filename the game stores.
   const portraits = readdirSync(path.join(projectRoot, 'website/assets/pfps')).filter(n => n.endsWith('.png')).sort();
   const cardCount = JSON.parse(readFileSync(path.join(projectRoot, 'catalog/public/data/cards.json'), 'utf8')).cards.filter(c => c.collectible).length;
-  const pages = renderPages({ featured, keywords, relayUrl, portraits, cardCount, catalogOrigin });
+  const patchNotes = JSON.parse(readFileSync(path.join(projectRoot, 'website/patch-notes.json'), 'utf8'));
+  const pages = renderPages({ featured, keywords, relayUrl, portraits, cardCount, catalogOrigin, patchNotes });
   const gameRoot = path.join(projectRoot, 'build');
   for (const name of ['index.html', 'index.js', 'index.wasm', 'index.pck']) {
     if (!existsSync(path.join(gameRoot, name))) throw new Error(`Export the Web game first: missing build/${name}`);

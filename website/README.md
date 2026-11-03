@@ -1,5 +1,7 @@
 # cardgame website
 
+`/patch-notes/` lists published updates newest first and is linked in the top navigation. It starts empty. To publish an entry, add an object to `website/patch-notes.json` with `date` (`YYYY-MM-DD`), `title`, and `changes` (an array of plain-text strings), then rebuild. Entries are sorted by date during the build; content is escaped as text. The draft root `PATCH_NOTES.md` is not automatically published.
+
 The public home, rulebook and glossary wrap the existing Godot Web export on the same Vercel project. Node 20+ is sufficient; no package installation or framework is needed.
 
 ```sh

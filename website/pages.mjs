@@ -8,7 +8,7 @@ const button = (label, href, secondary = false) => `<a class="button${secondary 
 let siteConfig = { relayUrl: '', portraits: [], catalogOrigin: '' };
 
 function shell(title, active, content, description) {
-  const nav = [['Home', '/'], ['Ranked', '/ranked/'], ['Glossary', '/glossary/'], ['Stats', '/stats/']];
+  const nav = [['Home', '/'], ['Ranked', '/ranked/'], ['Glossary', '/glossary/'], ['Stats', '/stats/'], ['Patch notes', '/patch-notes/']];
   const playing = active === 'Play';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${title === 'Home' ? 'cardgame — Space-age card battles in your browser' : `${title} — cardgame`}</title>
@@ -17,8 +17,8 @@ function shell(title, active, content, description) {
   <body${playing ? ' class="play-page"' : ''}><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="wrap header-inner">
   <a class="brand" href="/" aria-label="cardgame home"><img src="/media/logo.png" width="40" height="40" alt=""><span class="brand-word">CARD<b>GAME</b></span></a>
   <nav aria-label="Main navigation">${nav.map(([label, href]) => `<a href="${href}" ${active === label ? 'aria-current="page"' : ''}${playing && label !== 'Home' ? ' target="_blank" rel="noopener" aria-label="' + label + ' (opens in a new tab)"' : ''}>${label}</a>`).join('')}</nav>
-  <div class="account-slot" data-account-slot aria-live="polite"><noscript><a class="account-link" href="/play/">Log in</a></noscript></div>
-  <a class="nav-play" href="${playing ? '#play-area' : '/play/'}"${playing ? ' aria-current="page"' : ''}>${playing ? 'Playing' : 'Play now'}</a></div></header>
+  <a class="nav-play" href="${playing ? '#play-area' : '/play/'}"${playing ? ' aria-current="page"' : ''}>${playing ? 'Playing' : 'Play now'}</a>
+  <div class="account-slot" data-account-slot aria-live="polite"><noscript><a class="account-link" href="/play/">Log in</a></noscript></div></div></header>
   <main id="main">${content}</main>
   ${playing ? '' : `<footer class="site-footer"><div class="wrap footer-inner"><a class="brand small" href="/"><img src="/media/logo.png" width="28" height="28" alt=""><span class="brand-word">CARD<b>GAME</b></span></a>
   <nav aria-label="Footer navigation"><a href="/rulebook/">Learn to play</a><a href="/glossary/">Keywords</a><a href="/play/">Enter the game</a></nav><span class="footer-note">Playtest build. Cards and rules may change.</span></div></footer>`}</body></html>`;
@@ -115,11 +115,18 @@ function ranked() {
   <section class="final-cta"><div class="hero-art" aria-hidden="true"></div><div class="wrap final-inner"><h2>Your first division starts now.</h2>${button('Play ranked', '/play/')}</div></section>`, 'How cardgame ranked works: ladder points, divisions, the Legend tiers, and every rank from Orbital III to Universal.');
 }
 
-export function renderPages({ featured, keywords, relayUrl = '', portraits = [], cardCount = 0, catalogOrigin = '' }) {
+function patchNotesPage(entries) {
+  const ordered = [...entries].sort((a, b) => b.date.localeCompare(a.date));
+  return shell('Patch notes', 'Patch notes', `<section class="wrap page-heading"><span class="eyebrow">GAME UPDATES</span><h1>Patch <em>notes.</em></h1><p>The latest card changes, balance updates, and fixes.</p></section>
+  <section class="wrap patch-notes-list" aria-label="Published patch notes">${ordered.length ? ordered.map(entry => `<article class="patch-note"><time datetime="${escapeHtml(entry.date)}">${escapeHtml(new Date(`${entry.date}T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }))}</time><h2>${escapeHtml(entry.title)}</h2><ul>${entry.changes.map(change => `<li>${escapeHtml(change)}</li>`).join('')}</ul></article>`).join('') : '<div class="patch-note"><h2>No patch notes yet.</h2><p>Published updates will appear here, newest first.</p></div>'}</section>`, 'Published cardgame updates, balance changes, and fixes, newest first.');
+}
+
+export function renderPages({ featured, keywords, relayUrl = '', portraits = [], cardCount = 0, catalogOrigin = '', patchNotes = [] }) {
   siteConfig = { relayUrl, portraits, catalogOrigin };
   return { 'index.html': home(featured, cardCount), 'rulebook/index.html': rulebook(featured), 'glossary/index.html': glossary(keywords),
     'play/index.html': shell('Play', 'Play', '<div id="play-area" class="game-mount" data-game-mount data-game-src="/play/game.html"><div class="game-message"><noscript><p>cardgame needs JavaScript to log you in and run the game.</p></noscript></div></div>', 'Play cardgame with the site navigation available above the game.'),
     'ranked/index.html': ranked(),
+    'patch-notes/index.html': patchNotesPage(patchNotes),
     'stats/index.html': shell('Stats', 'Stats', '<div class="wrap stats-page" data-stats-app><p class="state"><noscript>The statistics pages need JavaScript. </noscript>Loading…</p></div>', 'Exact-deck results from cardgame playtests: win rates, opponents and matchups, with sample sizes.'),
     'account/index.html': shell('Account', 'Account', '<section class="wrap profile-page" data-profile><p class="profile-message"><noscript>Your profile needs JavaScript. </noscript>Loading your account…</p></section>', 'Your cardgame account: rank, balances, profile picture and sign-in methods.') };
 }
