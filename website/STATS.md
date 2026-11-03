@@ -47,4 +47,6 @@ The configured catalog must serve `/data/stats/deck-matchups.json`. If unavailab
 
 ## Card statistics
 
+The Cards tab's **Show generic cards** checkbox starts checked. Unchecking it hides generic rows while preserving the faction/search filters and all metric denominators. Shared links and reloads retain the unchecked setting as `generics=0`; this display preference is not sent to the API.
+
 Card metrics weight exact starting lists by recorded deck appearances. Average copies is conditional on inclusion; deck win rate measures outcomes of the whole deck. Times played uses actual recorded events, including replays/generated copies, and is independent of inclusion. No play coverage displays an em dash; incomplete coverage displays a lower bound (≥) with a visible note and exact coverage under About card statistics. Old AI games lack these events; older PvP history can be partial. Never turn unavailable/unknown recording into a zero. Definitions and formulas are in [the API contract](../catalog/stats-website-spec.md#recorded-plays-and-card-table-formulas).

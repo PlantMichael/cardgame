@@ -290,6 +290,12 @@ test('card metrics weight copies and win rate by appearances and distinguish mis
 test('card filters and sorting survive shared URLs; legacy AI/PvP cohorts remain selectable by URL',()=>{
   const route=S.routeFromSearch('?view=cards&mode=all&q=Slime&faction=BLACK&sort=deckWinRate&dir=asc');
   assert.deepEqual(S.routeFromSearch(S.searchFromRoute(route)),route);
+  assert.equal(route.showGenerics,true);
+  assert.ok(!new URLSearchParams(S.searchFromRoute(route)).has('generics'));
+  const noGenerics=S.routeFromSearch('?view=cards&generics=0&q=Slime&faction=BLACK');
+  assert.equal(noGenerics.showGenerics,false);
+  assert.deepEqual(S.routeFromSearch(S.searchFromRoute(noGenerics)),noGenerics);
+  assert.ok(!S.serverQuery(noGenerics.cohort).has('generics'),'visibility stays local to the card table');
   const legacy=S.routeFromSearch('?mode=ranked_ai&aiVersion=1&aiLevel=4&view=cards');
   assert.equal(legacy.cohort.aiLevel,'4');
   assert.deepEqual(S.routeFromSearch(S.searchFromRoute(legacy)),legacy);

@@ -51,7 +51,7 @@ export function apiUrl(origin, cohort) {
 }
 
 /** Everything the page remembers in its address: the cohort plus view state. */
-export const VIEW_KEYS = ['view', 'deck', 'role', 'opp', 'oppRole', 'faction', 'q', 'x', 'min', 'sort', 'dir', 'who', 'rows', 'cols', 'demo'];
+export const VIEW_KEYS = ['view', 'deck', 'role', 'opp', 'oppRole', 'faction', 'q', 'x', 'min', 'sort', 'dir', 'who', 'rows', 'cols', 'demo', 'generics'];
 
 export function routeFromSearch(search) {
   const params = new URLSearchParams(search);
@@ -70,6 +70,7 @@ export function routeFromSearch(search) {
     who: cohort.mode === 'all' ? 'combined' : params.get('who') === 'ai' ? 'ai' : 'human',
     rows: clampInt(params.get('rows'), 3, 25, 8), cols: clampInt(params.get('cols'), 3, 25, 8),
     demo: params.get('demo') === '1',
+    showGenerics: params.get('generics') !== '0',
   };
 }
 
@@ -92,7 +93,7 @@ export function searchFromRoute(route) {
     set('who', route.who, ownRole); set('faction', route.faction); set('q', route.q); set('x', route.x);
     set('min', route.min, DEFAULT_MIN_GAMES); set('sort', route.sort, 'matches'); set('dir', route.dir, 'desc');
   }
-  if (route.view === 'cards') { set('faction', route.faction); set('q', route.q); set('sort', route.sort, 'timesPlayed'); set('dir', route.dir, 'desc'); }
+  if (route.view === 'cards') { set('faction', route.faction); set('q', route.q); set('sort', route.sort, 'timesPlayed'); set('dir', route.dir, 'desc'); set('generics', route.showGenerics ? '1' : '0', '1'); }
   if (route.view === 'matrix') { set('rows', route.rows, 8); set('cols', route.cols, 8); }
   if (route.demo) q.set('demo', '1');
   return `?${q.toString()}`;
