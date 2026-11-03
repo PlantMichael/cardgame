@@ -26,6 +26,7 @@ test('schedule covers each pairing, both first players and every faction combina
 
 test('a policy upgrade saves an older completed pending simulation without relabeling or replaying it', {
   skip: !process.env.DATABASE_URL || !disposableDatabase() ? 'requires disposable DATABASE_URL' : false,
+  timeout: 15000,
 }, async t => {
   const admin = new Pool({connectionString:process.env.DATABASE_URL,ssl:false});
   const schema = `moon_pending_${process.pid}`;
@@ -48,7 +49,7 @@ test('a policy upgrade saves an older completed pending simulation without relab
   const pending = {id:randomUUID(),result};
   const file = path.join(dir,'state.json');
   await writeState(file,{cursor:2,pending});
-  const worker = {pool,stateDir:dir,matches:1,godotBin:'must-not-replay-a-finished-game',log:()=>{}};
+  const worker = {pool,stateDir:dir,matches:1,godotBin:'must-not-replay-a-finished-game',signal:t.signal,log:()=>{}};
   assert.equal(await runWorker(worker),1);
   assert.deepEqual((await pool.query('SELECT result FROM bot_matches WHERE match_id=$1',[pending.id])).rows[0].result,result);
   assert.deepEqual(await readState(file),{cursor:3});
