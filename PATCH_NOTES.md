@@ -55,6 +55,11 @@ Stats below are **attack/health**. Stratagems have no attack or health.
 
 - **Plated Soldier (Generic):** stats changed from **2/4 to 2/3**.
 - **Frontier Medic (Generic):** stats changed from **2/3 to 1/3**.
+- **Dump Scummer (Black):** stats changed from **3/5 to 2/4**.
+
+## Bug fixes
+
+- Fixed a bug where **Debris Hauler** incorrectly had **Cloaked**.
 
 ## Removed card
 
