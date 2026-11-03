@@ -5,8 +5,28 @@ const os = require('node:os');
 const path = require('node:path');
 const { Pool } = require('pg');
 const { provisionRankedBots } = require('./ranked_bot_accounts');
+const { normalizeBotParticipant } = require('./bot_matches');
 const { killTree } = require('./bot_worker');
 const ROOT = path.resolve(__dirname, '..');
+
+// A policy update must not change decisions halfway through a snapshotted game.
+// Only the owned seat's public policy crosses into the private child config.
+async function rankedBotSessions(pool, accounts) {
+  if (!(await pool.query("SELECT to_regclass('ranked_matches') AS relation")).rows[0].relation) return accounts;
+  const { rows } = await pool.query(`SELECT b.bot_id,m.match_id,m.engine_version,
+    CASE WHEN m.seat_a_player_id=b.player_id THEN m.bot_a ELSE m.bot_b END AS profile
+    FROM ranked_bot_accounts b JOIN ranked_matches m
+      ON b.player_id IN (m.seat_a_player_id,m.seat_b_player_id)
+    WHERE b.bot_id=ANY($1::text[]) AND m.status IN ('waiting','active')`, [accounts.map(a => a.id)]);
+  return accounts.map(account => {
+    const active = rows.filter(row => row.bot_id === account.id);
+    if (active.length > 1) throw new Error('multiple active matches for ranked bot');
+    if (!active.length) return account;
+    const row = active[0], profile = normalizeBotParticipant(row.profile, row.engine_version, true);
+    if (profile.id !== account.id) throw new Error('ranked bot match identity mismatch');
+    return { ...account, active_match: { id: row.match_id, profile } };
+  });
+}
 
 async function runRankedBots({ pool, godotBin, relayUrl, signal = new AbortController().signal,
   maxMatches = Infinity, onEvent = () => {}, log = console.log }) {
@@ -41,13 +61,14 @@ async function runRankedBots({ pool, godotBin, relayUrl, signal = new AbortContr
       } finally { probing = false; }
     }, 5000);
     accounts = await provisionRankedBots(pool);
+    const sessions = await rankedBotSessions(pool, accounts);
     directory = await fs.mkdtemp(path.join(os.tmpdir(), 'cardgame-ranked-bots-'));
     const completed = new Set();
     await new Promise((resolve, reject) => {
       let output = '', lines = '';
       child = spawn(godotBin, ['--headless', '--path', ROOT, '--', '--ranked-bots'], {
         env: { ...process.env, APPDATA: directory, XDG_DATA_HOME: directory,
-          RANKED_BOT_URL: url.href, RANKED_BOT_SESSIONS: JSON.stringify(accounts) },
+          RANKED_BOT_URL: url.href, RANKED_BOT_SESSIONS: JSON.stringify(sessions) },
         windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
       });
       child.stdout.on('data', data => {
@@ -110,4 +131,4 @@ async function main() {
   }
 }
 if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });
-module.exports = { runRankedBots };
+module.exports = { runRankedBots, rankedBotSessions };

@@ -8,6 +8,7 @@
 export const MODES = { all: 'Combined results', ranked_ai: 'Against AI', authoritative_pvp: 'Against players' };
 export const SERVER_PARAMS = ['mode', 'days', 'rulesVersion', 'aiVersion', 'aiLevel'];
 export const DEFAULT_COHORT = { mode: 'all', days: '30', rulesVersion: 'latest' };
+export const DEFAULT_MIN_GAMES = 5;
 export const FACTION_NAMES = { GREEN: 'Sapiens', CRIMSON: 'Moonlight Coven', BLACK: 'Junklings', ORANGE: 'Gundari', TEAL: 'Mokotai', GENERIC: 'Generic' };
 
 const VERSION = /^(latest|unknown|[1-9][0-9]{0,5}|1000000)$/;
@@ -59,7 +60,7 @@ export function routeFromSearch(search) {
   const role = (r, fallback) => (['human', 'ai', 'combined'].includes(r) ? r : fallback);
   const ownRole = cohort.mode === 'all' ? 'combined' : 'human';
   const enemyRole = cohort.mode === 'all' ? 'combined' : cohort.mode === 'ranked_ai' ? 'ai' : 'human';
-  const min = /^[0-9]{1,6}$/.test(params.get('min') || '') ? Number(params.get('min')) : 1;
+  const min = /^[0-9]{1,6}$/.test(params.get('min') || '') ? Number(params.get('min')) : view === 'explorer' ? DEFAULT_MIN_GAMES : 1;
   return {
     cohort, view,
     deck: params.get('deck') || '', role: role(params.get('role'), ownRole),
@@ -89,7 +90,7 @@ export function searchFromRoute(route) {
   }
   if (route.view === 'explorer') {
     set('who', route.who, ownRole); set('faction', route.faction); set('q', route.q); set('x', route.x);
-    set('min', route.min, 1); set('sort', route.sort, 'matches'); set('dir', route.dir, 'desc');
+    set('min', route.min, DEFAULT_MIN_GAMES); set('sort', route.sort, 'matches'); set('dir', route.dir, 'desc');
   }
   if (route.view === 'cards') { set('faction', route.faction); set('q', route.q); set('sort', route.sort, 'timesPlayed'); set('dir', route.dir, 'desc'); }
   if (route.view === 'matrix') { set('rows', route.rows, 8); set('cols', route.cols, 8); }

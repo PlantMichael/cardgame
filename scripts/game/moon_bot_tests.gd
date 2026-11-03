@@ -119,7 +119,7 @@ static func run() -> int:
 	check("Callisto chooses the supporting combo play over raw stats", combo_action.get("card_uid", "") == setup.player.hand[0].uid)
 
 	gs.opponent.hero_health = 4
-	for id in ["io", "callisto", "europa"]:
+	for id in ["io", "callisto", "europa", "ganymede"]:
 		var profile: Dictionary = profiles[id]
 		var action := await Bots.choose_action(gs, MCTSEngine.new("a", int(profile["level"]), str(profile["style"])), profile, rng)
 		var after := gs.duplicate_for_sim()
@@ -127,14 +127,69 @@ static func run() -> int:
 		check("%s takes an immediate win despite style" % id, after.winner_id == "a")
 	var missed := 0
 	var legal_mistakes := true
+	var legacy := {"id": "ganymede", "name": "Ganymede", "version": "1.0", "level": 1, "style": "random"}
 	for i in 40:
 		rng.seed = i
-		var action := await Bots.choose_action(gs, MCTSEngine.new("a", 1), profiles["ganymede"], rng)
+		var action := await Bots.choose_action(gs, MCTSEngine.new("a", 1), legacy, rng)
 		legal_mistakes = legal_mistakes and bool(gs.validate(action)["ok"])
 		if action["type"] == "end_turn":
 			missed += 1
-	check("Ganymede's mistakes remain legal", legal_mistakes)
-	check("Ganymede frequently passes up a visible win", missed >= 8)
+	check("Legacy Ganymede's mistakes remain legal", legal_mistakes)
+	check("Legacy Ganymede frequently passes up a visible win", missed >= 8)
+
+	# Cross the private startup config, normal authentication, deck restore and
+	# actual decision path before/after an old match disappears on restart.
+	var driver := LocalDriver.new()
+	var old_url := OS.get_environment("RANKED_BOT_URL")
+	var old_sessions := OS.get_environment("RANKED_BOT_SESSIONS")
+	var sessions := []
+	for id in ["io", "callisto", "europa", "ganymede"]:
+		var account := {"id": id, "token": "a".repeat(64)}
+		if id == "ganymede":
+			account["active_match"] = {"id": "old_policy", "profile": legacy}
+		sessions.append(account)
+	OS.set_environment("RANKED_BOT_URL", "ws://127.0.0.1:1")
+	OS.set_environment("RANKED_BOT_SESSIONS", JSON.stringify(sessions))
+	driver._ready()
+	OS.set_environment("RANKED_BOT_URL", old_url)
+	OS.set_environment("RANKED_BOT_SESSIONS", old_sessions)
+	var upgraded: RankedClient.BotConnection = driver._bots[3]
+	driver._receive(upgraded, {"type": "login_result", "success": true, "username": "Ganymede",
+		"bot_profile": profiles["ganymede"], "ranked_authoritative": true, "rules_version": RulesVersion.RULES_VERSION,
+		"ranked_bot_ai": true, "decks": [{"name": "Moon Bot 1.0", "faction_idx": 1, "card_ids": ["cr_002"]}]}, 0)
+	check("Policy upgrade authenticates current profile and rejoins old match with its saved draft",
+		driver.sent.back().get("match_id", "") == "old_policy" and upgraded.deck.size() == 1 and upgraded.deck[0].id == "cr_002")
+	# Network reconstruction resolves printed card IDs; use a real published body.
+	var network_game := position()
+	var real_body := Minion.new(CardDatabase.get_card("g_001").new_instance("network-attacker"), "a")
+	real_body.is_exhausted = false
+	network_game.player.place_minion(real_body)
+	network_game.opponent.hero_health = 1
+	var old_command := {}
+	for i in 20:
+		network_game.player.hero_health = 30 - i
+		old_command = await Bots.choose_view_action(network_game.to_net_dict("a"), "a", upgraded.deck, legacy)
+		if old_command.get("type", "") == "end_turn":
+			break
+	check("Legacy restart scenario has an intentional passed win", old_command.get("type", "") == "end_turn")
+	upgraded.view = network_game.to_net_dict("a")
+	upgraded.my_id = "a"
+	upgraded.seat = "a"
+	upgraded.stage = "playing"
+	await driver._think(upgraded)
+	check("Restarted old match keeps its snapshotted policy", driver.sent.back().get("cmd", {}) == old_command)
+	driver._receive(upgraded, {"type": "match_error", "match_id": "old_policy", "reason": "unknown_match"}, 0)
+	driver._draft(upgraded, 0)
+	check("Next release saves a fresh versioned archetype draft", driver.sent.back().get("name", "") == "Moon Bot 1.1" and upgraded.deck.size() == 40)
+	upgraded.view = network_game.to_net_dict("a")
+	upgraded.stage = "playing"
+	await driver._think(upgraded)
+	var new_command: Dictionary = driver.sent.back().get("cmd", {})
+	new_command["actor"] = "a"
+	var upgraded_result := network_game.duplicate_for_sim()
+	HeadlessTurn.apply_action(upgraded_result, new_command)
+	check("Next match uses normal level-four policy and takes the visible win", upgraded_result.winner_id == "a")
+	driver.free()
 	# Ranked planning is derived from a filtered view, not a privileged game copy.
 	var draft := Bots.build_deck(profiles["io"], 0, allowed)
 	var foe := Bots.build_deck(profiles["ganymede"], 1, allowed)
@@ -164,7 +219,7 @@ static func run() -> int:
 	check("Different hidden cards produce the same observation", visible == other_view)
 	var plan_again := Bots.planning_state(other_view, "host", draft, 501)
 	check("Ranked beliefs do not depend on hidden card identities", plan.to_net_dict() == plan_again.to_net_dict())
-	var driver := LocalDriver.new()
+	driver = LocalDriver.new()
 	var capped := RankedClient.BotConnection.new()
 	capped.profile = profiles["io"]
 	capped.stage = "ai_playing"

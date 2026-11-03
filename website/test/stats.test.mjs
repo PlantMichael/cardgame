@@ -168,12 +168,21 @@ test('estimated archetypes distinguish real printed card packages and do not gue
   assert.equal(S.deckArchetype(weighted, cards), 'Tempo');
 });
 
-test('a single-game 100% deck keeps its sample and is not hidden by default', () => {
+test('leaderboard starts at five games, keeps explicit smaller samples and preserves detail access', () => {
   const lone = snapshot.matchups.find((m) => m.matches === 1 && m.winRate === 1);
   assert.ok(lone);
   assert.equal(S.pct(lone.winRate), '100.0%');
   assert.equal(lone.matches, 1);
-  assert.equal(S.routeFromSearch('').min, 1, 'minimum sample starts at 1');
+  const sample = { decks: [1, 4, 5].map(matches => ({ ...snapshot.decks[0], id: String(matches), matches })), matchups: [] };
+  const defaultRoute = S.routeFromSearch('?mode=ranked_ai');
+  assert.deepEqual(S.filterDecks(sample, cards, defaultRoute).map(d => d.matches), [5]);
+  assert.ok(!new URLSearchParams(S.searchFromRoute(defaultRoute)).has('min'));
+  const all = S.routeFromSearch('?mode=ranked_ai&min=1');
+  assert.equal(S.filterDecks(sample, cards, all).length, 3);
+  assert.equal(S.routeFromSearch(S.searchFromRoute(all)).min, 1, 'explicit 1 survives sharing');
+  assert.equal(S.routeFromSearch(S.searchFromRoute(defaultRoute)).min, 5);
+  assert.equal(S.findDeck(S.indexSnapshot(sample), '1', 'human').matches, 1);
+  for (const view of ['deck', 'matrix', 'cards']) assert.equal(S.routeFromSearch(`?view=${view}`).min, 1);
 });
 
 test('mana curve comes from the composition and totals the card count', () => {
@@ -251,7 +260,8 @@ test('combined defaults and pooled fixture keep exact identities, mirrors and mi
   assert.equal(S.routeFromSearch('').cohort.mode,'all');
   assert.equal(S.routeFromSearch('').who,'combined');
   assert.deepEqual([...S.serverQuery(S.DEFAULT_COHORT).keys()].sort(),['days','mode','rulesVersion']);
-  assert.equal(S.filterDecks(mixed,cards,S.routeFromSearch('')).length,3);
+  assert.equal(S.filterDecks(mixed,cards,S.routeFromSearch('')).length,1);
+  assert.equal(S.filterDecks(mixed,cards,S.routeFromSearch('?min=1')).length,3);
   assert.equal(mixed.decks.reduce((n,d)=>n+d.matches,0),mixed.games*2);
   assert.equal(mixed.decks.reduce((n,d)=>n+d.wins,0),mixed.games);
   const axes=S.matrixAxes(mixed,'all',8,8),grid=S.buildMatrix(mixed,axes.rowDecks,axes.colDecks);

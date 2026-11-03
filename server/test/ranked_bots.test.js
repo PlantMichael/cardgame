@@ -10,10 +10,11 @@ const net = require('node:net');
 const WebSocket = require('ws');
 const { Pool } = require('pg');
 const { initLegacySchema } = require('../schema_legacy');
-const { initSchema } = require('../authoritative/schema');
+const { initSchema, PgStore } = require('../authoritative/schema');
+const { profiles } = require('../bot_matches');
 const { computeOutcome } = require('../authoritative/settle');
 const { provisionRankedBots } = require('../ranked_bot_accounts');
-const { runRankedBots } = require('../ranked_bot_worker');
+const { runRankedBots, rankedBotSessions } = require('../ranked_bot_worker');
 const { ratingBandAt, matchQueuedPlayers } = require('../ranked_queue');
 const { rankedAILevel } = require('../ranked_bot_ai');
 const { disposableDatabase, PROJECT_DIR, killTree } = require('./helpers');
@@ -85,6 +86,7 @@ test('trusted bot provisioning is atomic, preserves ranks and never adopts a hum
   await pool.query("DELETE FROM players WHERE username='CALLISTO'"); // This test owns the synthetic fixture.
   const accounts = await provisionRankedBots(pool);
   assert.deepEqual(accounts.map(a => a.id), ['io', 'callisto', 'europa', 'ganymede']);
+  assert.deepEqual(await rankedBotSessions(pool, accounts), accounts, 'legacy services keep their existing refusal path');
   await pool.query("UPDATE players SET rating=100,ranked_losses=9 WHERE username='Ganymede'");
   await initLegacySchema(pool); await initSchema(pool); await initSchema(pool);
   await pool.query(`INSERT INTO ranked_matches (match_id,status,rules_version,seed,first_seat,deck_a,deck_b)
@@ -93,11 +95,31 @@ test('trusted bot provisioning is atomic, preserves ranks and never adopts a hum
   await initSchema(pool); await initSchema(pool);
   assert.deepEqual((await pool.query("SELECT mode,bot_a,bot_b,engine_version FROM ranked_matches WHERE match_id='legacy_row'")).rows[0],
     { mode: 'authoritative', bot_a: null, bot_b: null, engine_version: null });
+  const legacy = { id:'ganymede',name:'Ganymede',version:'1.0',level:1,style:'random' };
+  const owned = (await pool.query('SELECT bot_id,player_id FROM ranked_bot_accounts')).rows;
+  const ganyId = owned.find(b => b.bot_id === 'ganymede').player_id;
+  await pool.query('UPDATE ranked_bot_accounts SET profile=$1 WHERE bot_id=$2', [legacy,'ganymede']);
+  const store = new PgStore(pool);
+  await store.createMatch({ match_id:'old_policy',rules_version:3,seed:17,first_seat:'a',
+    seat_a_player_id:owned.find(b=>b.bot_id==='io').player_id,seat_b_player_id:ganyId,
+    deck_a:['g_001'],deck_b:['cr_002'],mode:'ranked_bots',bot_a:profiles[0],bot_b:legacy,engine_version:2 });
   const again = await provisionRankedBots(pool);
   assert.equal((await pool.query('SELECT count(*) AS n FROM players')).rows[0].n, '4');
   const gany = (await pool.query("SELECT rating,ranked_losses FROM players WHERE username='Ganymede'")).rows[0];
   assert.deepEqual(gany, { rating: 100, ranked_losses: 9 });
   assert.ok(again.every(a => !accounts.some(old => old.token === a.token)));
+  assert.deepEqual((await pool.query("SELECT player_id,profile FROM ranked_bot_accounts WHERE bot_id='ganymede'")).rows[0],
+    { player_id:ganyId, profile:{...legacy,version:'1.1',level:4,style:''} });
+  const resumed = await rankedBotSessions(pool, again);
+  assert.deepEqual(resumed.find(a=>a.id==='ganymede').active_match,{id:'old_policy',profile:legacy});
+  assert.deepEqual((await store.loadActiveMatches())[0].bot_b,legacy, 'provisioning never relabels old matches');
+  await store.createMatch({...(await store.loadActiveMatches())[0],match_id:'duplicate_policy'});
+  await assert.rejects(rankedBotSessions(pool,again), /multiple active matches/);
+  await store.setStatus('duplicate_policy',{status:'voided'});
+  await pool.query('UPDATE ranked_matches SET bot_b=$1 WHERE match_id=$2',[profiles[0],'old_policy']);
+  await assert.rejects(rankedBotSessions(pool,again), /identity mismatch/);
+  await store.setStatus('old_policy',{status:'finished'});
+  assert.deepEqual(await rankedBotSessions(pool,again),again, 'completed matches cannot retain an old policy');
 });
 
 test('four real ranked clients queue, play, settle normally, reconnect and publish a separate ranked cohort', {
@@ -224,7 +246,8 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   assert.ok(validStatus(fleet));
   assert.deepEqual(fleet.bots.map(b => b.id), ['io','callisto','europa','ganymede']);
   const found = await human.take('ranked_match_found', null, 180000);
-  assert.equal(found.server_run, true); assert.match(found.opponent_name, /\[Bot 1\.0\]/);
+  assert.equal(found.server_run, true);
+  assert.ok(found.opponent_name.endsWith(`[Bot ${found.opponent_bot.version}]`));
   assert.ok(['io', 'callisto', 'europa', 'ganymede'].includes(found.opponent_bot.id));
   human.send({ type: 'match_join', match_id: found.match_id });
   const view = await human.take('match_view', found.match_id);
@@ -252,7 +275,7 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   const humanId = (await pool.query("SELECT id FROM players WHERE username='ranked_human'")).rows[0].id;
   assert.equal(first.mode, 'ranked_bots');
   assert.equal(first[view.seat === 'a' ? 'bot_a' : 'bot_b'], null, 'client-supplied bot fields cannot change identity');
-  assert.equal(first[view.seat === 'a' ? 'bot_b' : 'bot_a'].version, '1.0');
+  assert.equal(first[view.seat === 'a' ? 'bot_b' : 'bot_a'].version, profiles.find(p=>p.id===found.opponent_bot.id).version);
   assert.ok(aiOutcome.ai_match.bot_profile, 'the actual AI completion precedes normal queue entry');
   assert.equal(aiOutcome.ai_match.ai_level, 3);
   assert.equal(aiOutcome.outcome.rating, 1000, 'local ranked AI never moves matchmaking Elo');
@@ -373,12 +396,12 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   await pool.query("UPDATE ranked_bot_accounts SET profile=jsonb_set(profile,'{version}','\"2.0\"')");
   assert.deepEqual((await pool.query('SELECT bot_a,bot_b FROM ranked_matches WHERE match_id=$1', [first.match_id])).rows[0], snapshots);
   const historical = await (await fetch(route + '?mode=ranked&days=31')).json();
-  assert.ok(historical.bots.filter(b => !['human','standard'].includes(b.id)).every(b => b.version === '1.0'), 'fresh HTTP read uses historical snapshots rather than current registry');
+  assert.ok(historical.bots.filter(b => !['human','standard'].includes(b.id)).every(b => b.version === profiles.find(p=>p.id===b.id).version), 'fresh HTTP read uses historical snapshots rather than current registry');
   await pool.query('UPDATE ranked_settlements SET won=NOT won WHERE match_id=$1 AND player_id=$2', [first.match_id, humanId]);
   const contradictory = await (await fetch(route + '?mode=ranked&days=32')).json();
   assert.equal(contradictory.bots.filter(b => b.id === 'human').reduce((n, b) => n + b.matches, 0), 1, 'contradictory settlements exclude the whole match');
   await pool.query('UPDATE ranked_settlements SET won=NOT won WHERE match_id=$1 AND player_id=$2', [first.match_id, humanId]);
-  await pool.query("UPDATE ranked_bot_accounts SET profile=jsonb_set(profile,'{version}','\"1.0\"')");
+  for (const profile of profiles) await pool.query('UPDATE ranked_bot_accounts SET profile=$1 WHERE bot_id=$2',[profile,profile.id]);
   const playingAI = await until(async () => {
     const status = await (await fetch(statusUrl)).json();
     return status.bots?.find(b => b.activity === 'playing_ai');

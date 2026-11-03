@@ -17,7 +17,7 @@ function render(state) {
     const card = el('article', 'bot-card');
     const head = el('div', 'bot-card-head');
     head.append(el('h2', '', name), el('span', 'bot-version', bot ? `v${bot.version}` : ''));
-    card.append(head, el('p', 'bot-personality', bot ? `Level ${bot.level} · ${bot.style}` : 'Ranked bot'));
+    card.append(head, el('p', 'bot-personality', bot ? `Level ${bot.level} · ${bot.style || 'balanced'}` : 'Ranked bot'));
     card.append(el('p', `bot-activity ${bot?.activity || ''}`, bot ? ACTIVITIES[bot.activity]
       : state === 'loading' ? 'Checking activity…' : 'Status unavailable'));
     const rank = bot ? rankDisplay(bot.rank) : { name: '—', progress: state === 'loading' ? 'Loading rank…' : 'Rank unavailable', icon: null };

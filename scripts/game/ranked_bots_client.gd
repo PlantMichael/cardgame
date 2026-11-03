@@ -3,7 +3,6 @@ extends Node
 const Bots = preload("res://scripts/game/moon_bots.gd")
 const ACTION_PAUSE_MS := 600
 const RESPONSE_TIMEOUT_MS := 10000
-const DECK_NAME := "Moon Bot 1.0"
 
 class BotConnection:
 	var profile: Dictionary
@@ -13,6 +12,7 @@ class BotConnection:
 	var due := 0
 	var deadline := 0
 	var match_id := ""
+	var match_profile := {}
 	var my_id := ""
 	var seat := ""
 	var clock := {}
@@ -55,6 +55,12 @@ func _ready() -> void:
 		seen[id] = true
 		var c := BotConnection.new()
 		c.profile = profiles[id]
+		var active: Dictionary = account.get("active_match", {})
+		c.match_id = str(active.get("id", ""))
+		c.match_profile = active.get("profile", {})
+		if not c.match_id.is_empty() and str(c.match_profile.get("id", "")) != id:
+			_fail("Invalid ranked bot match identity")
+			return
 		c.token = str(account["token"])
 		c.faction = _bots.size() % 5
 		_bots.append(c)
@@ -63,6 +69,12 @@ func _ready() -> void:
 func _fail(message: String) -> void:
 	push_error(message) # Never log session tokens or credentials.
 	get_tree().quit(1)
+
+func _policy(c: BotConnection) -> Dictionary:
+	return c.match_profile if not c.match_profile.is_empty() else c.profile
+
+func _deck_name(c: BotConnection) -> String:
+	return "Moon Bot %s" % _policy(c)["version"]
 
 func _send(c: BotConnection, message: Dictionary) -> void:
 	message["token"] = c.token
@@ -136,7 +148,7 @@ func _draft(c: BotConnection, now: int) -> void:
 		return
 	c.stage = "saving"
 	c.deadline = now + RESPONSE_TIMEOUT_MS
-	_send(c, {"type": "save_deck", "name": DECK_NAME, "faction_idx": c.faction, "card_ids": c.deck.map(func(card): return card.id)})
+	_send(c, {"type": "save_deck", "name": _deck_name(c), "faction_idx": c.faction, "card_ids": c.deck.map(func(card): return card.id)})
 
 func _join(c: BotConnection, id: String, now: int) -> void:
 	c.match_id = id
@@ -167,7 +179,7 @@ func _receive(c: BotConnection, msg: Dictionary, now: int) -> void:
 			c.next_ai = bool(msg.get("bot_next_ai", true))
 			# Existing decks are returned on resume, so rejoining does not change our draft.
 			for deck in msg.get("decks", []):
-				if str(deck.get("name", "")) == DECK_NAME:
+				if str(deck.get("name", "")) == _deck_name(c):
 					c.deck.clear()
 					for id in deck.get("card_ids", []):
 						var card := CardDatabase.get_card(str(id))
@@ -362,11 +374,12 @@ func _ai_failed(c: BotConnection) -> void:
 
 func _queue(c: BotConnection) -> void:
 	c.stage = "queued"
-	_send(c, {"type": "queue_ranked", "deck_name": DECK_NAME, "rules_version": RulesVersion.RULES_VERSION})
+	_send(c, {"type": "queue_ranked", "deck_name": _deck_name(c), "rules_version": RulesVersion.RULES_VERSION})
 	print("RANKED_BOT_EVENT " + JSON.stringify({"event": "queued", "bot": c.profile["id"]}))
 
 func _finished(c: BotConnection, now: int) -> void:
 	c.match_id = ""
+	c.match_profile = {}
 	c.epoch += 1
 	c.client_seq = 0
 	c.awaiting = false
@@ -388,7 +401,7 @@ func _think(c: BotConnection) -> void:
 	var epoch := c.epoch
 	var seq := c.seq
 	c.thinking = true
-	var command := await Bots.choose_view_action(c.view, c.my_id, c.deck, c.profile)
+	var command := await Bots.choose_view_action(c.view, c.my_id, c.deck, _policy(c))
 	c.thinking = false
 	if c.epoch != epoch or c.seq != seq or c.stage != "playing" or c.awaiting:
 		return

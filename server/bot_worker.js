@@ -22,7 +22,7 @@ async function readState(file) {
     const state = JSON.parse(await fs.readFile(file, 'utf8'));
     if (!Number.isSafeInteger(state.cursor) || state.cursor < 0 || state.cursor > Number.MAX_SAFE_INTEGER - 1) throw new Error('invalid worker cursor');
     if (state.pending) {
-      normalizeBotMatch(state.pending.result);
+      normalizeBotMatch(state.pending.result, { historical: true });
       if (typeof state.pending.id !== 'string') throw new Error('invalid pending id');
     }
     return state;
@@ -112,7 +112,9 @@ async function runWorker({ pool, godotBin, stateDir, matches = Infinity, pauseMs
           state = { cursor: state.cursor, pending: { id: randomUUID(), result } };
         }
         await writeState(file, state);
-        await saveBotMatch(pool, state.pending.id, state.pending.result);
+        // Private pending files can contain a finished game from before a release.
+        // Fresh subprocess output was already checked against the current roster.
+        await saveBotMatch(pool, state.pending.id, state.pending.result, { historical: true });
         const next = { cursor: state.cursor + 1 };
         await writeState(file, next);
         state = next; completed++;

@@ -44,9 +44,9 @@ function normalizeBotMatch(input, { historical = false } = {}) {
     rulesVersion: input.rulesVersion, engineVersion: input.engineVersion };
 }
 
-async function saveBotMatch(pool, id, input) {
+async function saveBotMatch(pool, id, input, { historical = false } = {}) {
   if (typeof id !== 'string' || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id)) throw new Error('invalid match id');
-  const result = normalizeBotMatch(input);
+  const result = normalizeBotMatch(input, { historical });
   const saved = await pool.query(`INSERT INTO bot_matches (match_id,result) VALUES ($1,$2)
     ON CONFLICT (match_id) DO UPDATE SET result = bot_matches.result
     WHERE bot_matches.result = EXCLUDED.result RETURNING match_id`, [id, result]);

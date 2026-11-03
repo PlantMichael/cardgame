@@ -37,7 +37,11 @@ function go(patch, { replace = false } = {}) {
   if (needsFetch()) fetchCohort(); else render();
   if (!replace) window.scrollTo({ top: 0 });
 }
-const link = (patch, text, props = {}) => h('a', { href: here({ ...route, ...patch }), data: { statsLink: '1' }, ...props }, text);
+const link = (patch, text, props = {}) => {
+  const next = { ...route, ...patch };
+  if (patch.view === 'explorer' && route.view !== 'explorer') next.min = patch.min ?? S.DEFAULT_MIN_GAMES;
+  return h('a', { href: here(next), data: { statsLink: '1' }, ...props }, text);
+};
 
 document.addEventListener('click', (e) => {
   const a = e.target.closest?.('a[data-stats-link]');
@@ -179,7 +183,7 @@ function resolvedLine() {
 // ---- states ------------------------------------------------------------------------------------
 function statusPanel() {
   if (load.status === 'loading') return h('p', { class: 'state', role: 'status' }, 'Loading results…');
-  if (load.status === 'bad') return h('div', { class: 'state error', role: 'alert' }, h('p', {}, 'The server rejected these filters (400). Reset them to continue.'), link({ cohort: S.DEFAULT_COHORT, view: 'explorer', opp: '' }, 'Reset filters', { class: 'button small' }));
+  if (load.status === 'bad') return h('div', { class: 'state error', role: 'alert' }, h('p', {}, 'The server rejected these filters (400). Reset them to continue.'), link({ cohort: S.DEFAULT_COHORT, view: 'explorer', min: S.DEFAULT_MIN_GAMES, opp: '' }, 'Reset filters', { class: 'button small' }));
   if (load.status === 'unavailable') {
     const why = load.code === 404 ? 'The deck results are not available on this server yet.'
       : load.code === 503 ? 'The statistics service is unavailable or the request was too large (503). This does not mean no games were played.'
@@ -200,7 +204,7 @@ function explorer() {
   const rows = S.sortDecks(S.filterDecks(snap, catalog.cards, route, load.index.labels), route.sort, route.dir);
   const factions = ['GREEN', 'CRIMSON', 'BLACK', 'ORANGE', 'TEAL'];
   const patch = (p) => go(p, { replace: true });
-  const advancedActive = (route.cohort.mode !== 'all' && route.who !== 'human') || route.x || route.min > 1 || !['matches', 'winRate'].includes(route.sort);
+  const advancedActive = (route.cohort.mode !== 'all' && route.who !== 'human') || route.x || route.min !== S.DEFAULT_MIN_GAMES || !['matches', 'winRate'].includes(route.sort);
   const filters = h('div', { class: 'filter-row simple-filters' },
     h('label', { class: 'cohort-field' }, h('span', {}, 'Faction'), h('select', { onchange: (e) => patch({ faction: e.target.value }) },
       option('', 'Any faction', route.faction), factions.map((f) => option(f, S.FACTION_NAMES[f], route.faction)))),
@@ -232,7 +236,7 @@ function explorer() {
   return h('section', {},
     filters, moreFilters,
     rows.length ? table : h('p', { class: 'state', role: 'status' }, 'No decks match. Try another faction or clear your search and extra filters.'),
-    h('p', { class: 'foot', role: 'status' }, rows.length + ' ' + (route.who === 'combined' ? '' : route.who === 'human' ? 'player ' : 'AI ') + 'deck' + (rows.length === 1 ? '' : 's') + ' shown.'));
+    h('p', { class: 'foot', role: 'status' }, rows.length + ' ' + (route.who === 'combined' ? '' : route.who === 'human' ? 'player ' : 'AI ') + 'deck' + (rows.length === 1 ? '' : 's') + ` shown. Minimum ${route.min} recorded game${route.min === 1 ? '' : 's'} per deck.`));
 }
 
 // ---- deck detail ------------------------------------------------------------------------------------

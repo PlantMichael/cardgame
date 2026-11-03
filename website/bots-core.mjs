@@ -9,7 +9,7 @@ export function validStatus(data) {
   return data.bots.every(b => {
     if (!Object.hasOwn(BOT_NAMES, b?.id) || seen.has(b.id) || b.name !== BOT_NAMES[b.id] ||
         !Object.hasOwn(ACTIVITIES, b.activity) || typeof b.version !== 'string' || !/^[A-Za-z0-9._-]{1,32}$/.test(b.version) ||
-        !Number.isInteger(b.level) || b.level < 1 || b.level > 10 || !['tempo','combo','aggro','random'].includes(b.style)) return false;
+        !Number.isInteger(b.level) || b.level < 1 || b.level > 10 || !['tempo','combo','aggro','random',''].includes(b.style)) return false;
     seen.add(b.id);
     if (b.activity === 'not_started') return b.rank === null;
     const r = b.rank;

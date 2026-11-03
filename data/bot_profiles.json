@@ -2,5 +2,5 @@
   {"id":"io","name":"Io","version":"1.0","level":10,"style":"tempo"},
   {"id":"callisto","name":"Callisto","version":"1.0","level":8,"style":"combo"},
   {"id":"europa","name":"Europa","version":"1.0","level":8,"style":"aggro"},
-  {"id":"ganymede","name":"Ganymede","version":"1.0","level":1,"style":"random"}
+  {"id":"ganymede","name":"Ganymede","version":"1.1","level":4,"style":""}
 ]

@@ -44,7 +44,7 @@ static func choose_action(gs: GameState, engine: MCTSEngine, profile: Dictionary
 		return await engine.choose_action(gs)
 	var actions := HeadlessTurn.list_legal_actions(gs, gs.active_player_id)
 	if str(profile["style"]) == "random":
-		# Ganymede sometimes throws away a whole turn, even with good plays available.
+		# Legacy random releases sometimes throw away a whole turn.
 		if policy_rng.randf() < 0.35:
 			return {"type": "end_turn", "actor": gs.active_player_id}
 		return actions[policy_rng.randi_range(0, actions.size() - 1)]

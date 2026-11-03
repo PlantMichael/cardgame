@@ -13,7 +13,7 @@ export function projectBotStatus(data) {
     if (!Object.hasOwn(NAMES, row?.id) || seen.has(row.id) || row.name !== NAMES[row.id] ||
         typeof row.version !== 'string' || !/^[A-Za-z0-9._-]{1,32}$/.test(row.version) ||
         !Number.isInteger(row.level) || row.level < 1 || row.level > 10 ||
-        !['tempo', 'combo', 'aggro', 'random'].includes(row.style) || !STATES.includes(row.activity)) fail();
+        !['tempo', 'combo', 'aggro', 'random', ''].includes(row.style) || !STATES.includes(row.activity)) fail();
     seen.add(row.id);
     let rank = null;
     if (row.activity === 'not_started') { if (row.rank !== null) fail(); }

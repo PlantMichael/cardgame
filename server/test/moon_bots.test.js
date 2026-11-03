@@ -24,6 +24,39 @@ test('schedule covers each pairing, both first players and every faction combina
   for (const seen of pairs.values()) assert.equal(seen.size, 50);
 });
 
+test('a policy upgrade saves an older completed pending simulation without relabeling or replaying it', {
+  skip: !process.env.DATABASE_URL || !disposableDatabase() ? 'requires disposable DATABASE_URL' : false,
+}, async t => {
+  const admin = new Pool({connectionString:process.env.DATABASE_URL,ssl:false});
+  const schema = `moon_pending_${process.pid}`;
+  await admin.query(`CREATE SCHEMA ${schema}`);
+  const url = new URL(process.env.DATABASE_URL); url.searchParams.set('options', `-c search_path=${schema}`);
+  const pool = new Pool({connectionString:url.href,ssl:false});
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(),'moon-worker-test-'));
+  t.after(async()=>{
+    await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end();
+    assert.equal(path.dirname(dir),path.resolve(os.tmpdir()));
+    assert.ok(path.basename(dir).startsWith('moon-worker-test-'));
+    await fs.rm(dir,{recursive:true,force:true});
+  });
+  const starters = require('../../data/starters.json');
+  const result = { a:{id:'io',name:'Io',version:'1.0',level:10,style:'tempo'},
+    b:{id:'ganymede',name:'Ganymede',version:'1.0',level:1,style:'random'},
+    deckA:starters[0].card_ids,deckB:starters[1].card_ids,factionA:0,factionB:1,
+    first:'a',winner:'a',seed:17,turns:3,rulesVersion:3,engineVersion:2 };
+  assert.throws(()=>normalizeBotMatch(result),/wrong release/, 'new producer validation stays current');
+  const pending = {id:randomUUID(),result};
+  const file = path.join(dir,'state.json');
+  await writeState(file,{cursor:2,pending});
+  const worker = {pool,stateDir:dir,matches:1,godotBin:'must-not-replay-a-finished-game',log:()=>{}};
+  assert.equal(await runWorker(worker),1);
+  assert.deepEqual((await pool.query('SELECT result FROM bot_matches WHERE match_id=$1',[pending.id])).rows[0].result,result);
+  assert.deepEqual(await readState(file),{cursor:3});
+  await writeState(file,{cursor:2,pending});
+  assert.equal(await runWorker(worker),1);
+  assert.equal((await pool.query('SELECT count(*) AS n FROM bot_matches')).rows[0].n,'1');
+});
+
 test('worker plays actual named bots, persists/replays results and feeds only simulation HTTP stats', {
   skip: !process.env.GODOT_BIN || !process.env.DATABASE_URL || !disposableDatabase() ? 'requires Godot and disposable DATABASE_URL' : false,
   timeout: 240000,
@@ -76,7 +109,8 @@ test('worker plays actual named bots, persists/replays results and feeds only si
   assert.equal(stored.result.a.name, 'Io'); assert.equal(stored.result.b.name, 'Ganymede');
   assert.equal(stored.result.a.version, '1.0');
   assert.ok(['a', 'b', 'draw'].includes(stored.result.winner));
-  assert.equal(stored.result.a.level, 10); assert.equal(stored.result.b.level, 1);
+  assert.equal(stored.result.a.level, 10); assert.equal(stored.result.b.level, 4);
+  assert.equal(stored.result.b.version, '1.1'); assert.equal(stored.result.b.style, '');
   assert.equal((await readState(path.join(dir, 'state.json'))).cursor, 3);
   // Simulate a lost acknowledgment: the pending game already exists in PostgreSQL.
   await writeState(path.join(dir, 'state.json'), { cursor: 2, pending: { id: stored.match_id, result: stored.result } });

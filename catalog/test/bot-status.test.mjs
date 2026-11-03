@@ -20,12 +20,14 @@ test('public bot status proxy projects only four identities and rejects unavaila
     if (mode === 'status') { res.writeHead(500).end('private diagnostic'); return; }
     if (mode === 'large') { res.end(' '.repeat(32769)); return; }
     const data = fixture();
+    Object.assign(data.bots[3], {version:'1.1',level:4,style:''});
     if (mode === 'duplicate') data.bots[1] = data.bots[0];
     if (mode === 'human') data.bots[0].name = 'Private Human';
     if (mode === 'unknown') data.bots[0].id = 'someone_else';
     if (mode === 'rank') data.bots[0].rank.bracket = 21;
     if (mode === 'lp') data.bots[0].rank.lp = 100;
     if (mode === 'activity') data.bots[0].activity = 'winning';
+    if (mode === 'style') data.bots[3].style = 'invented';
     if (mode === 'missing') data.bots.pop();
     if (mode === 'null_rank') data.bots[0].rank = null;
     if (mode === 'not_started') { data.bots[0].activity = 'not_started'; data.bots[0].rank = null; }
@@ -40,6 +42,7 @@ test('public bot status proxy projects only four identities and rejects unavaila
   const text = await response.text(), data = JSON.parse(text);
   assert.deepEqual(data.bots.map(b=>b.id),Object.keys(names));
   assert.equal(data.bots[0].rank.lp,34);
+  assert.deepEqual([data.bots[3].version,data.bots[3].level,data.bots[3].style],['1.1',4,'']);
   for(const secret of ['token','player_id','match_id','private','rating"']) assert.ok(!text.includes(secret),secret);
   const before = calls;
   assert.equal((await fetch(url+'?username=human')).status,400); assert.equal(calls,before);
@@ -47,7 +50,7 @@ test('public bot status proxy projects only four identities and rejects unavaila
   assert.equal((await fetch(url,{method:'OPTIONS'})).status,204);
   assert.equal(await (await fetch(url,{method:'HEAD'})).text(),'');
   mode='not_started'; assert.equal((await (await fetch(url)).json()).bots[0].rank,null);
-  for(mode of ['duplicate','human','unknown','rank','lp','activity','missing','null_rank','status','redirect','large','timeout']) {
+  for(mode of ['duplicate','human','unknown','rank','lp','activity','style','missing','null_rank','status','redirect','large','timeout']) {
     const failed=await fetch(url); assert.equal(failed.status,503,mode);
     assert.deepEqual(await failed.json(),{error:'bot status unavailable'});
   }
