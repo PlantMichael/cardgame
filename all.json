@@ -1,0 +1,3398 @@
+{
+  "GREEN": [
+    {
+      "id": "g_020",
+      "card_name": "Logi Runner",
+      "cost": 1,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Rush",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "rush"
+      ],
+      "art": "res://assets/green/LogiRunner.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_001",
+      "card_name": "Lone Operative",
+      "cost": 1,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Ambush",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "ambush"
+      ],
+      "art": "res://assets/green/loneoperative.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_002",
+      "card_name": "Cocky Commando",
+      "cost": 2,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Reinforce",
+      "attack": 2,
+      "health": 1,
+      "abilities": [
+        "reinforce"
+      ],
+      "art": "res://assets/green/cockycommando.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_str_002",
+      "card_name": "Kevlar",
+      "cost": 2,
+      "color": "GREEN",
+      "card_type": "STRATAGEM",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Give a friendly creature +0/+3.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/green/kevlar.png",
+      "effect": "buff_health",
+      "effect_value": 3
+    },
+    {
+      "id": "g_026",
+      "card_name": "Sapien Rifle Squad",
+      "cost": 2,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "",
+      "attack": 3,
+      "health": 2,
+      "abilities": [],
+      "effect": "",
+      "effect_value": 0,
+      "is_token": false,
+      "in_starter": false
+    },
+    {
+      "id": "g_str_004",
+      "card_name": "Tactical retreat",
+      "cost": 2,
+      "color": "GREEN",
+      "card_type": "STRATAGEM",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Give each friendly creature +0/+1.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/green/commandingshout.png",
+      "effect": "buff_all_friendly_health",
+      "effect_value": 1
+    },
+    {
+      "id": "g_str_003",
+      "card_name": "Commanding Shout",
+      "cost": 3,
+      "color": "GREEN",
+      "card_type": "STRATAGEM",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Give each friendly creature +1/+0.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/green/commandingshout.png",
+      "effect": "buff_all_friendly_attack",
+      "effect_value": 1
+    },
+    {
+      "id": "g_011",
+      "card_name": "Engineer",
+      "cost": 3,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On Death: Draw a Tank.",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "deathrattle_draw_tank"
+      ],
+      "art": "res://assets/green/engineer.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_014",
+      "card_name": "Flanking Rifleman",
+      "cost": 3,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Rush",
+      "attack": 3,
+      "health": 1,
+      "abilities": [
+        "rush"
+      ],
+      "art": "res://assets/green/flankingrifleman.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_010",
+      "card_name": "Heavy Unit",
+      "cost": 3,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Reinforce",
+      "attack": 2,
+      "health": 2,
+      "abilities": [
+        "reinforce"
+      ],
+      "art": "res://assets/green/heavyunit.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_009",
+      "card_name": "Paratroopers",
+      "cost": 3,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Recon.",
+      "attack": 3,
+      "health": 2,
+      "abilities": [
+        "recon"
+      ],
+      "art": "res://assets/green/paratroopers.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_024",
+      "card_name": "Sapien Platoon",
+      "cost": 3,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Recon.",
+      "attack": 3,
+      "health": 4,
+      "abilities": [],
+      "art": "res://assets/green/paratroopers.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_012",
+      "card_name": "Sniper",
+      "cost": 3,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On play: do 2 damage",
+      "attack": 3,
+      "health": 1,
+      "abilities": [
+        "on_play_damage_2"
+      ],
+      "art": "res://assets/green/sniper.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_025",
+      "card_name": "SS4 Blackwidow",
+      "cost": 3,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "",
+      "description": "Ambush.",
+      "attack": 5,
+      "health": 3,
+      "abilities": [
+        "ambush"
+      ],
+      "art": "",
+      "effect": "res://assets/green/ss4blackwidow.png",
+      "effect_value": 0
+    },
+    {
+      "id": "g_018",
+      "card_name": "Stealth Jet",
+      "cost": 3,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "tank",
+      "description": "Whenever an enemy creature takes damage, it takes 1 more.",
+      "attack": 2,
+      "health": 2,
+      "abilities": [
+        "enemy_damage_amp_1"
+      ],
+      "art": "res://assets/green/stealthjet.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_str_001",
+      "card_name": "Supply Drop",
+      "cost": 3,
+      "color": "GREEN",
+      "card_type": "STRATAGEM",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Give a friendly creature +2/+2.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/green/supplydrop.png",
+      "effect": "buff_creature",
+      "effect_value": 2
+    },
+    {
+      "id": "g_030",
+      "card_name": "Beam Rifle Soldier",
+      "cost": 4,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Headshot: Deal 1 damage to a minion.",
+      "attack": 2,
+      "health": 2,
+      "abilities": [
+        "headshot_damage_1"
+      ],
+      "art": "res://assets/green/flankingrifleman.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_016",
+      "card_name": "Drone Pilot",
+      "cost": 4,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "On Death: Return a stratagem from your graveyard to your hand.",
+      "attack": 2,
+      "health": 2,
+      "abilities": [
+        "deathrattle_return_stratagem"
+      ],
+      "art": "res://assets/green/dronepilot.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_003",
+      "card_name": "Phalanx",
+      "cost": 4,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Guardian.",
+      "attack": 3,
+      "health": 3,
+      "abilities": [
+        "guardian"
+      ],
+      "art": "res://assets/green/phalanx.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_008",
+      "card_name": "Sapien Infantry",
+      "cost": 4,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Reinforce",
+      "attack": 3,
+      "health": 2,
+      "abilities": [
+        "reinforce"
+      ],
+      "art": "res://assets/green/sapieninfantry.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_019",
+      "card_name": "Tank Specialist",
+      "cost": 4,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "When a friendly Tank dies, give another Tank +1/+2.",
+      "attack": 2,
+      "health": 2,
+      "abilities": [
+        "on_friendly_tank_death_buff_tank"
+      ],
+      "art": "res://assets/green/tankspecialist.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_004",
+      "card_name": "Bunker",
+      "cost": 5,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Guardian. Cloaked.",
+      "attack": 3,
+      "health": 5,
+      "abilities": [
+        "guardian",
+        "cloaked"
+      ],
+      "art": "res://assets/green/bunker.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_028",
+      "card_name": "Commander Maurice, Local Legend",
+      "cost": 5,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "LEGENDARY",
+      "tribe": "",
+      "description": "Reinforce 4.",
+      "attack": 1,
+      "health": 2,
+      "abilities": [
+        "reinforce_4"
+      ],
+      "effect": "",
+      "effect_value": 0,
+      "is_token": false,
+      "in_starter": false
+    },
+    {
+      "id": "g_021",
+      "card_name": "Corporal Garrick, the Intimidating",
+      "cost": 5,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "LEGENDARY",
+      "tribe": "tank",
+      "description": "The first time a friendly creature would die each turn, reinforce it.",
+      "attack": 4,
+      "health": 5,
+      "abilities": [
+        "on_friendly_death_reinforce"
+      ],
+      "art": "res://assets/green/corporalgarrick.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_022",
+      "card_name": "Requisitioner",
+      "cost": 5,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "tank",
+      "description": "On play: Gains +0/+1 for each other friendly creature on the board.",
+      "attack": 2,
+      "health": 5,
+      "abilities": [
+        "on_play_health_per_friendly"
+      ],
+      "art": "res://assets/green/requistioner.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_027",
+      "card_name": "T6 Ironclad",
+      "cost": 5,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "tank",
+      "description": "",
+      "attack": 5,
+      "health": 6,
+      "abilities": [],
+      "effect": "",
+      "effect_value": 0,
+      "is_token": false,
+      "in_starter": false
+    },
+    {
+      "id": "g_015",
+      "card_name": "Tactical Officer",
+      "cost": 5,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "When a friendly creature reinforces, give it +1 attack.",
+      "attack": 3,
+      "health": 5,
+      "abilities": [
+        "tactical_officer"
+      ],
+      "art": "res://assets/green/tacticalofficer.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_007",
+      "card_name": "T12 Serpent",
+      "cost": 6,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "tank",
+      "description": "Reinforce. Deal 1 damage when any creatures reinforce.",
+      "attack": 3,
+      "health": 5,
+      "abilities": [
+        "reinforce",
+        "on_any_reinforce_shot_1"
+      ],
+      "art": "res://assets/green/t12serpent.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_029",
+      "card_name": "The Staller Mk3",
+      "cost": 6,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "LEGENDARY",
+      "tribe": "",
+      "description": "Guardian",
+      "attack": 1,
+      "health": 11,
+      "abilities": [
+        "guardian"
+      ],
+      "art": "res://assets/green/bunker.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_013",
+      "card_name": "A4SI Python",
+      "cost": 7,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "tank",
+      "description": "Reinforce. Deal 2 damage to any creature on play and when reinforced",
+      "attack": 3,
+      "health": 3,
+      "abilities": [
+        "reinforce",
+        "on_play_damage_2",
+        "on_reinforce_damage_2"
+      ],
+      "art": "res://assets/green/a4sipython.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_005",
+      "card_name": "T8 Tigershark",
+      "cost": 7,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "tank",
+      "description": "Guardian. On play: deal 2 damage.",
+      "attack": 4,
+      "health": 7,
+      "abilities": [
+        "guardian",
+        "on_play_damage_2"
+      ],
+      "art": "res://assets/green/tigershark.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "g_017",
+      "card_name": "Big Bertha, the Hail Mary",
+      "cost": 10,
+      "color": "GREEN",
+      "card_type": "CREATURE",
+      "rarity": "LEGENDARY",
+      "tribe": "tank",
+      "description": "On play: Deal 8 damage",
+      "attack": 5,
+      "health": 5,
+      "abilities": [
+        "on_play_damage_8"
+      ],
+      "art": "res://assets/green/bigbertha.png",
+      "effect": "",
+      "effect_value": 0
+    }
+  ],
+  "CRIMSON": [
+    {
+      "id": "cr_str_006",
+      "card_name": "Bloodlet",
+      "cost": 1,
+      "color": "CRIMSON",
+      "card_type": "STRATAGEM",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Deal 2 damage or heal 2 health.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/crimson/moonhowl.png",
+      "effect": "bloodlet",
+      "effect_value": 2
+    },
+    {
+      "id": "cr_010",
+      "card_name": "Crypt Runt",
+      "cost": 1,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "bat",
+      "description": "On play: Transform into a 1/1 bat.",
+      "attack": 1,
+      "health": 2,
+      "abilities": [
+        "on_play_transform"
+      ],
+      "transform_into": "cr_008t",
+      "art": "res://assets/crimson/moonchild.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_009t",
+      "card_name": "Desperate Mauler",
+      "cost": 1,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "monstrosity",
+      "description": "",
+      "attack": 3,
+      "health": 3,
+      "abilities": [],
+      "transform_into": "",
+      "is_token": true,
+      "art": "res://assets/crimson/wardinggargoyle.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_str_003",
+      "card_name": "Drain",
+      "cost": 1,
+      "color": "CRIMSON",
+      "card_type": "STRATAGEM",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Take 2 health from a creature you control and give it to another creature you control.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/crimson/drain.png",
+      "effect": "sanguine",
+      "effect_value": 2
+    },
+    {
+      "id": "cr_008t",
+      "card_name": "Fledgeling Scout",
+      "cost": 1,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "monstrosity",
+      "description": "",
+      "attack": 1,
+      "health": 1,
+      "abilities": [],
+      "transform_into": "",
+      "is_token": true,
+      "art": "res://assets/crimson/wardinggargoyle.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_002",
+      "card_name": "Moonchild",
+      "cost": 1,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "bat",
+      "description": "Give a friendly minion +1 max health",
+      "attack": 1,
+      "health": 2,
+      "abilities": [
+        "on_play_buff_friendly_health"
+      ],
+      "art": "res://assets/crimson/moonchild.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_str_008",
+      "card_name": "Blood boil",
+      "cost": 2,
+      "color": "CRIMSON",
+      "card_type": "STRATAGEM",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Double current health of target creature",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/crimson/moonhowl.png",
+      "effect": "blood_boil",
+      "effect_value": 1
+    },
+    {
+      "id": "cr_020",
+      "card_name": "Blood Merchant",
+      "cost": 2,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "On play: swap the healths of two friendly minions",
+      "attack": 1,
+      "health": 3,
+      "abilities": [
+        "on_play_swap_friendly_health"
+      ],
+      "art": "res://assets/crimson/bloodmerchant.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_str_001",
+      "card_name": "Blood Transfusion",
+      "cost": 2,
+      "color": "CRIMSON",
+      "card_type": "STRATAGEM",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Steal 2 health from an enemy creature and give it to a creature you control.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/crimson/bloodtransfusion.png",
+      "effect": "blood_transfusion",
+      "effect_value": 2
+    },
+    {
+      "id": "cr_018",
+      "card_name": "Fletchling",
+      "cost": 2,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On play: Transform into a 2/1 bat with rush or a 1/2 gargoyle with guardian.",
+      "attack": 3,
+      "health": 3,
+      "abilities": [
+        "on_play_transform_choice"
+      ],
+      "transform_choices": [
+        "cr_005t",
+        "cr_007t"
+      ],
+      "art": "res://assets/crimson/fletchling.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_003",
+      "card_name": "Haven Guard",
+      "cost": 2,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Transform when health reaches 4 or more.",
+      "attack": 2,
+      "health": 3,
+      "abilities": [
+        "transform_at_max_health_4"
+      ],
+      "transform_into": "cr_001t",
+      "art": "res://assets/crimson/havenguard.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_001t",
+      "card_name": "Hungering Wolf",
+      "cost": 2,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "monstrosity",
+      "description": "Rush.",
+      "attack": 5,
+      "health": 4,
+      "abilities": [
+        "rush"
+      ],
+      "transform_into": "",
+      "is_token": true,
+      "art": "res://assets/crimson/hungeringwolf.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_016",
+      "card_name": "Sanguine Bat",
+      "cost": 2,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "bat",
+      "description": "Rush",
+      "attack": 3,
+      "health": 1,
+      "abilities": [
+        "rush"
+      ],
+      "art": "res://assets/crimson/sanguinebat.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_007t",
+      "card_name": "Warding Gargoyle",
+      "cost": 2,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "monstrosity",
+      "description": "Guardian",
+      "attack": 1,
+      "health": 2,
+      "abilities": [
+        "guardian"
+      ],
+      "transform_into": "",
+      "is_token": true,
+      "art": "res://assets/crimson/wardinggargoyle.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_027",
+      "card_name": "Cornered Hunter",
+      "cost": 3,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On death: Transform into a 3/3 monstrosity.",
+      "attack": 3,
+      "health": 3,
+      "abilities": [
+        "deathrattle_transform"
+      ],
+      "transform_into": "cr_009t",
+      "art": "res://assets/crimson/ghoulhunter.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_006",
+      "card_name": "Covenhound",
+      "cost": 3,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "wolf",
+      "description": "Rush. When this attacks, give a random creature you control +1 health.",
+      "attack": 2,
+      "health": 3,
+      "abilities": [
+        "rush",
+        "attack_buff_friendly_health"
+      ],
+      "art": "res://assets/crimson/covenhound.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_009",
+      "card_name": "Ghoul Hunter",
+      "cost": 3,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "When a friendly creature transforms, transform into Fleshripper.",
+      "attack": 2,
+      "health": 2,
+      "abilities": [
+        "mirror_transform"
+      ],
+      "transform_into": "cr_004t",
+      "art": "res://assets/crimson/ghoulhunter.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_str_004",
+      "card_name": "Moonhowl",
+      "cost": 3,
+      "color": "CRIMSON",
+      "card_type": "STRATAGEM",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Heal a creature for 3. If it's full health, give it +1 max health",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/crimson/moonhowl.png",
+      "effect": "heal",
+      "effect_value": 3
+    },
+    {
+      "id": "cr_005t",
+      "card_name": "Slippy Bat",
+      "cost": 3,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "monstrosity",
+      "description": "Rush",
+      "attack": 2,
+      "health": 1,
+      "abilities": [
+        "rush"
+      ],
+      "transform_into": "",
+      "is_token": true,
+      "art": "res://assets/crimson/slippybat.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_str_005",
+      "card_name": "Tainted Blood",
+      "cost": 3,
+      "color": "CRIMSON",
+      "card_type": "STRATAGEM",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Destroy target friendly creature, deal damage to opponent based on half it's health rounded down health.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/crimson/moonhowl.png",
+      "effect": "tainted_blood",
+      "effect_value": 1
+    },
+    {
+      "id": "cr_008",
+      "card_name": "Apothecary",
+      "cost": 4,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "When a friendly creature gains health, it gains +1 health",
+      "attack": 2,
+      "health": 5,
+      "abilities": [
+        "apothecary"
+      ],
+      "art": "res://assets/crimson/apothecary.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_015",
+      "card_name": "Bat Colony",
+      "cost": 4,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "bat",
+      "description": "",
+      "attack": 5,
+      "health": 4,
+      "abilities": [],
+      "art": "res://assets/crimson/batcolony.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_024",
+      "card_name": "Coven Supplier",
+      "cost": 4,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "On play: give all friendly minions +0/+1",
+      "attack": 2,
+      "health": 2,
+      "abilities": [
+        "on_play_buff_all_friendly_health"
+      ],
+      "art": "res://assets/crimson/cryptlurker.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_004",
+      "card_name": "Crypt King",
+      "cost": 4,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On play: Transform into Bat or Wolf.",
+      "attack": 5,
+      "health": 5,
+      "abilities": [
+        "on_play_transform_choice"
+      ],
+      "transform_choices": [
+        "cr_002t",
+        "cr_003t"
+      ],
+      "art": "res://assets/crimson/cryptking.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_011",
+      "card_name": "Crypt Savage",
+      "cost": 4,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Guardian.",
+      "attack": 2,
+      "health": 6,
+      "abilities": [
+        "guardian"
+      ],
+      "art": "res://assets/crimson/cryptsavage.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_019",
+      "card_name": "Delos, the Crypt Priest",
+      "cost": 4,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "LEGENDARY",
+      "tribe": "",
+      "description": "When this creature gains health, lose it and draw a card.",
+      "attack": 2,
+      "health": 3,
+      "abilities": [
+        "heal_to_draw"
+      ],
+      "art": "res://assets/crimson/delosthecryptpriest.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_025",
+      "card_name": "Feast Attendant",
+      "cost": 4,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "At the end of your turn, give adjacent creatures +0/+1",
+      "attack": 2,
+      "health": 2,
+      "abilities": [
+        "feast_attendant"
+      ],
+      "art": "res://assets/crimson/cryptlurker.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_007",
+      "card_name": "Moonlight Devotee",
+      "cost": 4,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "",
+      "attack": 3,
+      "health": 5,
+      "abilities": [],
+      "art": "res://assets/crimson/moonlightdevotee.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_023",
+      "card_name": "Broodtender",
+      "cost": 5,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Friendly monstrosities have Rejuvenate 2",
+      "attack": 3,
+      "health": 4,
+      "abilities": [
+        "broodtender_aura"
+      ],
+      "art": "res://assets/crimson/broodtender.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_012",
+      "card_name": "Coven Acolyte",
+      "cost": 5,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "When a friendly creature transforms, gain +1/+1",
+      "attack": 4,
+      "health": 5,
+      "abilities": [
+        "on_friendly_transform_buff_self"
+      ],
+      "art": "res://assets/crimson/covenacolyte.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_str_007",
+      "card_name": "Exsanguinate",
+      "cost": 5,
+      "color": "CRIMSON",
+      "card_type": "STRATAGEM",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Deal damage to target minion equal to it's health",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/crimson/moonhowl.png",
+      "effect": "exsanguinate",
+      "effect_value": 1
+    },
+    {
+      "id": "cr_003t",
+      "card_name": "Festering Wolf",
+      "cost": 5,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "monstrosity",
+      "description": "Rush.",
+      "attack": 4,
+      "health": 4,
+      "abilities": [
+        "rush"
+      ],
+      "transform_into": "",
+      "is_token": true,
+      "art": "res://assets/crimson/festeringwolf.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_004t",
+      "card_name": "Fleshripper",
+      "cost": 5,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "monstrosity",
+      "description": "Cloaked.",
+      "attack": 5,
+      "health": 4,
+      "abilities": [
+        "cloaked"
+      ],
+      "transform_into": "",
+      "is_token": true,
+      "art": "res://assets/crimson/fleshripper.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_002t",
+      "card_name": "Royal Bat",
+      "cost": 5,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "monstrosity",
+      "description": "Ethereal. (Immune to combat damage, can be targeted by stratagems.)",
+      "attack": 2,
+      "health": 1,
+      "abilities": [
+        "combat_immune"
+      ],
+      "transform_into": "",
+      "is_token": true,
+      "art": "res://assets/crimson/royalbat.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_014",
+      "card_name": "Crypt Gangrel",
+      "cost": 6,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "On Death: Deal 1 damage to all creatures, then become a Fleshripper.",
+      "attack": 3,
+      "health": 3,
+      "abilities": [
+        "deathrattle_aoe_transform"
+      ],
+      "transform_into": "cr_004t",
+      "art": "res://assets/crimson/cryptgangrel.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_028",
+      "card_name": "Animus Hoarder",
+      "cost": 7,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "monstrosity",
+      "description": "At the end of your turn, steal 1 health from a random enemy creature.",
+      "attack": 7,
+      "health": 6,
+      "abilities": [
+        "end_turn_drain_random_enemy"
+      ],
+      "art": "res://assets/crimson/fleshraker.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_005",
+      "card_name": "Elder Sire",
+      "cost": 8,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "",
+      "description": "Guardian. When attacked, give all friendly minions +1 max health.",
+      "attack": 6,
+      "health": 7,
+      "abilities": [
+        "guardian",
+        "when_attacked_buff_friendly"
+      ],
+      "art": "res://assets/crimson/eldersire.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_013",
+      "card_name": "Fleshraker",
+      "cost": 8,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "monstrosity",
+      "description": "",
+      "attack": 8,
+      "health": 8,
+      "abilities": [],
+      "art": "res://assets/crimson/fleshraker.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_022",
+      "card_name": "Crypt Lurker",
+      "cost": 9,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "monstrosity",
+      "description": "On play: devour a friendly minion. Gain it's health.",
+      "attack": 5,
+      "health": 5,
+      "abilities": [
+        "on_play_devour_friendly"
+      ],
+      "art": "res://assets/crimson/cryptlurker.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "cr_026",
+      "card_name": "Bloodscar, the Reaper",
+      "cost": 10,
+      "color": "CRIMSON",
+      "card_type": "CREATURE",
+      "rarity": "LEGENDARY",
+      "tribe": "",
+      "description": "Destroy all other creatures on the field. gain stats equal to the stats of the destroyed creatures.",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "on_play_devour_all"
+      ],
+      "art": "res://assets/crimson/delosthecryptpriest.png",
+      "effect": "",
+      "effect_value": 0
+    }
+  ],
+  "BLACK": [
+    {
+      "id": "b_022",
+      "card_name": "Sludgewalker Scout",
+      "cost": 1,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Recon.",
+      "attack": 1,
+      "health": 2,
+      "abilities": [
+        "recon"
+      ],
+      "art": "res://assets/black/sludgescout.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_009",
+      "card_name": "Trash Runt",
+      "cost": 1,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "",
+      "attack": 2,
+      "health": 1,
+      "abilities": [],
+      "art": "res://assets/black/trashrunt.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_str_002",
+      "card_name": "Hot Garbage",
+      "cost": 2,
+      "color": "BLACK",
+      "card_type": "STRATAGEM",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Give a creature rush",
+      "attack": 0,
+      "health": 0,
+      "abilities": [
+        "rush"
+      ],
+      "art": "res://assets/black/hotgarbage.png",
+      "effect": "give_ability",
+      "effect_value": 0
+    },
+    {
+      "id": "b_020",
+      "card_name": "Litter Critter",
+      "cost": 2,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "",
+      "description": "If this minion was rummaged, gain Void Touch",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "on_play_voidtouch_if_rummaged"
+      ],
+      "art": "res://assets/black/stinkherder.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_016",
+      "card_name": "Rubbleweaver Hauler",
+      "cost": 2,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "On play: gain +1/+1 for every time this creature has been rummaged.",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "on_play_rummage_buff"
+      ],
+      "art": "res://assets/black/trashcollector.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_015",
+      "card_name": "Scrap Hauler",
+      "cost": 2,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On Death: Draw a card.",
+      "attack": 2,
+      "health": 1,
+      "abilities": [
+        "deathrattle_draw_card"
+      ],
+      "art": "res://assets/black/scraphauler.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_008",
+      "card_name": "Slime Launcher",
+      "cost": 2,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On play: Deal 2 damage to anything.",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "on_play_damage_2"
+      ],
+      "art": "res://assets/black/slimelauncher.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_028",
+      "card_name": "Splinterkin Runt",
+      "cost": 2,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On play: If you have more than 10 cards in your graveyard, gain +0/+1 permanently.",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "on_play_graveyard_health"
+      ],
+      "art": "res://assets/black/trashrunt.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_014",
+      "card_name": "Filth Eater",
+      "cost": 3,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "",
+      "description": "Guardian. Whenever you Rummage, this creature gains +0/+1",
+      "attack": 3,
+      "health": 3,
+      "abilities": [
+        "guardian",
+        "rummage_buff"
+      ],
+      "art": "res://assets/black/filtheater.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_007",
+      "card_name": "Junkwheel",
+      "cost": 3,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Rush.",
+      "attack": 3,
+      "health": 2,
+      "abilities": [
+        "rush"
+      ],
+      "art": "res://assets/black/junkwheel.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_001",
+      "card_name": "Scrap Addict",
+      "cost": 3,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On play: Rummage. On death: Rummage.",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "rummage",
+        "rummage_on_death"
+      ],
+      "art": "res://assets/black/garbageaddict.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_012",
+      "card_name": "Scrap Pack Tallyer",
+      "cost": 3,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "",
+      "description": "Recon. Whenever you Rummage, draw a card.",
+      "attack": 2,
+      "health": 2,
+      "abilities": [
+        "recon",
+        "rummage_draw"
+      ],
+      "art": "res://assets/black/trashtallyer.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_004",
+      "card_name": "Dump Scummer",
+      "cost": 4,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On play: Rummage. Guardian.",
+      "attack": 2,
+      "health": 4,
+      "abilities": [
+        "guardian",
+        "rummage"
+      ],
+      "art": "res://assets/black/dumpscummer.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_005",
+      "card_name": "Greedy Splinterkin",
+      "cost": 4,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On play: Rummage and play it",
+      "attack": 2,
+      "health": 2,
+      "abilities": [
+        "rummage_and_play"
+      ],
+      "art": "res://assets/black/greedyjunkling.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_010",
+      "card_name": "Junk Blockade",
+      "cost": 4,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "If you have less cards in your hand than your opponent, Recon.",
+      "attack": 0,
+      "health": 7,
+      "abilities": [
+        "guardian",
+        "on_play_recon_if_fewer_cards"
+      ],
+      "art": "res://assets/black/junkblockade.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_002",
+      "card_name": "Junkbuster Guardian",
+      "cost": 4,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Guardian.",
+      "attack": 1,
+      "health": 6,
+      "abilities": [
+        "guardian"
+      ],
+      "art": "res://assets/black/lazyjunker.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_027",
+      "card_name": "Lord Knucklepunch",
+      "cost": 4,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "LEGENDARY",
+      "tribe": "",
+      "description": "Ambush. Headshot: Shuffle this creature into its owner's library.",
+      "attack": 7,
+      "health": 1,
+      "abilities": [
+        "ambush",
+        "headshot_shuffle_self"
+      ],
+      "art": "res://assets/black/clutterpunk.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_003",
+      "card_name": "Psionic Rummager",
+      "cost": 4,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On play: Rummage a spell of any cost.",
+      "attack": 3,
+      "health": 3,
+      "abilities": [
+        "rummage_spell"
+      ],
+      "art": "res://assets/black/psionicrummager.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_018",
+      "card_name": "Stinkherder",
+      "cost": 4,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "",
+      "description": "Rush. On death, return a non-legendary creature from your graveyard to your hand. Counts as rummaging.",
+      "attack": 3,
+      "health": 2,
+      "abilities": [
+        "rush",
+        "deathrattle_rummage_creature"
+      ],
+      "art": "res://assets/black/stinkherder.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_str_001",
+      "card_name": "Trash Pact",
+      "cost": 4,
+      "color": "BLACK",
+      "card_type": "STRATAGEM",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Give a creature you control \"Rummage on death\".",
+      "attack": 0,
+      "health": 0,
+      "abilities": [
+        "rummage_on_death"
+      ],
+      "art": "res://assets/black/trashpact.png",
+      "effect": "give_ability",
+      "effect_value": 0
+    },
+    {
+      "id": "b_019",
+      "card_name": "Clutterpunk, the Mad Defiler",
+      "cost": 5,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "LEGENDARY",
+      "tribe": "",
+      "description": "Cloaked. Creatures of an equal cost can be rummaged.",
+      "attack": 5,
+      "health": 5,
+      "abilities": [
+        "cloaked",
+        "rummage_equal_cost"
+      ],
+      "art": "res://assets/black/clutterpunk.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_013",
+      "card_name": "Decaying Junkling",
+      "cost": 5,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On play: Deal 2 damage to all enemy creatures.",
+      "attack": 2,
+      "health": 2,
+      "abilities": [
+        "on_play_aoe_enemy_2"
+      ],
+      "art": "res://assets/black/decayingjunkling.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_024",
+      "card_name": "Salvager",
+      "cost": 5,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "",
+      "description": "On play: Rummage. A creature rummaged this way gets +1/+1 permanently.",
+      "attack": 5,
+      "health": 5,
+      "abilities": [
+        "rummage_buff_creature"
+      ],
+      "art": "res://assets/black/debrishauler.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_str_003",
+      "card_name": "Sludge Spray",
+      "cost": 5,
+      "color": "BLACK",
+      "card_type": "STRATAGEM",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Deal {n} damage to enemy creatures. Whenever this is rummaged, deal 1 more.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/black/hotgarbage.png",
+      "effect": "sludge_spray",
+      "effect_value": 2
+    },
+    {
+      "id": "b_011",
+      "card_name": "Debris Hauler",
+      "cost": 6,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "",
+      "description": "On play: Rummage, Rummage",
+      "attack": 5,
+      "health": 4,
+      "abilities": [
+        "rummage",
+        "rummage"
+      ],
+      "art": "res://assets/black/debrishauler.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_021",
+      "card_name": "Dust Scraper",
+      "cost": 6,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "",
+      "description": "When this minion attacks, rummage",
+      "attack": 5,
+      "health": 5,
+      "abilities": [
+        "attack_rummage"
+      ],
+      "art": "res://assets/black/debrishauler.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_026",
+      "card_name": "Scrap Courier",
+      "cost": 7,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "",
+      "description": "When this creature takes damage, Rummage.",
+      "attack": 6,
+      "health": 6,
+      "abilities": [
+        "damage_rummage"
+      ],
+      "art": "res://assets/black/debrishauler.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_025",
+      "card_name": "Splinterkin Behemoth",
+      "cost": 7,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "",
+      "description": "Headshot: Rummage.",
+      "attack": 5,
+      "health": 7,
+      "abilities": [
+        "headshot_rummage"
+      ],
+      "art": "res://assets/black/trashcolossus.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_006",
+      "card_name": "Creeper Colossus",
+      "cost": 8,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "",
+      "description": "Guardian. Rejuvenate 1",
+      "attack": 6,
+      "health": 6,
+      "abilities": [
+        "guardian",
+        "rejuvenate_1"
+      ],
+      "art": "res://assets/black/trashcolossus.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_str_004",
+      "card_name": "Rust Grenade",
+      "cost": 9,
+      "color": "BLACK",
+      "card_type": "STRATAGEM",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Destroy all minions, then Rummage a creature and put it on the battlefield.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/black/hotgarbage.png",
+      "effect": "destroy_all_rummage_creature",
+      "effect_value": 0
+    },
+    {
+      "id": "b_017",
+      "card_name": "StinkPile, Lord of Garbage",
+      "cost": 9,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "LEGENDARY",
+      "tribe": "",
+      "description": "When a card is rummaged, put it on the battlefield instead. On play: Rummage 3.",
+      "attack": 7,
+      "health": 5,
+      "abilities": [
+        "rummage",
+        "rummage",
+        "rummage",
+        "stinkpile_passive"
+      ],
+      "art": "res://assets/black/stinkpile.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "b_023",
+      "card_name": "Junksquatch",
+      "cost": 10,
+      "color": "BLACK",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "",
+      "description": "On play: This creature's stats become the number of cards in your graveyard.",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "stats_from_graveyard"
+      ],
+      "art": "res://assets/black/trashcolossus.png",
+      "effect": "",
+      "effect_value": 0
+    }
+  ],
+  "ORANGE": [
+    {
+      "id": "o_027",
+      "card_name": "Morph Drones",
+      "cost": 1,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Headshot: Self-destruct and heal all friendly minions 2.",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "headshot_self_destruct_heal"
+      ],
+      "art": "res://assets/orange/scraprummager.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_025",
+      "card_name": "Scouter",
+      "cost": 1,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "mech",
+      "description": "Pilotable.",
+      "attack": 1,
+      "health": 1,
+      "abilities": [],
+      "art": "res://assets/orange/scraprummager.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_001",
+      "card_name": "Scrap Rummager",
+      "cost": 1,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Rush.",
+      "attack": 1,
+      "health": 2,
+      "abilities": [
+        "rush"
+      ],
+      "art": "res://assets/orange/scraprummager.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_str_005",
+      "card_name": "Carbon Mesh",
+      "cost": 2,
+      "color": "ORANGE",
+      "card_type": "STRATAGEM",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Friendly mech gains Shielded 3 until the end of your opponents next turn.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/orange/carbonmesh.png",
+      "effect": "give_mech_shielded_temp",
+      "effect_value": 3
+    },
+    {
+      "id": "o_022",
+      "card_name": "Duster",
+      "cost": 2,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "",
+      "attack": 1,
+      "health": 2,
+      "abilities": [],
+      "art": "res://assets/orange/duster.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_003",
+      "card_name": "Junior Pilot",
+      "cost": 2,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Pilot 2/2",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "pilot_2_2"
+      ],
+      "art": "res://assets/orange/juniorpilot.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_002",
+      "card_name": "Mech Spotlighter",
+      "cost": 2,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Rush.",
+      "attack": 3,
+      "health": 1,
+      "abilities": [
+        "rush"
+      ],
+      "art": "res://assets/orange/mechspotlighter.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_026",
+      "card_name": "Mech Station",
+      "cost": 2,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "At the end of your turn, heal all friendly mechs 2.",
+      "attack": 0,
+      "health": 5,
+      "abilities": [
+        "end_turn_heal_mechs"
+      ],
+      "art": "res://assets/orange/juniorpilot.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_str_003",
+      "card_name": "Panic Button",
+      "cost": 2,
+      "color": "ORANGE",
+      "card_type": "STRATAGEM",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Eject a pilot from a friendly Mech. The pilot returns to the field.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/orange/panicbutton.png",
+      "effect": "eject_pilot",
+      "effect_value": 0
+    },
+    {
+      "id": "o_021",
+      "card_name": "Sweeper",
+      "cost": 2,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "",
+      "attack": 2,
+      "health": 1,
+      "abilities": [],
+      "art": "res://assets/orange/sweeper.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_013",
+      "card_name": "Air control",
+      "cost": 3,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "When a friendly creature pilots, draw a card.",
+      "attack": 3,
+      "health": 3,
+      "abilities": [
+        "on_friendly_pilot_draw"
+      ],
+      "art": "res://assets/orange/aircontrol.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_str_004",
+      "card_name": "Doomsday Protocol",
+      "cost": 3,
+      "color": "ORANGE",
+      "card_type": "STRATAGEM",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Eject all friendly pilots.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/orange/doomsdayprotocol.png",
+      "effect": "eject_all_pilots",
+      "effect_value": 0
+    },
+    {
+      "id": "o_014",
+      "card_name": "F4lcon",
+      "cost": 3,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "mech",
+      "description": "Pilotable. When piloted, gain 1+/+1",
+      "attack": 3,
+      "health": 3,
+      "abilities": [
+        "on_piloted_stat_boost"
+      ],
+      "art": "res://assets/orange/f4lcon.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_019",
+      "card_name": "Jab bot",
+      "cost": 3,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "",
+      "description": "Dualstrike",
+      "attack": 3,
+      "health": 3,
+      "abilities": [
+        "dual_strike"
+      ],
+      "art": "res://assets/orange/jabbot.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_028",
+      "card_name": "Morphling Flyer",
+      "cost": 3,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Pilot 3/3. On pilot: Heal the Mech to full.",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "pilot_3_3",
+        "on_pilot_restore_health"
+      ],
+      "art": "res://assets/orange/nervousflyer.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_str_002",
+      "card_name": "Nanotech",
+      "cost": 3,
+      "color": "ORANGE",
+      "card_type": "STRATAGEM",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Give a creature +2/+2.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/orange/nanotech.png",
+      "effect": "buff_creature",
+      "effect_value": 2
+    },
+    {
+      "id": "o_007",
+      "card_name": "Nervous Flyer",
+      "cost": 3,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Pilot 1/3, gives Cloaked to piloted mech",
+      "attack": 2,
+      "health": 4,
+      "abilities": [
+        "pilot_1_3",
+        "pilot_gives_cloaked"
+      ],
+      "art": "res://assets/orange/nervousflyer.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_004",
+      "card_name": "Veteran Pilot",
+      "cost": 3,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Recon. Pilot 3/4",
+      "attack": 3,
+      "health": 2,
+      "abilities": [
+        "pilot_3_4",
+        "recon"
+      ],
+      "art": "res://assets/orange/veteranpilot.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_008",
+      "card_name": "Brash Captain",
+      "cost": 4,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Pilot 4/1, gives mech Rush when piloted.",
+      "attack": 2,
+      "health": 6,
+      "abilities": [
+        "pilot_4_1",
+        "pilot_gives_rush"
+      ],
+      "art": "res://assets/orange/brashcaptain.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_005",
+      "card_name": "Gundari Engineer",
+      "cost": 4,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Guardian. On death, return one mech from graveyard to hand.",
+      "attack": 3,
+      "health": 3,
+      "abilities": [
+        "guardian",
+        "rummage_mech_on_death"
+      ],
+      "art": "res://assets/orange/gundariengineer.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_017",
+      "card_name": "Newt Nano, the Cunning",
+      "cost": 4,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "LEGENDARY",
+      "tribe": "mech",
+      "description": "Pilot 2/2. On play: Pilot a mech for free.",
+      "attack": 2,
+      "health": 3,
+      "abilities": [
+        "pilot_2_2",
+        "on_play_pilot_mech"
+      ],
+      "art": "res://assets/orange/newtnanothecunning.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_006",
+      "card_name": "Odd wired Mech",
+      "cost": 4,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "mech",
+      "description": "Pilotable. Rush",
+      "attack": 5,
+      "health": 2,
+      "abilities": [
+        "rush"
+      ],
+      "art": "res://assets/orange/oddwiredmech.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_009",
+      "card_name": "St4rling",
+      "cost": 4,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "mech",
+      "description": "Pilotable. Cloaked.",
+      "attack": 4,
+      "health": 4,
+      "abilities": [
+        "cloaked"
+      ],
+      "art": "res://assets/orange/st4rling.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_011",
+      "card_name": "0sprey",
+      "cost": 5,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "mech",
+      "description": "Pilotable. Guardian",
+      "attack": 3,
+      "health": 7,
+      "abilities": [
+        "guardian"
+      ],
+      "art": "res://assets/orange/0sprey.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_015",
+      "card_name": "Damen Captain",
+      "cost": 5,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Pilot 5/4, give Guardian to piloted mech.",
+      "attack": 5,
+      "health": 5,
+      "abilities": [
+        "pilot_4_3",
+        "pilot_gives_guardian"
+      ],
+      "art": "res://assets/orange/damencaptain.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_024",
+      "card_name": "Organic Vapeorizor",
+      "cost": 5,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "mech",
+      "description": "Guardian. On death: deal 3 damage to all creatures except mechs.",
+      "attack": 0,
+      "health": 6,
+      "abilities": [
+        "guardian",
+        "deathrattle_damage_all_except_mech_3"
+      ],
+      "art": "res://assets/orange/0sprey.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_010",
+      "card_name": "Kestrel",
+      "cost": 6,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "mech",
+      "description": "Pilotable. Guardian.",
+      "attack": 4,
+      "health": 5,
+      "abilities": [
+        "guardian"
+      ],
+      "art": "res://assets/orange/kestrel.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_016",
+      "card_name": "Qu3tzalcoatl, the Serpent",
+      "cost": 6,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "LEGENDARY",
+      "tribe": "mech",
+      "description": "Pilotable. On pilot, gain Rush and Cloaked. When this creature dies, eject the pilot.",
+      "attack": 6,
+      "health": 6,
+      "abilities": [
+        "on_piloted_stat_boost",
+        "on_piloted_gain_cloaked",
+        "eject_pilot_on_death",
+        "on_piloted_gain_rush"
+      ],
+      "art": "res://assets/orange/qu3tzalcoatltheserpent.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_012",
+      "card_name": "C4ladrius",
+      "cost": 7,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "mech",
+      "description": "Pilotable. Rush",
+      "attack": 6,
+      "health": 7,
+      "abilities": [
+        "rush"
+      ],
+      "art": "res://assets/orange/c4ladrius.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_020",
+      "card_name": "Growvin, the Architect",
+      "cost": 7,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "LEGENDARY",
+      "tribe": "mech",
+      "description": "All friendly mechs have Cloaked, Rejuvenate 1, and Shielded 1.",
+      "attack": 6,
+      "health": 6,
+      "abilities": [
+        "growvin_aura"
+      ],
+      "art": "res://assets/orange/growvinthearchitect.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "o_018",
+      "card_name": "Griff1n",
+      "cost": 10,
+      "color": "ORANGE",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "mech",
+      "description": "Pilotable. Gain +1/+1 whenever a friendly mech dies.",
+      "attack": 9,
+      "health": 8,
+      "abilities": [
+        "mech",
+        "on_friendly_mech_death_buff"
+      ],
+      "art": "res://assets/orange/griff1n.png",
+      "effect": "",
+      "effect_value": 0
+    }
+  ],
+  "TEAL": [
+    {
+      "id": "t_014",
+      "card_name": "Iceologist",
+      "cost": 1,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "When a friendly Yeti challenges and survives, it gains +1/+1.",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "on_yeti_challenge_buff"
+      ],
+      "art": "res://assets/teal/iceologist.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_017",
+      "card_name": "Lost Yetiling",
+      "cost": 1,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "When a friendly Yeti challenges, attack the same target.",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "on_yeti_challenge_attack"
+      ],
+      "art": "res://assets/teal/lostyetiling.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_023",
+      "card_name": "Yeti scout",
+      "cost": 1,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "yeti",
+      "description": "Recon",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "recon"
+      ],
+      "art": "res://assets/teal/yetiscout.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_str_003",
+      "card_name": "Icewhip",
+      "cost": 2,
+      "color": "TEAL",
+      "card_type": "STRATAGEM",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Make a yeti you control challenge. If it wins, give it +2/+2",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/teal/icewhip.png",
+      "effect": "force_challenge",
+      "effect_value": 2
+    },
+    {
+      "id": "t_003",
+      "card_name": "Mokotai Infantry",
+      "cost": 2,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On play: If you control a yeti, gain +2/+1",
+      "attack": 2,
+      "health": 3,
+      "abilities": [
+        "on_play_buff_if_yeti"
+      ],
+      "art": "res://assets/teal/mokotaiinfantry.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_009",
+      "card_name": "Mokotai Scout",
+      "cost": 2,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Recon. Cloaked",
+      "attack": 2,
+      "health": 2,
+      "abilities": [
+        "recon",
+        "cloaked"
+      ],
+      "art": "res://assets/teal/mokotaiscout.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_011",
+      "card_name": "Sledbearer",
+      "cost": 2,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "yeti",
+      "description": "Challenge",
+      "attack": 1,
+      "health": 2,
+      "abilities": [
+        "challenge"
+      ],
+      "art": "res://assets/teal/sledbearer.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_025",
+      "card_name": "Tundra Forager",
+      "cost": 2,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "yeti",
+      "description": "",
+      "attack": 2,
+      "health": 3,
+      "abilities": [],
+      "effect": "",
+      "effect_value": 0,
+      "is_token": false,
+      "in_starter": false
+    },
+    {
+      "id": "t_005",
+      "card_name": "Tundra Speeder",
+      "cost": 2,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Rush.",
+      "attack": 3,
+      "health": 1,
+      "abilities": [
+        "rush"
+      ],
+      "art": "res://assets/teal/tundraspeeder.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_str_001",
+      "card_name": "Avalanche",
+      "cost": 3,
+      "color": "TEAL",
+      "card_type": "STRATAGEM",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Deal 3 damage to all creatures.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/teal/icewhip.png",
+      "effect": "deal_damage_all_creatures",
+      "effect_value": 3
+    },
+    {
+      "id": "t_026",
+      "card_name": "Glacierback Yeti",
+      "cost": 3,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "yeti",
+      "description": "",
+      "attack": 3,
+      "health": 4,
+      "abilities": [],
+      "effect": "",
+      "effect_value": 0,
+      "is_token": false,
+      "in_starter": false
+    },
+    {
+      "id": "t_020",
+      "card_name": "Iceskimmer",
+      "cost": 3,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "yeti",
+      "description": "Ambush",
+      "attack": 1,
+      "health": 3,
+      "abilities": [
+        "ambush"
+      ],
+      "art": "res://assets/teal/sereneyeti_t_019.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_028",
+      "card_name": "Pa'tael",
+      "cost": 3,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "LEGENDARY",
+      "tribe": "",
+      "description": "Ethereal. Headshot: Challenge.",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "combat_immune",
+        "headshot_challenge"
+      ],
+      "art": "res://assets/teal/iceologist.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_str_002",
+      "card_name": "Snow Bank",
+      "cost": 3,
+      "color": "TEAL",
+      "card_type": "STRATAGEM",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Give a friendly creature +2/+2.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/teal/snowbank.png",
+      "effect": "buff_creature",
+      "effect_value": 2
+    },
+    {
+      "id": "t_012",
+      "card_name": "Yeti Poker",
+      "cost": 3,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On play select a yeti you control to challenge.",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "on_play_yeti_challenge"
+      ],
+      "art": "res://assets/teal/yetipoker.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_007",
+      "card_name": "Yeti Rancher",
+      "cost": 3,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On Death: Draw a random Yeti from your deck.",
+      "attack": 1,
+      "health": 2,
+      "abilities": [
+        "deathrattle_draw_yeti"
+      ],
+      "art": "res://assets/teal/yetirancher.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_001",
+      "card_name": "Rallying Yetiling",
+      "cost": 4,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "yeti",
+      "description": "Challenge. On play: Give other yetis you control 2 attack",
+      "attack": 2,
+      "health": 3,
+      "abilities": [
+        "challenge",
+        "on_play_buff_friendly_yeti_attack"
+      ],
+      "art": "res://assets/teal/yetiling.jpg",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_024",
+      "card_name": "Rampant Yetiling",
+      "cost": 4,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "yeti",
+      "description": "Trample",
+      "attack": 5,
+      "health": 3,
+      "abilities": [
+        "trample"
+      ],
+      "art": "res://assets/teal/sereneyeti_t_019.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_002",
+      "card_name": "Recovery Sled",
+      "cost": 4,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Guardian. When a friendly yeti dies, gain +0/+2",
+      "attack": 3,
+      "health": 2,
+      "abilities": [
+        "guardian",
+        "on_friendly_yeti_death_buff"
+      ],
+      "art": "res://assets/teal/recoverysled.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_019",
+      "card_name": "Serene Yeti",
+      "cost": 4,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "yeti",
+      "description": "Ambush",
+      "attack": 2,
+      "health": 4,
+      "abilities": [
+        "ambush"
+      ],
+      "art": "res://assets/teal/sereneyeti_t_019.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_021",
+      "card_name": "Tutkiun, the last Surveyor",
+      "cost": 4,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "LEGENDARY",
+      "tribe": "",
+      "description": "At the end of your turn, reduce the cost of Yetis in your hand by 1.",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "end_turn_yeti_discount"
+      ],
+      "art": "res://assets/teal/recoverysled.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_022",
+      "card_name": "Wrangling crew",
+      "cost": 4,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "",
+      "description": "When a friendly yeti challenges, attack the same target right after.",
+      "attack": 4,
+      "health": 5,
+      "abilities": [
+        "on_yeti_challenge_attack"
+      ],
+      "art": "res://assets/teal/recoverysled.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_018",
+      "card_name": "Gate yeti",
+      "cost": 5,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "yeti",
+      "description": "Challenge. Dualstrike.",
+      "attack": 3,
+      "health": 3,
+      "abilities": [
+        "challenge",
+        "dual_strike"
+      ],
+      "art": "res://assets/teal/gateyeti.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_015",
+      "card_name": "Mokotai Overwatch",
+      "cost": 5,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "When a friendly yeti dies, choose a friendly yeti to challenge",
+      "attack": 2,
+      "health": 3,
+      "abilities": [
+        "on_yeti_death_challenge"
+      ],
+      "art": "res://assets/teal/mokotaioverwatch.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_004",
+      "card_name": "Mokotai Vanguard",
+      "cost": 5,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Guardian. Cloaked",
+      "attack": 4,
+      "health": 6,
+      "abilities": [
+        "guardian",
+        "cloaked"
+      ],
+      "art": "res://assets/teal/mokotaivanguard.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_027",
+      "card_name": "Snowdrift Matriarch",
+      "cost": 5,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "yeti",
+      "description": "On play: Restore 2 health to each other friendly Yeti.",
+      "attack": 3,
+      "health": 6,
+      "abilities": [
+        "on_play_heal_friendly_yetis"
+      ],
+      "effect": "",
+      "effect_value": 0,
+      "is_token": false,
+      "in_starter": false
+    },
+    {
+      "id": "t_str_004",
+      "card_name": "Whiteout",
+      "cost": 5,
+      "color": "TEAL",
+      "card_type": "STRATAGEM",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Deal 2 damage to all enemy creatures. If any die from this damage, draw a random Yeti from your deck.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "effect": "deal_damage_all_enemy_draw_yeti",
+      "effect_value": 2
+    },
+    {
+      "id": "t_010",
+      "card_name": "Yeti Grunt",
+      "cost": 6,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "yeti",
+      "description": "Guardian. On play: Challenge. If this yeti wins, gain +1/+1.",
+      "attack": 4,
+      "health": 4,
+      "abilities": [
+        "guardian",
+        "on_play_challenge_win_buff"
+      ],
+      "art": "res://assets/teal/yetigrunt.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_008",
+      "card_name": "Frost Yeti",
+      "cost": 7,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "yeti",
+      "description": "Guardian. Challenge",
+      "attack": 4,
+      "health": 6,
+      "abilities": [
+        "guardian",
+        "challenge"
+      ],
+      "art": "res://assets/teal/frostyeti.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_006",
+      "card_name": "Serene Yeti",
+      "cost": 8,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "yeti",
+      "description": "Guardian.",
+      "attack": 6,
+      "health": 8,
+      "abilities": [
+        "guardian"
+      ],
+      "art": "res://assets/teal/sereneyeti.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_013",
+      "card_name": "Abominus, Primal Wraith",
+      "cost": 10,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "LEGENDARY",
+      "tribe": "yeti",
+      "description": "On play: Challenge every enemy creature from left to right",
+      "attack": 10,
+      "health": 8,
+      "abilities": [
+        "challenge_all"
+      ],
+      "art": "res://assets/teal/abominusprimalwraith.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_0",
+      "card_name": "Ancient Abominable",
+      "cost": 10,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "yeti",
+      "description": "Colossal",
+      "attack": 11,
+      "health": 11,
+      "abilities": [
+        "two_slot"
+      ],
+      "art": "res://assets/teal/motheryeti.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "t_016",
+      "card_name": "Mother Yeti",
+      "cost": 10,
+      "color": "TEAL",
+      "card_type": "CREATURE",
+      "rarity": "EPIC",
+      "tribe": "yeti",
+      "description": "Guardian.",
+      "attack": 9,
+      "health": 10,
+      "abilities": [
+        "guardian"
+      ],
+      "art": "res://assets/teal/motheryeti.png",
+      "effect": "",
+      "effect_value": 0
+    }
+  ],
+  "GENERIC": [
+    {
+      "id": "gen_001",
+      "card_name": "Mortified Scout",
+      "cost": 1,
+      "color": "GENERIC",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Recon",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "recon"
+      ],
+      "art": "res://assets/generic/mortifiedscout.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "gen_013",
+      "card_name": "Checkpoint Sentry",
+      "cost": 2,
+      "color": "GENERIC",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Guardian.",
+      "attack": 1,
+      "health": 3,
+      "abilities": [
+        "guardian"
+      ],
+      "effect": "",
+      "effect_value": 0,
+      "is_token": false,
+      "in_starter": false
+    },
+    {
+      "id": "gen_str_005",
+      "card_name": "Emergency Extraction",
+      "cost": 2,
+      "color": "GENERIC",
+      "card_type": "STRATAGEM",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Return a friendly creature to your hand.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "effect": "return_friendly_to_hand",
+      "effect_value": 0
+    },
+    {
+      "id": "gen_011",
+      "card_name": "Frontier Mercenary",
+      "cost": 2,
+      "color": "GENERIC",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "",
+      "attack": 2,
+      "health": 2,
+      "abilities": [],
+      "effect": "",
+      "effect_value": 0,
+      "is_token": false,
+      "in_starter": false
+    },
+    {
+      "id": "gen_014",
+      "card_name": "Archive Courier",
+      "cost": 3,
+      "color": "GENERIC",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On death: Draw a card.",
+      "attack": 2,
+      "health": 2,
+      "abilities": [
+        "deathrattle_draw_card"
+      ],
+      "effect": "",
+      "effect_value": 0,
+      "is_token": false,
+      "in_starter": false
+    },
+    {
+      "id": "gen_015",
+      "card_name": "Frontier Medic",
+      "cost": 3,
+      "color": "GENERIC",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On play: Restore 1 health to a creature.",
+      "attack": 1,
+      "health": 3,
+      "abilities": [
+        "on_play_restore_health"
+      ],
+      "effect": "",
+      "effect_value": 0,
+      "is_token": false,
+      "in_starter": false
+    },
+    {
+      "id": "gen_002",
+      "card_name": "Lost Junkling",
+      "cost": 3,
+      "color": "GENERIC",
+      "card_type": "CREATURE",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "On play: Null a creature.",
+      "attack": 2,
+      "health": 2,
+      "abilities": [
+        "null"
+      ],
+      "art": "res://assets/generic/lostjunkling.png",
+      "effect": "",
+      "effect_value": 0
+    },
+    {
+      "id": "gen_str_001",
+      "card_name": "Orbital Strike",
+      "cost": 3,
+      "color": "GENERIC",
+      "card_type": "STRATAGEM",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Deal 3 damage to any target.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/generic/orbitalstrike.png",
+      "effect": "deal_damage",
+      "effect_value": 3
+    },
+    {
+      "id": "gen_009",
+      "card_name": "Plated Soldier",
+      "cost": 3,
+      "color": "GENERIC",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Shielded 1",
+      "attack": 2,
+      "health": 3,
+      "abilities": [
+        "shielded_1"
+      ],
+      "art": "res://assets/generic/platedsoldier.png",
+      "effect": "",
+      "effect_value": 0,
+      "in_starter": false
+    },
+    {
+      "id": "gen_010",
+      "card_name": "Shadow Scout",
+      "cost": 3,
+      "color": "GENERIC",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Ambush",
+      "attack": 3,
+      "health": 2,
+      "abilities": [
+        "ambush"
+      ],
+      "art": "res://assets/generic/shadowscout.png",
+      "effect": "",
+      "effect_value": 0,
+      "in_starter": false
+    },
+    {
+      "id": "gen_007",
+      "card_name": "Twin Fang",
+      "cost": 3,
+      "color": "GENERIC",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Dualstrike",
+      "attack": 3,
+      "health": 2,
+      "abilities": [
+        "dual_strike"
+      ],
+      "art": "res://assets/generic/Twinfang.png",
+      "effect": "",
+      "effect_value": 0,
+      "in_starter": false
+    },
+    {
+      "id": "gen_008",
+      "card_name": "Void Stalker",
+      "cost": 3,
+      "color": "GENERIC",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Voidtouch",
+      "attack": 1,
+      "health": 1,
+      "abilities": [
+        "voidtouch"
+      ],
+      "art": "res://assets/generic/Voidstalker.png",
+      "effect": "",
+      "effect_value": 0,
+      "in_starter": false
+    },
+    {
+      "id": "gen_012",
+      "card_name": "Cargo Loader",
+      "cost": 4,
+      "color": "GENERIC",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "",
+      "attack": 4,
+      "health": 4,
+      "abilities": [],
+      "effect": "",
+      "effect_value": 0,
+      "is_token": false,
+      "in_starter": false
+    },
+    {
+      "id": "gen_str_003",
+      "card_name": "Noxious Bombardment",
+      "cost": 4,
+      "color": "GENERIC",
+      "card_type": "STRATAGEM",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Deal 2 damage to all enemy creatures.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/generic/noxiousbombardment.png",
+      "effect": "deal_damage_all_enemy",
+      "effect_value": 2
+    },
+    {
+      "id": "gen_016",
+      "card_name": "Supply Quartermaster",
+      "cost": 4,
+      "color": "GENERIC",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On play: Give another friendly creature +1/+1.",
+      "attack": 3,
+      "health": 3,
+      "abilities": [
+        "on_play_buff_other_friendly"
+      ],
+      "effect": "",
+      "effect_value": 0,
+      "is_token": false,
+      "in_starter": false
+    },
+    {
+      "id": "gen_017",
+      "card_name": "Heavy Bounty Hunter",
+      "cost": 5,
+      "color": "GENERIC",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "On play: Deal 4 damage to an enemy creature with 5 or more attack.",
+      "attack": 3,
+      "health": 3,
+      "abilities": [
+        "on_play_damage_high_attack"
+      ],
+      "effect": "",
+      "effect_value": 0,
+      "is_token": false,
+      "in_starter": false
+    },
+    {
+      "id": "gen_str_002",
+      "card_name": "Laser Barrage",
+      "cost": 5,
+      "color": "GENERIC",
+      "card_type": "STRATAGEM",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Deal 5 damage to any target.",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/generic/LaserBarrage.png",
+      "effect": "deal_damage",
+      "effect_value": 5
+    },
+    {
+      "id": "gen_018",
+      "card_name": "Convoy Defender",
+      "cost": 6,
+      "color": "GENERIC",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "Guardian.",
+      "attack": 4,
+      "health": 7,
+      "abilities": [
+        "guardian"
+      ],
+      "effect": "",
+      "effect_value": 0,
+      "is_token": false,
+      "in_starter": false
+    },
+    {
+      "id": "gen_str_004",
+      "card_name": "Black hole",
+      "cost": 8,
+      "color": "GENERIC",
+      "card_type": "STRATAGEM",
+      "rarity": "RARE",
+      "tribe": "",
+      "description": "Destroy all creatures",
+      "attack": 0,
+      "health": 0,
+      "abilities": [],
+      "art": "res://assets/generic/BlackHole.png",
+      "effect": "destroy_all_creatures",
+      "effect_value": 0
+    },
+    {
+      "id": "gen_019",
+      "card_name": "Wasteland Behemoth",
+      "cost": 8,
+      "color": "GENERIC",
+      "card_type": "CREATURE",
+      "rarity": "COMMON",
+      "tribe": "",
+      "description": "",
+      "attack": 7,
+      "health": 8,
+      "abilities": [],
+      "effect": "",
+      "effect_value": 0,
+      "is_token": false,
+      "in_starter": false
+    }
+  ]
+}
