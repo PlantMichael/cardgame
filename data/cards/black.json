@@ -225,8 +225,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "On play: Rummage. Guardian.",
-		"attack": 3,
-		"health": 5,
+		"attack": 2,
+		"health": 4,
 		"abilities": [
 			"guardian",
 			"rummage"
@@ -359,8 +359,7 @@
 		"health": 4,
 		"abilities": [
 			"rummage",
-			"rummage",
-			"cloaked"
+			"rummage"
 		],
 		"art": "res://assets/black/debrishauler.png",
 		"effect": "",

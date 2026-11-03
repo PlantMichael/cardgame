@@ -68,8 +68,8 @@
       "type": "CREATURE",
       "rarity": "COMMON",
       "manaCost": 4,
-      "attack": 3,
-      "health": 5,
+      "attack": 2,
+      "health": 4,
       "tribe": null,
       "description": "On play: Rummage. Guardian.",
       "abilities": [
@@ -215,8 +215,7 @@
       "description": "On play: Rummage, Rummage",
       "abilities": [
         "rummage",
-        "rummage",
-        "cloaked"
+        "rummage"
       ],
       "collectible": true,
       "isToken": false,
