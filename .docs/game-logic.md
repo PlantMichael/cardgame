@@ -1,5 +1,9 @@
 # Game Logic Scripts
 
+Human ranked games (including normal ranked-AI fallback) offer the second player an opening bonus before either mulligan: five deck cards total, four deck cards plus a Coin, or four deck cards plus a vanilla 1/1 Starting Recruit. The Coin is added after its owner's mulligan, costs zero, and grants one additional usable mana only for the turn it is played. The Recruit starts on the board, remains exhausted on its owner's first turn, and readies on their second. First player keeps three cards and normal mana/draw progression. Non-ranked/campaign games and any match involving a named Moon bot keep the baseline three/four opening.
+
+`GameState.begin_mulligan(with_opening_choice = false)` owns this ordering. Pending mulligans are initialized immediately for observation, but commands cannot mulligan until the mandatory `opening_bonus` choice is answered. `opening_bonus` and `temporary_mana` survive simulation copies, filtered views and hashing. A choice timeout defaults to five cards without ending the first player's turn. Coin and Recruit are non-collectible catalog tokens, excluded from decks and packs.
+
 ## minion.gd
 
 Runtime creature instance. Created when a card is played to the board.

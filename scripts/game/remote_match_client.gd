@@ -32,6 +32,7 @@ var _ack_token: int = 0
 var _inbox: Array[Dictionary] = []
 var _pumping: bool = false
 var _have_view: bool = false
+var _mulligan_started: bool = false
 var _answering_choice_id: String = ""
 var _game_over_shown: bool = false
 var _reconnecting: bool = false
@@ -108,7 +109,7 @@ func _send_command(cmd: Dictionary) -> bool:
 	return true
 
 func _my_turn() -> bool:
-	return game_state != null and game_state.active_player_id == _my_id and game_state.mulligan_pending.is_empty()
+	return game_state != null and game_state.active_player_id == _my_id and game_state.mulligan_pending.is_empty() and not game_state.opening_choice_pending()
 
 func _on_play_card(card_data: CardData, at_index: int) -> void:
 	if card_data == null or not _my_turn():
@@ -267,8 +268,10 @@ func _on_view(msg: Dictionary) -> void:
 		_have_view = true
 		_last_turn = game_state.turn_number
 		_last_active = game_state.active_player_id
-		if not game_state.mulligan_pending.is_empty() and game_state.mulligan_pending.has(_my_id):
-			_begin_mulligan()
+		if not game_state.mulligan_pending.is_empty():
+			await board.show_coinflip_result(game_state.active_player_id == _my_id)
+			if not is_instance_valid(board):
+				return
 	else:
 		await _present_events(events)
 		_announce_turn_change(was_my_turn)
@@ -280,6 +283,9 @@ func _on_view(msg: Dictionary) -> void:
 		_settled.emit()
 		return
 	_maybe_prompt_choice()
+	if not _mulligan_started and not game_state.opening_choice_pending() and game_state.mulligan_pending.has(_my_id):
+		_mulligan_started = true
+		_begin_mulligan()
 	_settled.emit()
 
 func _present_attack(e: Dictionary) -> void:
@@ -347,16 +353,22 @@ func _answer_choice(choice: Dictionary) -> void:
 	var selection: String = await board.prompt_choice(choice)
 	if not is_instance_valid(board) or _game_over_shown:
 		return
+	if str(choice["effect"]) == GameState.CHOICE_OPENING_BONUS and (not game_state.opening_choice_pending() or str(game_state.pending_choice.get("id", "")) != str(choice["id"])):
+		return
 	# Answered while a send was still in flight: wait our turn to speak.
-	while _awaiting_ack and is_instance_valid(board):
+	while (_awaiting_ack or _reconnecting) and is_instance_valid(board):
 		await get_tree().process_frame
+	if not is_instance_valid(board) or _game_over_shown or str(game_state.pending_choice.get("id", "")) != str(choice["id"]):
+		return
 	_send_command({"type": "answer_choice", "choice_id": str(choice.get("id", "")), "selection": selection})
 
 # ── Mulligan ──────────────────────────────────────────────────────────────
 
 func _begin_mulligan() -> void:
-	var first_player_id := game_state.active_player_id
-	await board.show_coinflip_result(first_player_id == _my_id)
+	while board.opening_picker_visible():
+		await get_tree().process_frame
+		if not is_instance_valid(board) or _game_over_shown:
+			return
 	var hand_before: Array[CardData] = game_state.player.hand.duplicate()
 	await board.show_mulligan_screen(hand_before,
 		func(swaps: Array[CardData]) -> Array[CardData]:
@@ -468,6 +480,8 @@ func _refresh_status() -> void:
 		_set_status("Connection lost - reconnecting...")
 	elif _opp_disconnect_s >= 0:
 		_set_status("Opponent disconnected - they forfeit in %ds" % _opp_disconnect_s)
+	elif game_state != null and game_state.opening_choice_pending():
+		_set_status("Choose your opening bonus..." if str(game_state.opening_bonus["player_id"]) == _my_id else "Waiting for opponent's opening bonus...")
 	elif game_state != null and not game_state.mulligan_pending.is_empty() and not game_state.mulligan_pending.has(_my_id):
 		_set_status("Waiting for opponent's mulligan...")
 	elif _clock.has("turn_remaining_s") and int(_clock["turn_remaining_s"]) <= CLOCK_WARN_SEC \

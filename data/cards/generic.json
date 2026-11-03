@@ -1,5 +1,28 @@
 [
 	{
+		"id": "gen_token_coin",
+		"card_name": "Coin",
+		"cost": 0,
+		"color": "GENERIC",
+		"card_type": "STRATAGEM",
+		"rarity": "COMMON",
+		"description": "Gain 1 mana for this turn only.",
+		"effect": "opening_coin",
+		"is_token": true
+	},
+	{
+		"id": "gen_token_initiative",
+		"card_name": "Starting Recruit",
+		"cost": 1,
+		"color": "GENERIC",
+		"card_type": "CREATURE",
+		"rarity": "COMMON",
+		"description": "",
+		"attack": 1,
+		"health": 1,
+		"is_token": true
+	},
+	{
 		"id": "gen_001",
 		"card_name": "Mortified Scout",
 		"cost": 1,

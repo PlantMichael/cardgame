@@ -69,17 +69,36 @@ func start_local_game(board_node: Board, player_deck: Array[CardData], opponent_
 	if ranked:
 		_ranked_ai_match["first_player"] = "player" if first_player_id == LOCAL_PLAYER_ID else "opponent"
 	game_state.start_game(first_player_id)
+	if ranked:
+		game_state.begin_mulligan(true)
 	if grant_catchup_mana:
 		game_state.player.max_mana += 1
 		if game_state.is_local_player_turn():
 			game_state.player.current_mana += 1
 	board.setup(game_state)
+	var starting_state := game_state
+	var starting_board := board
 	await board.show_coinflip_result(first_player_id == LOCAL_PLAYER_ID)
-	game_state.mulligan_swap(OPPONENT_PLAYER_ID, AIHeuristics.pick_mulligan_swaps(game_state.opponent.hand))
+	if not _is_current_match(starting_state, starting_board):
+		return
+	if ranked:
+		await _drive_choices()
+		if not _is_current_match(starting_state, starting_board):
+			return
+		var ai_swaps := AIHeuristics.pick_mulligan_swaps(game_state.opponent.hand)
+		game_state.execute({"type": GameState.CMD_MULLIGAN, "actor": OPPONENT_PLAYER_ID,
+			"card_uids": ai_swaps.map(func(card): return card.uid)})
+	else:
+		game_state.mulligan_swap(OPPONENT_PLAYER_ID, AIHeuristics.pick_mulligan_swaps(game_state.opponent.hand))
 	# The screen applies the swap itself (through this callback) so it can deal
 	# each replacement into the slot it replaced before closing.
 	await board.show_mulligan_screen(game_state.player.hand.duplicate(),
 		func(swaps: Array[CardData]) -> Array[CardData]:
+			if ranked:
+				var previous := game_state.player.hand.map(func(card): return card.uid)
+				game_state.execute({"type": GameState.CMD_MULLIGAN, "actor": LOCAL_PLAYER_ID,
+					"card_uids": swaps.map(func(card): return card.uid)})
+				return game_state.player.hand.filter(func(card): return card.uid not in previous and card.id != GameState.OPENING_COIN_ID)
 			return game_state.mulligan_swap(LOCAL_PLAYER_ID, swaps))
 	board.refresh()
 	if not game_state.is_local_player_turn():
@@ -161,10 +180,13 @@ func _drive_choices(search_engine: MCTSEngine = null) -> void:
 			await get_tree().create_timer(ai_controller.THINK_DELAY * 0.5).timeout
 			if not _is_current_match(match_state, match_board):
 				return
-			var action := await engine.choose_action(match_state)
-			if not _is_current_match(match_state, match_board):
-				return
-			selection = str(action.get("selection", choice["default"]))
+			if str(choice["effect"]) == GameState.CHOICE_OPENING_BONUS:
+				selection = AIHeuristics.pick_choice_answer(match_state, choice)
+			else:
+				var action := await engine.choose_action(match_state)
+				if not _is_current_match(match_state, match_board):
+					return
+				selection = str(action.get("selection", choice["default"]))
 		if not _is_current_match(match_state, match_board):
 			return
 		# Choice IDs restart in each match; both match identity and owner matter.

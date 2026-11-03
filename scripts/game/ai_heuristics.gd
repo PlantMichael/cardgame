@@ -294,6 +294,13 @@ static func _fallback_choice_answer(gs: GameState, choice: Dictionary) -> String
 ## priority list. This cheap policy completes rollouts; MCTS still branches
 ## over all choices and can see payoffs beyond the immediate state.
 static func pick_choice_answer(gs: GameState, choice: Dictionary) -> String:
+	if str(choice["effect"]) == GameState.CHOICE_OPENING_BONUS:
+		var ones := 0
+		var twos := 0
+		for card in gs.find_player(str(choice["player_id"])).hand:
+			if card.effective_cost() == 1: ones += 1
+			if card.effective_cost() == 2: twos += 1
+		return "coin" if twos >= 2 else ("token" if ones >= 2 else "five_cards")
 	var preferred := _fallback_choice_answer(gs, choice)
 	var selections: Array = [preferred]
 	for selection in choice["options"]:

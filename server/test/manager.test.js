@@ -46,6 +46,9 @@ test.after(async () => { if (host) await host.stop(); });
 function setup(overrides = {}) {
   let clock = 1_000_000;
   const store = new MemoryStore({
+    // Existing general manager cases use the supported named-bot baseline.
+    // The human-only experiment and its lifecycle are exercised separately below.
+    bots: overrides.bots ?? { 1: { id: 'io', name: 'Io', version: '1.0', level: 10, style: 'tempo' } },
     decks: {
       '1:green': { faction_idx: 0, card_ids: legalDeck('GREEN') },
       '2:crimson': { faction_idx: 1, card_ids: legalDeck('CRIMSON') },
@@ -328,4 +331,53 @@ test('a log that does not replay to its last hash voids the match with no rank c
   assert.equal(ctx.store.matches.get(m.id).status, 'voided');
   assert.equal(ctx.settled.length, 0);
   assert.ok(m.ca.last('match_voided'));
+});
+
+test('human opening choice owns its clock, reconnect, log and replay before mulligan', { skip }, async () => {
+  const ctx = setup({ bots: {}, config: { graceSeconds: 60 } });
+  const m = await startedMatch(ctx);
+  const sess = ctx.manager.sessions.get(m.id);
+  const [pid, conn] = m.first === 'a' ? [2, m.cb] : [1, m.ca];
+  const choice = sess.views[m.first === 'a' ? 'b' : 'a'].pending_choice;
+  assert.equal(choice.effect, 'opening_bonus');
+  assert.equal(sess.mulliganDeadline, null);
+  assert.equal(ctx.store.matches.get(m.id).mode, 'authoritative');
+  await cmd(ctx, pid, conn, m.id, 1, { type: 'mulligan', card_uids: [] });
+  assert.equal(ctx.store.actions.get(m.id).length, 0, 'cannot bypass choice');
+  const rejoin = new FakeConn('opening-rejoin');
+  await ctx.manager.handleMessage(pid, { type: 'match_join', match_id: m.id }, rejoin);
+  assert.deepEqual(rejoin.last('match_view').view.pending_choice, choice);
+  ctx.advance(9);
+  await cmd(ctx, pid, rejoin, m.id, 2, { type: 'answer_choice', choice_id: choice.id, selection: 'coin' });
+  assert.equal(sess.mulliganDeadline - ctx.now(), 10000, 'full new mulligan period');
+  const hash = sess.lastHash;
+  await host.request('drop', { match_id: m.id });
+  await ctx.manager.resume();
+  assert.equal(sess.lastHash, hash, 'persisted mode and action reconstruct same bonus');
+  assert.equal(sess.status, 'active');
+  await cmd(ctx, pid, rejoin, m.id, 3, { type: 'mulligan', card_uids: [] });
+  const state = rejoin.last('match_view').view[pid === 1 ? 'host_state' : 'guest_state'];
+  assert.equal(state.hand.filter(c => c.id === 'gen_token_coin').length, 1);
+  assert.equal(state.hand.length, 5);
+  await cmd(ctx, pid, rejoin, m.id, 4, { type: 'answer_choice', choice_id: choice.id, selection: 'token' });
+  assert.equal(ctx.store.actions.get(m.id).length, 2, 'late answer does not grant another bonus');
+});
+
+test('human choice timeout chooses five then allows a full mulligan window', { skip }, async () => {
+  const ctx = setup({ bots: {}, config: { graceSeconds: 60 } });
+  const m = await startedMatch(ctx);
+  ctx.advance(11);
+  await ctx.manager.tick();
+  const sess = ctx.manager.sessions.get(m.id);
+  assert.equal(sess.views.a.opening_bonus.selection, 'five_cards');
+  assert.equal(Object.keys(sess.views.a.mulligan_pending).length, 2);
+  assert.equal(sess.mulliganDeadline - ctx.now(), 10000);
+  assert.equal(sess.views.a.active_player_id, m.first === 'a' ? 'host' : 'guest');
+  const hash = sess.lastHash;
+  await host.request('drop', { match_id: m.id });
+  await ctx.manager.resume();
+  assert.equal(sess.lastHash, hash, 'timeout replay selects the same opening');
+  ctx.advance(11);
+  await ctx.manager.tick();
+  assert.deepEqual(sess.views.a.mulligan_pending, {});
 });

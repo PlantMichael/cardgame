@@ -10,6 +10,8 @@ results).
 
 Spec and contracts: [`specs/003-authoritative-ranked-server/`](../specs/003-authoritative-ranked-server/).
 
+Rules 7 enables the second-player opening choice for human-only authoritative ranked matches and human local ranked-AI fallback. Any named-bot participant keeps baseline openings. The relay derives eligibility from trusted account metadata; create, restart recovery and the administrative replay tool reproduce it from the persisted match mode/bot snapshots. A client cannot enable or disable it. Opening choice uses the existing `answer_choice` command and normal choice clock; its completion starts a fresh full mulligan clock for both players. First player waits while second chooses. Reconnect views show the pending choice or the resulting mulligan, never a second bonus. The deterministic timeout selects five cards. This changes no database schema and deletes no match history.
+
 ## The three processes
 
 | Process | What it is | What it owns |

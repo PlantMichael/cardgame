@@ -22,6 +22,7 @@ var _flash_start: int = 0
 @onready var combat_log_scroll: ScrollContainer = $CombatLogPanel/CombatLogScroll
 @onready var combat_log_vbox: VBoxContainer = $CombatLogPanel/CombatLogScroll/CombatLogVBox
 var decline_button: Button
+var _opening_picker: CanvasLayer
 
 const CardScene = preload("res://scenes/cards/Card.tscn")
 const CardBackScene = preload("res://scenes/cards/CardBack.tscn")
@@ -524,6 +525,8 @@ const CHOICE_PROMPT_TEXT := {
 ## options can be clicked; the UI never decides what is allowed.
 func prompt_choice(choice: Dictionary) -> String:
 	var effect := str(choice["effect"])
+	if effect == GameState.CHOICE_OPENING_BONUS:
+		return await _prompt_opening_bonus(choice)
 	var options: Array = choice["options"]
 	if str(choice["kind"]) == GameState.CHOICE_KIND_PICK_CARD_ID:
 		var cards: Array[CardData] = []
@@ -562,6 +565,65 @@ func prompt_choice(choice: Dictionary) -> String:
 	start_choice_targeting(options, str(CHOICE_DECLINE_TEXT.get(effect, "Skip")), effect in CHOICE_HELPFUL_EFFECTS)
 	var selection: String = await choice_selected
 	return selection
+
+func opening_picker_visible() -> bool:
+	return is_instance_valid(_opening_picker)
+
+## A mandatory pre-mulligan choice, using the same modal owner as other picks.
+## A new server view may time it out; then dismiss without sending a stale answer.
+func _prompt_opening_bonus(choice: Dictionary) -> String:
+	var expected_state := game_state
+	var overlay := _open_modal_overlay()
+	_opening_picker = overlay
+	var shade := ColorRect.new()
+	shade.color = Color(0, 0, 0, 0.88)
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(shade)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
+	var panel := VBoxContainer.new()
+	panel.custom_minimum_size.x = 760
+	panel.add_theme_constant_override("separation", 22)
+	center.add_child(panel)
+	var title := Label.new()
+	title.text = "You're going second"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 34)
+	panel.add_child(title)
+	var subtitle := Label.new()
+	subtitle.text = "Choose your opening bonus, then mulligan."
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.add_theme_font_size_override("font_size", 24)
+	panel.add_child(subtitle)
+	var labels := {
+		"five_cards": "Five cards\nStart with 5 cards total.",
+		"coin": "Coin + four cards\nA zero-cost Coin gives 1 mana for the turn you play it.",
+		"token": "1/1 Recruit + four cards\nStarts on your board. Can attack on your second turn.",
+	}
+	var answer := {"selection": ""}
+	var first_button: Button = null
+	for option in choice["options"]:
+		var button := Button.new()
+		button.text = str(labels[option])
+		button.custom_minimum_size.y = 110
+		button.add_theme_font_size_override("font_size", 24)
+		button.pressed.connect(func(): answer["selection"] = str(option))
+		panel.add_child(button)
+		if first_button == null:
+			first_button = button
+	first_button.grab_focus()
+	while str(answer["selection"]).is_empty():
+		await get_tree().process_frame
+		if game_state != expected_state and not is_online:
+			break
+		if game_state.current_phase == GameState.Phase.GAME_OVER or not game_state.opening_choice_pending() or str(game_state.pending_choice.get("id", "")) != str(choice["id"]):
+			break
+	var selected := str(answer["selection"])
+	_close_modal_overlay(overlay)
+	await get_tree().process_frame
+	_opening_picker = null
+	return selected
 
 func start_buff_friendly_targeting(exclude: Minion = null, tribe_filter: String = "") -> void:
 	_buff_friendly_mode = true
@@ -1952,7 +2014,7 @@ func _settle_shifted_cards(zone: Container, old_positions: Dictionary) -> void:
 		tween.tween_property(card, "position", BOARD_CARD_REST_POSITION, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 func _refresh_boards() -> void:
-	var is_my_turn = game_state.is_local_player_turn()
+	var is_my_turn = game_state.is_local_player_turn() and game_state.mulligan_pending.is_empty() and not game_state.opening_choice_pending()
 
 	_reconcile_board_zone(player_board_zone, game_state.player.board, _BOARD_WRAPPER_SIZE, Card.SCALE_BOARD,
 		func(card: Card, minion: Minion) -> void:
@@ -2102,11 +2164,15 @@ func _refresh_heroes() -> void:
 	_note_hero_health(opponent_hero, "opponent", game_state.opponent.hero_health)
 
 func _refresh_ui() -> void:
-	var is_my_turn = game_state.is_local_player_turn()
+	var is_my_turn = game_state.is_local_player_turn() and game_state.mulligan_pending.is_empty() and not game_state.opening_choice_pending()
 	end_turn_button.disabled = not is_my_turn
 	_update_end_turn_button(is_my_turn)
 	turn_label.text = "Turn %d" % game_state.turn_number
 	var available_mana = game_state.player.max_mana - game_state.player.current_mana
+	# A held Coin may be used even at the permanent ten-crystal limit.
+	# Keep that temporary overflow readable instead of silently hiding it.
+	mana_label.visible = game_state.player.max_mana > PlayerState.MAX_MANA
+	mana_label.text = "%d mana" % available_mana
 	for i in _mana_dots.size():
 		var dot = _mana_dots[i]
 		if i < game_state.player.max_mana:

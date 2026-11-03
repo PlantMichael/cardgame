@@ -60,6 +60,8 @@ var cost_modifier: int = 0
 var rummage_count: int = 0
 
 func effective_cost() -> int:
+	if id == "gen_token_coin":
+		return 0
 	return clamp(cost + cost_modifier, 1, 10)
 
 ## Locations share the board row with creatures: played from hand into a board

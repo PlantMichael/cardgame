@@ -15,4 +15,5 @@ extends RefCounted
 ##    returned-card draw identity, and removal of Crypt Chapel.
 ## 5: Plated Soldier becomes 2/3; Frontier Medic becomes 1/3.
 ## 6: Dump Scummer becomes 2/4; Debris Hauler loses unintended Cloaked.
-const RULES_VERSION := 6
+## 7: Human ranked second-player opening choice; named bot games keep baseline.
+const RULES_VERSION := 7

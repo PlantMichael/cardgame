@@ -1,5 +1,7 @@
 # AI
 
+Normal human ranked-AI fallback participates in the opening-bonus experiment. If AI goes second, it chooses Coin when its opening hand has at least two two-cost cards, otherwise Recruit when it has at least two one-cost cards, otherwise five cards. The ordinary search can play the Coin and spend its temporary mana; it may save the Coin when there is no immediate payoff. Named Moon bot games retain baseline openings.
+
 ## Versioned Moon bots
 
 `data/bot_profiles.json` defines Io 1.0 (level 10 tempo), Callisto 1.0 (level 8 combo), Europa 1.0 (level 8 aggro), and Ganymede 1.1 (normal level 4). `MoonBots` drafts published decks through DeckManager and plays UI-free games with GameState/HeadlessTurn. MCTS accepts an optional style: named search bots score both the immediate position and neutral-greedy future; empty style preserves the ordinary opponent's existing search/evaluation. Current Ganymede uses that normal search and the ranked AI's archetype deck builder; historical Ganymede 1.0 used level 1 random legal actions and deliberate passes. Named search bots take immediate wins before applying style preferences. The profiles can run as isolated simulation participants or dedicated ranked accounts.

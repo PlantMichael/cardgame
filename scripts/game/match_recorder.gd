@@ -43,6 +43,15 @@ func begin(gs: GameState) -> void:
 ## Called after every accepted command / timeout with the events it produced.
 func observe(gs: GameState, events: Array) -> void:
 	turns = gs.turn_number
+	# The fifth opening card is drawn after begin(), before either mulligan.
+	# Register it before processing its draw, so it remains a deck/kept card.
+	for event in events:
+		if str(event.get("type", "")) == "opening_bonus" and str(event.get("selection", "")) == "five_cards":
+			var owner := gs.find_player(str(event["owner"]))
+			var opening_seat: Dictionary = _seat[owner.player_id]
+			for card in owner.hand:
+				opening_seat["uids"][card.uid] = card.id
+				opening_seat["opening"][card.uid] = true
 	for e in events:
 		var owner_id := str(e.get("owner", ""))
 		if not _seat.has(owner_id):

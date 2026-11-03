@@ -67,6 +67,7 @@ async function replay(pool, matchId) {
     const actions = acts.rows.map((r) => ({ seat: r.seat, kind: r.kind === 'timeout_default' ? 'timeout_default' : 'command', cmd: r.command }));
     const rep = await host.request('replay', {
       match_id: `replay_${matchId}`, seed: Number(row.seed), first_seat: row.first_seat, rules_version: row.rules_version,
+      opening_choice: row.mode === 'authoritative' && !row.bot_a && !row.bot_b,
       deck_a: row.deck_a, deck_b: row.deck_b, actions,
     });
     const expected = acts.rows.length ? acts.rows[acts.rows.length - 1].state_hash : null;
