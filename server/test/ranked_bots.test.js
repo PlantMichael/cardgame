@@ -353,7 +353,7 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   }, 'autonomous bot-v-bot completion', 210000);
   assert.ok(finished[0].facts.turns > 1);
   const initialActions = (await pool.query('SELECT kind,command FROM ranked_match_actions WHERE match_id=$1 ORDER BY seq LIMIT 3', [finished[0].match_id])).rows;
-  assert.equal(initialActions[0].kind, 'command', 'bot answers its opening rather than timing out');
+  assert.equal(initialActions[0].kind, 'answer', 'bot answers its opening rather than timing out');
   assert.equal(initialActions[0].command.type, 'answer_choice');
   assert.ok(initialActions.slice(1).every(a => a.command.type === 'mulligan'), 'both mulligans follow the bot opening answer');
   const active = (await pool.query("SELECT * FROM ranked_matches WHERE status='active' AND mode='ranked_bots' LIMIT 1")).rows[0];
