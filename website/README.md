@@ -4,6 +4,8 @@
 
 The public home, rulebook and glossary wrap the existing Godot Web export on the same Vercel project. Node 20+ is sufficient; no package installation or framework is needed.
 
+Statistics → Cards shows cards with at least 20 recorded deck appearances in the selected cohort. This minimum uses games containing the card in the starting deck, regardless of copies or repeated plays; lower-sample data remains recorded and included in aggregate denominators.
+
 ```sh
 node website/build.mjs
 node website/preview.mjs
