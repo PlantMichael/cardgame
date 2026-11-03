@@ -207,6 +207,7 @@ signal on_play_pilot_target_selected(target: Minion)
 func _ready() -> void:
 	background.texture = BATTLEFIELD_TEXTURES.pick_random()
 	mana_label.hide()
+	mana_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	var dot_container := HBoxContainer.new()
 	dot_container.add_theme_constant_override("separation", 2)
 	dot_container.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -1420,7 +1421,10 @@ func _on_card_drag_started(card: Card) -> void:
 
 func _set_flash_alpha(alpha: float) -> void:
 	for i in _flash_cost:
-		_mana_dots[_flash_start + i].modulate.a = alpha
+		var index := _flash_start + i
+		# Temporary overflow is shown by the mana counter, not another gem.
+		if index >= 0 and index < _mana_dots.size():
+			_mana_dots[index].modulate.a = alpha
 
 func _stop_mana_flash() -> void:
 	if _drag_tween and _drag_tween.is_valid():

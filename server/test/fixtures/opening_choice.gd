@@ -134,6 +134,45 @@ func local_case(seed_value: int) -> String:
 	await frames()
 	return second
 
+func coin_drag_case() -> void:
+	var gs := GameState.new("host", "guest", deck(), deck(), 77)
+	gs.start_game("guest")
+	gs.begin_mulligan(true)
+	gs.execute({"type": "answer_choice", "actor": "host", "choice_id": "choice-1", "selection": "coin"})
+	for who in ["host", "guest"]: gs.execute({"type": "mulligan", "actor": who, "card_uids": []})
+	gs.execute({"type": "end_turn", "actor": "guest"})
+	gs.player.max_mana = 10
+	var board := BoardScene.instantiate() as Board
+	add_child(board)
+	board.setup(gs)
+	await frames()
+	var plays := {"count": 0}
+	board.action_play_stratagem.connect(func(card: CardData, target: Minion, player_id: String):
+		check(target == null and player_id.is_empty(), "human Coin needs no target")
+		var result := gs.execute({"type": "play_stratagem", "actor": "host", "card_uid": card.uid})
+		check(result["ok"], "human Coin drop reaches real rules")
+		plays["count"] += 1)
+	var coin_node: Card = null
+	for wrapper in board.player_hand_zone.get_children():
+		var candidate := board._get_card_child(wrapper)
+		if candidate.data.id == GameState.OPENING_COIN_ID: coin_node = candidate
+	var motion := InputEventMouseMotion.new()
+	motion.position = Vector2.ZERO # empty space, outside either hero/board
+	Input.parse_input_event(motion)
+	coin_node.start_drag()
+	board._on_card_dropped(coin_node)
+	await frames()
+	check(plays["count"] == 1 and gs.player.max_mana - gs.player.current_mana == 11, "empty-space drop consumes Coin and grants eleven usable mana at cap")
+	board.refresh()
+	await frames()
+	var paid := board._get_card_child(board.player_hand_zone.get_child(0))
+	board._on_card_drag_started(paid)
+	board._set_flash_alpha(0.5)
+	check(board.mana_label.visible and board.mana_label.text == "11 mana", "overflow mana stays readable while dragging a paid card")
+	board._stop_mana_flash()
+	board.queue_free()
+	await frames()
+
 func _run() -> void:
 	await remote_case("guest", false)
 	await remote_case("guest", true)
@@ -143,6 +182,7 @@ func _run() -> void:
 		local_seats[await local_case(seed_value)] = true
 		if local_seats.size() == 2: break
 	check(local_seats.size() == 2, "human and AI can each receive the local ranked choice")
+	await coin_drag_case()
 	# Ordinary AI can choose and actually use the zero-cost Coin through search.
 	var rush_deck: Array[CardData] = []
 	for _i in 20: rush_deck.append(CardDatabase.get_card("cr_016"))
