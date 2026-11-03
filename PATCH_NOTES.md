@@ -51,6 +51,11 @@ Stats below are **attack/health**. Stratagems have no attack or health.
 - Pa'tael's Headshot lets you choose an enemy creature to Challenge after attacking the player.
 - Morphling Flyer heals the Mech after its Pilot bonuses are applied.
 
+## Balance changes
+
+- **Plated Soldier (Generic):** stats changed from **2/4 to 2/3**.
+- **Frontier Medic (Generic):** stats changed from **2/3 to 1/3**.
+
 ## Removed card
 
 - **Crypt Chapel** has been removed from the card pool.

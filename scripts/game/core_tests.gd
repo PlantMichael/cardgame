@@ -681,7 +681,7 @@ static func _test_new_cards_catalog() -> void:
 		"gen_012": ["Cargo Loader", CardData.CardColor.GENERIC, 4, 4, 4, "", CardData.CardRarity.COMMON],
 		"gen_013": ["Checkpoint Sentry", CardData.CardColor.GENERIC, 2, 1, 3, "", CardData.CardRarity.COMMON],
 		"gen_014": ["Archive Courier", CardData.CardColor.GENERIC, 3, 2, 2, "", CardData.CardRarity.COMMON],
-		"gen_015": ["Frontier Medic", CardData.CardColor.GENERIC, 3, 2, 3, "", CardData.CardRarity.COMMON],
+		"gen_015": ["Frontier Medic", CardData.CardColor.GENERIC, 3, 1, 3, "", CardData.CardRarity.COMMON],
 		"gen_016": ["Supply Quartermaster", CardData.CardColor.GENERIC, 4, 3, 3, "", CardData.CardRarity.COMMON],
 		"gen_017": ["Heavy Bounty Hunter", CardData.CardColor.GENERIC, 5, 3, 3, "", CardData.CardRarity.COMMON],
 		"gen_018": ["Convoy Defender", CardData.CardColor.GENERIC, 6, 4, 7, "", CardData.CardRarity.COMMON],

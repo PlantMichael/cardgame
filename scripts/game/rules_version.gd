@@ -13,4 +13,5 @@ extends RefCounted
 ##    and Gate Yeti becomes 3/3.
 ## 4: Headshot card batch, damage-triggered Rummage, permanent card stats,
 ##    returned-card draw identity, and removal of Crypt Chapel.
-const RULES_VERSION := 4
+## 5: Plated Soldier becomes 2/3; Frontier Medic becomes 1/3.
+const RULES_VERSION := 5

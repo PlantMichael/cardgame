@@ -2151,7 +2151,7 @@
       "rarity": "COMMON",
       "manaCost": 3,
       "attack": 2,
-      "health": 4,
+      "health": 3,
       "tribe": null,
       "description": "Shielded 1",
       "abilities": [
@@ -2266,7 +2266,7 @@
       "type": "CREATURE",
       "rarity": "COMMON",
       "manaCost": 3,
-      "attack": 2,
+      "attack": 1,
       "health": 3,
       "tribe": null,
       "description": "On play: Restore 1 health to a creature.",
