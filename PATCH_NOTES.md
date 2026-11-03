@@ -77,3 +77,4 @@ Whiteout, Snowdrift Matriarch, and Emergency Extraction remain excluded from the
 
 - The ten new cards currently reuse existing faction artwork as placeholders.
 - Rummage pickers show earned stats, discounts, and scaled card text consistently in local and network play.
+- Fixed Abominus leaving a frozen card on screen and blocking input when it dies during its on-play challenges.

@@ -1556,6 +1556,9 @@ func _slam_ghost_onto_card(ghost: Card, real_card: Card, wrapper: Control, targe
 ## this right after board.refresh() so a same-play prompt/picker (e.g.
 ## StinkPile's on-play Rummage) can't pop up mid-animation.
 func await_slam_landed(zone: Container) -> void:
+	# An on-play challenge can kill its own source before refresh creates a
+	# board card. No landing will claim that ghost; release it and input now.
+	release_unclaimed_ghost(zone)
 	while _slam_animating_zones.get(zone, false):
 		await get_tree().process_frame
 
@@ -1572,20 +1575,22 @@ func _await_zone_sorted(zone: Container, max_sec: float = 0.5) -> void:
 	while not state["done"] and Time.get_ticks_msec() < deadline:
 		await get_tree().process_frame
 
-## The player's flying card was never claimed by a board card (the server
-## refused the play, answered with no new creature, or the send never happened):
-## remove it and give the player their turn back. A card that did land is not
-## touched. Safe to call at any time.
-func release_unclaimed_ghost() -> void:
-	var ghost: Card = _pending_slam_ghost_by_zone.get(player_board_zone)
+## A flying card was never claimed by a board card (the play was refused or
+## its source died during its on-play effect): remove it and release any
+## local input lock. Call after the resolved state has been refreshed; a card
+## already claimed by a landing is not touched. Defaults to the player's zone.
+func release_unclaimed_ghost(zone: Container = null) -> void:
+	if zone == null:
+		zone = player_board_zone
+	var ghost: Card = _pending_slam_ghost_by_zone.get(zone)
 	if ghost == null:
 		return
-	_pending_slam_ghost_by_zone.erase(player_board_zone)
+	_pending_slam_ghost_by_zone.erase(zone)
 	if is_instance_valid(ghost):
 		ghost.queue_free()
 	if ghost == _active_player_ghost:
 		_active_player_ghost = null
-	_card_animation_playing = false
+		_card_animation_playing = false
 	if game_state != null:
 		refresh()
 
