@@ -222,7 +222,7 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   assert.equal((await probe.take('ranked_refused')).reason, 'in_ai_match');
   const starters = require('../../data/starters.json');
   const probeSummary = { player_deck: starters[0].card_ids, opponent_deck: starters[1].card_ids,
-    ai_level: 10, ai_version: 2, rules_version: liveRulesVersion, turns: 1, first_player: 'player' };
+    ai_level: 10, ai_version: 3, rules_version: liveRulesVersion, turns: 1, first_player: 'player' };
   for (const invalid of [{ ai_match: { ...probeSummary, ai_level: 3 } },
     { ai_match: { ...probeSummary, player_deck: ['g_001'] } },
     { token: probeAccounts.find(a => a.id === 'callisto').token, ai_match: probeSummary }]) {
@@ -257,11 +257,12 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   human.send({ type: 'match_join', match_id: found.match_id });
   const view = await human.take('match_view', found.match_id);
   const first = (await pool.query('SELECT * FROM ranked_matches WHERE match_id=$1', [found.match_id])).rows[0];
+  assert.equal(view.view.opening_bonus.player_id, first.first_seat === 'a' ? 'guest' : 'host', 'human/bot ranked match has the same second-player opening');
   const opponentId = first[view.seat === 'a' ? 'seat_b_player_id' : 'seat_a_player_id'];
   const aiOutcome = (await pool.query(`SELECT match_id,won,outcome,ai_match FROM ranked_settlements WHERE player_id=$1 AND ai_match IS NOT NULL ORDER BY settled_at LIMIT 1`, [opponentId])).rows[0];
   const aiOnly = await (await fetch(httpUrl + '/data/stats/deck-matchups.json?mode=all&days=29')).json();
   assert.ok(aiOnly.games > 0 && aiOnly.decks.every(d => d.testers === 0), 'bot AI games feed pooled results without inventing human testers');
-  assert.equal((await (await fetch(httpUrl + `/data/stats/deck-matchups.json?mode=ranked_ai&aiLevel=3&rulesVersion=${liveRulesVersion}&aiVersion=2`)).json()).games, 0, 'the human-only AI filter excludes bot-controlled games');
+  assert.equal((await (await fetch(httpUrl + `/data/stats/deck-matchups.json?mode=ranked_ai&aiLevel=3&rulesVersion=${liveRulesVersion}&aiVersion=${aiOutcome.ai_match.ai_version}`)).json()).games, 0, 'the human-only AI filter excludes bot-controlled games');
   const retriedAI = await Client.open(wsUrl); clients.push(retriedAI);
   retriedAI.token = (await pool.query('SELECT token FROM sessions WHERE player_id=$1 ORDER BY created_at DESC LIMIT 1', [opponentId])).rows[0].token;
   retriedAI.send({ type: 'ranked_bot_ai_start', match_id: aiOutcome.match_id });
@@ -351,6 +352,10 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
     return rows.length ? rows : null;
   }, 'autonomous bot-v-bot completion', 210000);
   assert.ok(finished[0].facts.turns > 1);
+  const initialActions = (await pool.query('SELECT kind,command FROM ranked_match_actions WHERE match_id=$1 ORDER BY seq LIMIT 3', [finished[0].match_id])).rows;
+  assert.equal(initialActions[0].kind, 'answer', 'bot answers its opening rather than timing out');
+  assert.equal(initialActions[0].command.type, 'answer_choice');
+  assert.ok(initialActions.slice(1).every(a => a.command.type === 'mulligan'), 'both mulligans follow the bot opening answer');
   const active = (await pool.query("SELECT * FROM ranked_matches WHERE status='active' AND mode='ranked_bots' LIMIT 1")).rows[0];
   if (active) {
     const playerId = active.bot_a ? active.seat_a_player_id : active.seat_b_player_id;

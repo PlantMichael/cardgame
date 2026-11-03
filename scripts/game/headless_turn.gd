@@ -317,6 +317,12 @@ static func _pick_stratagem_target(card: CardData, gs: GameState, acting_id: Str
 	var friendly_targetable: Array[Minion] = acting.board.duplicate()
 
 	match card.effect:
+		"opening_coin":
+			var after := gs.duplicate_for_sim()
+			var played := after.execute({"type": GameState.CMD_PLAY_STRATAGEM, "actor": acting_id, "card_uid": card.uid})
+			if played["ok"]:
+				var followup := greedy_pick_action(after, acting_id)
+				result["ready"] = followup.get("type") in [GameState.CMD_PLAY_CREATURE, GameState.CMD_PLAY_STRATAGEM]
 		"deal_damage":
 			var no_guardians = enemy.get_guardian_minions().is_empty()
 			if no_guardians and card.effect_value >= enemy.hero_health:

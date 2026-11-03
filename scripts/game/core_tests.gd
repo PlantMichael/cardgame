@@ -2414,6 +2414,80 @@ static func _test_headshot_support_cards() -> void:
 	var face := guardian.execute({"type": "attack", "actor": "b", "attacker_instance_id": attacker.instance_id, "target_player_id": "a"})
 	_check("Staller's 1/11 Guardian body protects its hero", guard.current_attack == 1 and guard.max_health == 11 and not face["ok"])
 
+static func _test_ranked_opening() -> void:
+	print("[ranked opening choice]")
+	for first in ["host", "guest"]:
+		var second := "guest" if first == "host" else "host"
+		for selection in ["five_cards", "coin", "token"]:
+			var gs := GameState.new("host", "guest", _deck_of("gen_001", 20), _deck_of("gen_001", 20), 42)
+			gs.set_events_enabled(true)
+			gs.start_game(first)
+			gs.begin_mulligan(true)
+			var recorder := MatchRecorder.new()
+			recorder.begin(gs)
+			recorder.observe(gs, gs.drain_events())
+			var before := gs.state_hash()
+			for cmd in [{"type": "mulligan", "actor": first, "card_uids": []}, {"type": "end_turn", "actor": first},
+				{"type": "answer_choice", "actor": first, "choice_id": "choice-1", "selection": selection},
+				{"type": "answer_choice", "actor": second, "choice_id": "choice-1", "selection": "invalid"}]:
+				_check("opening rejects bypass without mutation", not gs.execute(cmd)["ok"] and gs.state_hash() == before)
+			var choice_cmd := {"type": "answer_choice", "actor": second, "choice_id": "choice-1", "selection": selection}
+			var chosen := gs.execute(choice_cmd)
+			recorder.observe(gs, chosen["events"])
+			if selection == "five_cards":
+				_check("fifth opening draw is not generated", not recorder.facts(gs)["seats"]["a" if second == "host" else "b"]["created"].has("gen_001"))
+			_check("second player selects once", chosen["ok"] and not gs.execute(choice_cmd)["ok"])
+			var owner := gs.find_player(second)
+			_eq("opening deck hand size", owner.hand.size(), 5 if selection == "five_cards" else 4)
+			_eq("first player retains three", gs.find_player(first).hand.size(), 3)
+			var clone := gs.duplicate_for_sim()
+			_eq("opening clone retains full state", clone.state_hash(), gs.state_hash())
+			var view := GameState.from_net_dict(gs.to_net_dict(second), second)
+			_eq("bonus survives filtered view", view.opening_bonus, gs.opening_bonus)
+			_eq("opponent hand remains hidden", view.opponent.hand.size(), 0)
+			for pid in [first, second]:
+				var swapped: Array = []
+				if pid == second and first == "guest":
+					swapped = [owner.hand.back().uid]
+				var result := gs.execute({"type": "mulligan", "actor": pid, "card_uids": swapped})
+				recorder.observe(gs, result["events"])
+				_check("mulligan accepted", result["ok"])
+			if selection == "five_cards":
+				var facts: Dictionary = recorder.facts(gs)["seats"]["a" if second == "host" else "b"]
+				_eq("fifth card counted as kept unless swapped", facts["deck_cards"][0]["kept_copies"], 4 if first == "guest" else 5)
+			if selection == "coin":
+				_eq("coin added after mulligan", owner.hand.size(), 5)
+				_eq("coin is recorded as generated", recorder.facts(gs)["seats"]["a" if second == "host" else "b"]["created"].get(GameState.OPENING_COIN_ID, 0), 1)
+				var coin: CardData = owner.hand.back()
+				_eq("coin really costs zero", coin.effective_cost(), 0)
+				_check("coin is excluded from drafts", coin.is_token)
+			gs.execute({"type": "end_turn", "actor": first})
+			_eq("second starts with normal one mana", owner.max_mana, 1)
+			if selection == "coin":
+				owner.current_mana = 1
+				var played := gs.execute({"type": "play_stratagem", "actor": second, "card_uid": owner.hand.back().uid})
+				_check("coin works at zero remaining mana", played["ok"] and owner.max_mana - owner.current_mana == 1)
+				var mana_clone := gs.duplicate_for_sim()
+				mana_clone.execute({"type": "end_turn", "actor": second})
+				_check("clone expires its own coin only", mana_clone.find_player(second).max_mana == 1 and owner.max_mana == 2)
+			if selection == "token":
+				var token := owner.board[0]
+				_check("starting token is vanilla 1/1 and cannot attack own turn one", token.current_attack == 1 and token.current_health == 1 and token.abilities.is_empty() and not token.can_attack())
+			gs.execute({"type": "end_turn", "actor": second})
+			_eq("no permanent coin ramp", owner.max_mana, 1)
+			gs.execute({"type": "end_turn", "actor": first})
+			_eq("second turn normal two mana", owner.max_mana, 2)
+			if selection == "token":
+				var hit := gs.execute({"type": "attack", "actor": second, "attacker_instance_id": owner.board[0].instance_id, "target_player_id": first})
+				_check("token attacks on own turn two", hit["ok"] and gs.find_player(first).hero_health == 29)
+	var baseline := _fresh_match("gen_001")
+	baseline.begin_mulligan()
+	_check("baseline keeps 3/4 and no bonus", baseline.player.hand.size() == 3 and baseline.opponent.hand.size() == 4 and baseline.opening_bonus.is_empty())
+	var timed := GameState.new("host", "guest", _deck_of("gen_001", 20), _deck_of("gen_001", 20), 42)
+	timed.start_game("host")
+	timed.begin_mulligan(true)
+	_check("opening timeout gives five without ending turn or mulligan", timed.apply_timeout("guest")["ok"] and timed.opponent.hand.size() == 5 and timed.active_player_id == "host" and timed.mulligan_pending.size() == 2)
+
 static func run() -> int:
 	_failures = 0
 	_checks = 0
@@ -2470,6 +2544,7 @@ static func run() -> int:
 	_test_headshot_returns_and_permanence()
 	_test_headshot_support_cards()
 	_test_player_views(card_id)
+	_test_ranked_opening()
 	print("CORE TESTS: %d checks, %d failed" % [_checks, _failures])
 	print("RESULT: %s" % ("PASS" if _failures == 0 else "FAIL"))
 	return _failures

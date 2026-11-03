@@ -153,11 +153,22 @@ func _begin_turn() -> void:
 		elif _opening_hand_dealt and drawn != null and active.player_id == player.player_id:
 			pending_drawn_cards.append(drawn)
 	active.reset_for_new_turn()
+	# The starting token readies on its owner's second turn.
+	if str(opening_bonus.get("player_id", "")) == active.player_id and bool(opening_bonus.get("token_sleep_pending", false)):
+		var token := find_minion(str(opening_bonus.get("token_instance_id", "")))
+		if token != null:
+			token.is_exhausted = true
+		opening_bonus["token_sleep_pending"] = false
 	_emit("turn_start", {"owner": active.player_id, "turn": turn_number})
 	_check_win_condition()
 
 func end_turn() -> void:
 	_emit("turn_end", {"owner": active_player_id})
+	if temporary_mana.has(active_player_id):
+		var ending := _get_active_player()
+		ending.max_mana -= int(temporary_mana[active_player_id])
+		ending.current_mana = mini(ending.current_mana, ending.max_mana)
+		temporary_mana.erase(active_player_id)
 	_expire_temp_shields_for(active_player_id)
 	_apply_rejuvenate(active_player_id)
 	_apply_feast_attendant(active_player_id)
@@ -287,6 +298,9 @@ const CHOICE_NULL_TARGET := "null_target"
 const CHOICE_BUFF_HEALTH_TARGET := "buff_health_target"
 const CHOICE_TANK_BUFF_TARGET := "tank_buff_target"
 const CHOICE_HEAL_BUFF_TARGET := "heal_buff_target"
+const CHOICE_OPENING_BONUS := "opening_bonus"
+const OPENING_COIN_ID := "gen_token_coin"
+const OPENING_TOKEN_ID := "gen_token_initiative"
 const CMD_PILOT := "pilot"
 
 ## What the options of a choice ARE.
@@ -296,6 +310,7 @@ const CMD_PILOT := "pilot"
 const CHOICE_KIND_TARGET := "target"
 const CHOICE_KIND_PICK_CARD := "pick_card"
 const CHOICE_KIND_PICK_CARD_ID := "pick_card_id"
+const CHOICE_KIND_OPENING := "opening"
 
 ## Heroes appear among a choice's options as "hero:<player_id>".
 const HERO_PREFIX := "hero:"
@@ -331,14 +346,24 @@ var _choice_queue: Array[Dictionary] = []
 var _next_choice_id: int = 0
 
 ## player_id -> true while that player may still take their one opening-hand
-## mulligan. Empty outside a server-run match's opening (local play runs its
-## mulligan through its own screen and calls mulligan_swap directly). While any
+## mulligan. Used by server-run and local ranked openings (other local modes
+## run their screen and call mulligan_swap directly). While any
 ## entry remains, no turn action is accepted - and a player cannot mulligan twice.
 var mulligan_pending: Dictionary = {}
+## Empty for baseline games. Selection stays public; hands remain filtered.
+var opening_bonus: Dictionary = {}
+var temporary_mana: Dictionary = {}
+
+func opening_choice_pending() -> bool:
+	return not opening_bonus.is_empty() and str(opening_bonus.get("selection", "")).is_empty()
 
 ## Opens the mulligan phase for both players (after start_game()).
-func begin_mulligan() -> void:
+func begin_mulligan(with_opening_choice: bool = false) -> void:
 	mulligan_pending = {player.player_id: true, opponent.player_id: true}
+	if with_opening_choice:
+		var second_id := _opponent_id(active_player_id)
+		opening_bonus = {"player_id": second_id, "selection": ""}
+		request_choice(second_id, CHOICE_OPENING_BONUS, 0, null)
 
 func has_pending_choice() -> bool:
 	return not pending_choice.is_empty()
@@ -357,6 +382,8 @@ func is_targetable_by(target: Minion, actor_id: String) -> bool:
 ## declinable target pick.
 func _choice_traits(effect: String) -> Dictionary:
 	match effect:
+		CHOICE_OPENING_BONUS:
+			return {"kind": CHOICE_KIND_OPENING, "allow_none": false, "steps": 1}
 		CHOICE_TRANSFORM:
 			# Must be answered: the card is not played until it is decided.
 			return {"kind": CHOICE_KIND_PICK_CARD_ID, "allow_none": false, "steps": 1}
@@ -377,6 +404,8 @@ func choice_options_for(effect: String, actor_id: String, source: Minion, data: 
 		return out
 	var enemy := find_player(_opponent_id(actor_id))
 	match effect:
+		CHOICE_OPENING_BONUS:
+			return ["five_cards", "coin", "token"] as Array[String]
 		CHOICE_RESTORE_HEALTH:
 			# Any living creature on either board. A full-health creature is
 			# still a legal target - it just gains nothing - and heroes never
@@ -582,6 +611,18 @@ func _resolve_choice(choice: Dictionary, selection: String) -> void:
 	var actor_id := str(choice["player_id"])
 	var target := find_minion(selection)
 	match effect:
+		CHOICE_OPENING_BONUS:
+			opening_bonus["selection"] = selection
+			var owner := find_player(actor_id)
+			if selection == "five_cards":
+				owner.draw_card()
+			elif selection == "token":
+				var data := CardDatabase.get_card(OPENING_TOKEN_ID).new_instance(owner.mint_card_uid())
+				var token := Minion.new(data, actor_id, owner.mint_minion_id(data.id))
+				owner.place_minion(token)
+				opening_bonus["token_instance_id"] = token.instance_id
+				opening_bonus["token_sleep_pending"] = true
+			_emit("opening_bonus", {"owner": actor_id, "selection": selection})
 		CHOICE_RESTORE_HEALTH:
 			restore_health(target, amount)
 		CHOICE_BUFF_OTHER_FRIENDLY:
@@ -854,6 +895,9 @@ static func filter_events_for(seat_id: String, evts: Array) -> Array[Dictionary]
 func apply_timeout(actor_id: String) -> Dictionary:
 	if current_phase == Phase.GAME_OVER:
 		return _reject("game is over")
+	if opening_choice_pending():
+		return execute({"type": CMD_ANSWER_CHOICE, "actor": actor_id,
+			"choice_id": str(pending_choice["id"]), "selection": str(pending_choice["default"])})
 	var guard := 0
 	while has_pending_choice() and guard < 64:
 		guard += 1
@@ -888,6 +932,7 @@ func state_hash() -> String:
 	parts.append("G|%d|%s|%d|%s|%d|%s" % [current_phase, active_player_id, turn_number, winner_id, _next_choice_id, JSON.stringify(mulligan_pending)])
 	parts.append("R|%d|%d" % [rng.seed, rng.state])
 	parts.append("C|" + JSON.stringify(pending_choice) + "|" + JSON.stringify(_choice_queue))
+	parts.append("O|" + JSON.stringify(opening_bonus) + "|" + JSON.stringify(temporary_mana))
 	for qn in PENDING_QUEUES:
 		parts.append("Q|%s|%s" % [qn, JSON.stringify(get(qn))])
 	parts.append("T|" + JSON.stringify(temp_shielded) + "|" + JSON.stringify(growvin_granted) + "|" + ",".join(death_reinforce_used))
@@ -961,6 +1006,10 @@ func validate(cmd: Dictionary) -> Dictionary:
 	# These two are not "turn actions": the owner of an open choice answers it
 	# whoever's turn it is, and either player may concede at any time.
 	if cmd_type == CMD_CONCEDE:
+		return {"ok": true, "actor": actor}
+	if opening_choice_pending():
+		if cmd_type != CMD_ANSWER_CHOICE or actor_id != str(opening_bonus["player_id"]):
+			return _reject("waiting for second player's opening choice")
 		return {"ok": true, "actor": actor}
 	if cmd_type == CMD_MULLIGAN:
 		if not mulligan_pending.get(actor_id, false):
@@ -1147,6 +1196,8 @@ func _execute_validated(cmd: Dictionary) -> Dictionary:
 		CMD_MULLIGAN:
 			mulligan_pending.erase(actor.player_id)
 			mulligan_swap(actor.player_id, check["cards"])
+			if str(opening_bonus.get("player_id", "")) == actor.player_id and str(opening_bonus.get("selection", "")) == "coin":
+				actor.hand.append(CardDatabase.get_card(OPENING_COIN_ID).new_instance(actor.mint_card_uid()))
 			return {"ok": true}
 	return _reject("unhandled command type")
 
@@ -1604,6 +1655,10 @@ func _try_transform(minion: Minion, owner: PlayerState) -> void:
 func _apply_stratagem(card: CardData, target_minion: Minion,
 					  target_player_id: String, acting_player_id: String = "") -> void:
 	match card.effect:
+		"opening_coin":
+			var owner := find_player(acting_player_id)
+			owner.max_mana += 1
+			temporary_mana[acting_player_id] = int(temporary_mana.get(acting_player_id, 0)) + 1
 		"deal_damage":
 			if target_minion:
 				var amp := _get_enemy_damage_amp(acting_player_id) if acting_player_id != "" else 0
@@ -2101,6 +2156,8 @@ func duplicate_for_sim() -> GameState:
 	gs._next_choice_id = _next_choice_id
 	gs.end_reason = end_reason
 	gs.mulligan_pending = mulligan_pending.duplicate()
+	gs.opening_bonus = opening_bonus.duplicate(true)
+	gs.temporary_mana = temporary_mana.duplicate()
 	# events_enabled stays false: a simulation copy never emits events.
 	return gs
 
@@ -2129,6 +2186,8 @@ func to_net_dict(for_player_id: String = "") -> Dictionary:
 		"choice_queue": _choice_queue.duplicate(true) if for_player_id.is_empty() else [],
 		"end_reason": end_reason,
 		"mulligan_pending": mulligan_pending.duplicate(),
+		"opening_bonus": opening_bonus.duplicate(true),
+		"temporary_mana": temporary_mana.duplicate(),
 		"pending_rummages": pending_rummages.duplicate(true),
 		"pending_tank_shots": pending_tank_shots.duplicate(),
 		"pending_nulls": pending_nulls.duplicate(true),
@@ -2154,6 +2213,8 @@ static func from_net_dict(d: Dictionary, my_id: String) -> GameState:
 	gs.pending_choice = (d.get("pending_choice", {}) as Dictionary).duplicate(true)
 	gs.end_reason = str(d.get("end_reason", ""))
 	gs.mulligan_pending = (d.get("mulligan_pending", {}) as Dictionary).duplicate()
+	gs.opening_bonus = (d.get("opening_bonus", {}) as Dictionary).duplicate(true)
+	gs.temporary_mana = (d.get("temporary_mana", {}) as Dictionary).duplicate()
 	gs.pending_rummages.clear()
 	for r in d.get("pending_rummages", []):
 		gs.pending_rummages.append(r)

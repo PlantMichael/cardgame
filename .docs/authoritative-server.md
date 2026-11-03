@@ -10,6 +10,8 @@ results).
 
 Spec and contracts: [`specs/003-authoritative-ranked-server/`](../specs/003-authoritative-ranked-server/).
 
+Rules 8 enables the second-player opening choice for every authoritative ranked match and ranked-AI fallback, including all four Moon bots. Create, restart recovery and the administrative replay tool all enable the same opening; exact-version guards prevent old matches being replayed under different rules. A client cannot enable or disable it. Opening choice uses the existing `answer_choice` command and normal choice clock; its completion starts a fresh full mulligan clock for both players. First player waits while second chooses. Reconnect views show the pending choice or the resulting mulligan, never a second bonus. The deterministic timeout selects five cards. This changes no database schema and deletes no match history. Completed rules-6/7 games remain available in Statistics; its existing latest-version default is unchanged.
+
 ## The three processes
 
 | Process | What it is | What it owns |

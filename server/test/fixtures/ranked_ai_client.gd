@@ -1,5 +1,11 @@
 extends Node
 
+class AutomatedBoard extends Board:
+	func prompt_choice(choice: Dictionary) -> String:
+		if str(choice["effect"]) == GameState.CHOICE_OPENING_BONUS:
+			return str(choice["default"])
+		return await super.prompt_choice(choice)
+
 ## Drives the real local-game result producer into a localhost test relay.
 ## Main.tscn is not loaded, so no login or production connection is attempted.
 func _ready() -> void:
@@ -15,6 +21,7 @@ func _run() -> void:
 	Auth._apply_profile({"token": OS.get_environment("AI_TEST_TOKEN"), "username": "ai_tester"})
 	for ranked in [true, false]:
 		var board := load("res://scenes/game/Board.tscn").instantiate() as Board
+		board.set_script(AutomatedBoard)
 		add_child(board)
 		board.auto_confirm_mulligan = true
 		var human: Array[CardData] = []

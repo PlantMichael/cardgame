@@ -413,7 +413,7 @@ async function main() {
   if (authoritativeEnabled()) {
     auth = new Authoritative({ pool });
     await auth.start();
-    console.log('Ranked matches are server-authoritative (rules version', auth.rulesVersion + ')');
+    console.log('Ranked matches are server-authoritative (rules version', auth.rulesVersion + ', AI policy', auth.manager.host.engineVersion + ')');
   }
 
   const { server, wss } = createRelayServer({ pool, botActivity: botPresence.activity });
@@ -921,6 +921,7 @@ async function main() {
             if (Object.hasOwn(msg, 'ai_match')) {
               aiMatch = match ? null : normalizeAIRecord(msg.ai_match, matchId, CARD_RARITY);
               if (!aiMatch) {
+                if (player.bot_profile) console.warn('Ranked bot AI refusal', JSON.stringify({ bot: player.bot_profile.id, reason: 'invalid_summary' }));
                 sendTo(ws, { type: 'ranked_result_ack', success: false, message: 'Invalid AI match summary.' });
                 return;
               }
@@ -930,6 +931,14 @@ async function main() {
               if (!auth || !aiMatch || admission?.matchId !== matchId || admission.playerId !== player.id ||
                   !validBotAIDecks(aiMatch) || aiMatch.ai_level !== admission.level ||
                   aiMatch.rules_version !== auth.rulesVersion || aiMatch.ai_version !== auth.manager.host.engineVersion) {
+                console.warn('Ranked bot AI refusal', JSON.stringify({ bot: player.bot_profile.id, reason: 'invalid_admission',
+                  admissionMatches: !!admission && admission.matchId === matchId && admission.playerId === player.id,
+                  decksValid: !!aiMatch && validBotAIDecks(aiMatch), levelMatches: !!aiMatch && aiMatch.ai_level === admission?.level,
+                  deckSizes: aiMatch ? [aiMatch.player_deck.length, aiMatch.opponent_deck.length] : [],
+                  playerDeckValid: !!aiMatch && validBotAIDecks({ ...aiMatch, opponent_deck: aiMatch.player_deck }),
+                  opponentDeckValid: !!aiMatch && validBotAIDecks({ ...aiMatch, player_deck: aiMatch.opponent_deck }),
+                  rulesMatch: !!aiMatch && aiMatch.rules_version === auth?.rulesVersion,
+                  engineMatches: !!aiMatch && aiMatch.ai_version === auth?.manager?.host?.engineVersion }));
                 sendTo(ws, { type: 'ranked_result_ack', success: false, message: 'Invalid bot AI admission.' }); return;
               }
               aiMatch.bot_profile = admission.profile;

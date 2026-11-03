@@ -153,7 +153,7 @@ func _build_match(msg: Dictionary) -> Dictionary:
 	var gs := GameState.new(HOST_ID, GUEST_ID, deck_a, deck_b, int(msg.get("seed", 0)))
 	gs.set_events_enabled(true)
 	gs.start_game(_internal(first))
-	gs.begin_mulligan()
+	gs.begin_mulligan(bool(msg.get("opening_choice", false)))
 	gs.drain_events()  # the opening deal is shown through each seat's view
 	var rec := MatchRecorder.new()
 	rec.begin(gs)
@@ -219,7 +219,12 @@ func _op_timeout(msg: Dictionary) -> Dictionary:
 	var gs: GameState = m["gs"]
 	var internal := _internal(seat)
 	var events: Array = []
-	if gs.mulligan_pending.get(internal, false):
+	if gs.opening_choice_pending():
+		var r := gs.apply_timeout(internal)
+		if not r["ok"]:
+			return r
+		events = r.get("events", [])
+	elif gs.mulligan_pending.get(internal, false):
 		# A player who never mulligans simply keeps their hand.
 		var r := gs.execute({"type": GameState.CMD_MULLIGAN, "actor": internal, "card_uids": []})
 		events = r.get("events", [])
@@ -252,7 +257,9 @@ func _op_replay(msg: Dictionary) -> Dictionary:
 		var internal := _internal(seat)
 		if kind == "timeout_default":
 			var timed_out: Dictionary
-			if gs.mulligan_pending.get(internal, false):
+			if gs.opening_choice_pending():
+				timed_out = gs.apply_timeout(internal)
+			elif gs.mulligan_pending.get(internal, false):
 				timed_out = gs.execute({"type": GameState.CMD_MULLIGAN, "actor": internal, "card_uids": []})
 			else:
 				timed_out = gs.apply_timeout(internal)

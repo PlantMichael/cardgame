@@ -6,6 +6,7 @@ const app = document.querySelector('[data-stats-app]');
 const meta = (name) => document.querySelector(`meta[name="${name}"]`)?.content || '';
 const CATALOG = meta('cg-catalog').replace(/\/$/, '');
 const SNAPSHOT_TTL_MS = 60000; // the relay caches for 60s; never refetch faster
+const MIN_CARD_GAMES = 20;
 
 const h = (tag, props = {}, ...kids) => {
   const node = document.createElement(tag);
@@ -364,7 +365,7 @@ function cardsView() {
   const ids = catalog.list.filter(c=>c.collectible && !c.isToken).map(c=>c.id);
   const sort = S.CARD_SORT_KEYS.includes(route.sort)?route.sort:'timesPlayed';
   const rows = S.sortCardMetrics(S.cardMetrics(snap,ids).map(row=>({...row,name:cardName(row.id)})),sort,route.dir)
-    .filter(row=>catalog.cards.has(row.id) && (route.showGenerics||catalog.cards.get(row.id).color!=='GENERIC') && (!route.faction||catalog.cards.get(row.id).color===route.faction) && (!q||row.name.toLowerCase().includes(q)));
+    .filter(row=>row.appearances>=MIN_CARD_GAMES && catalog.cards.has(row.id) && (route.showGenerics||catalog.cards.get(row.id).color!=='GENERIC') && (!route.faction||catalog.cards.get(row.id).color===route.faction) && (!q||row.name.toLowerCase().includes(q)));
   const coverage = snap.playStats || {totalSeats:snap.games*2,trackedSeats:0,completeSeats:0};
   const heading = (key,label,help)=>h('th',{scope:'col',ariaSort:sort===key?(route.dir==='asc'?'ascending':'descending'):'none'},
     h('button',{type:'button',class:'sort',title:help,onclick:()=>go({sort:key,dir:sort===key&&route.dir==='desc'?'asc':'desc'},{replace:true})},label,sort===key?(route.dir==='asc'?' ▲':' ▼'):''));
@@ -379,6 +380,7 @@ function cardsView() {
       h('form',{class:'deck-search',onsubmit:e=>{e.preventDefault();go({q:e.currentTarget.elements.q.value},{replace:true});}},
         h('label',{class:'cohort-field'},h('span',{},'Find a card'),h('input',{name:'q',type:'search',value:route.q,placeholder:'Card name'})),
         h('button',{type:'submit',class:'button small'},h('span',{},'Search')))),
+    h('p',{class:'foot'},'Cards appear after '+MIN_CARD_GAMES+' recorded deck appearances containing the card. Repeated plays within a game do not count toward this minimum.'),
     h('p',{class:'foot'},coverage.trackedSeats===0?'No card-play history is recorded for these games. The deck statistics are still available.'
       : coverage.completeSeats<coverage.totalSeats?'Times played is partially recorded for older games. Counts below show recorded plays only.':'Play counts are fully recorded for these results.'),
     h('details',{class:'stats-disclosure'},h('summary',{},'About card statistics'),
@@ -388,7 +390,7 @@ function cardsView() {
       h('p',{class:'foot'},coverage.completeSeats+' of '+coverage.totalSeats+' deck results have complete play tracking; '+(coverage.trackedSeats-coverage.completeSeats)+' have partial tracking. Missing history is not counted as zero.')),
     catalog.status==='failed'?h('div',{class:'state error'},h('p',{},'Could not load card names.'),h('button',{type:'button',class:'button small',onclick:fetchCatalog},'Retry'))
       :catalog.status==='loading'?h('p',{class:'state',role:'status'},'Loading card names…')
-      :!rows.length?h('p',{class:'state',role:'status'},'No cards match. Adjust your search, faction or generic card setting.')
+      :!rows.length?h('p',{class:'state',role:'status'},'No cards match with at least '+MIN_CARD_GAMES+' recorded deck appearances. Adjust your filters or wait for more games.')
       :h('div',{class:'table-wrap'},h('table',{class:'stats-table card-statistics'},h('caption',{class:'sr-only'},'Card statistics'),
         h('thead',{},h('tr',{},heading('name','Card','Sort by card name'),heading('inDecks','In % of decks','Share of deck appearances containing this card'),
           heading('averageCopies','Avg. copies','Average copies among decks containing the card'),heading('deckWinRate','Deck win rate','Win rate of decks containing the card'),heading('timesPlayed','Times played','Actual recorded plays; older history can be incomplete'))),

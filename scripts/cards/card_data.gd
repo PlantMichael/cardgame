@@ -60,6 +60,8 @@ var cost_modifier: int = 0
 var rummage_count: int = 0
 
 func effective_cost() -> int:
+	if id == "gen_token_coin":
+		return 0
 	return clamp(cost + cost_modifier, 1, 10)
 
 ## Locations share the board row with creatures: played from hand into a board
@@ -105,7 +107,7 @@ func new_instance(new_uid: String) -> CardData:
 
 # Target semantics shared by human presentation and AI enumeration.
 func stratagem_needs_target() -> bool:
-	return effect not in ["destroy_all_creatures", "destroy_all_rummage_creature", "deal_damage_all_creatures", "deal_damage_all_enemy", "deal_damage_all_enemy_draw_yeti", "buff_all_friendly_attack", "buff_all_friendly_health", "eject_all_pilots", "sludge_spray"]
+	return effect not in ["opening_coin", "destroy_all_creatures", "destroy_all_rummage_creature", "deal_damage_all_creatures", "deal_damage_all_enemy", "deal_damage_all_enemy_draw_yeti", "buff_all_friendly_attack", "buff_all_friendly_health", "eject_all_pilots", "sludge_spray"]
 
 func stratagem_needs_creature_target() -> bool:
 	return effect in ["give_ability", "buff_creature", "buff_health", "force_challenge", "poke_bear", "blood_transfusion", "sanguine", "heal", "eject_pilot", "give_mech_shielded_temp", "tainted_blood", "exsanguinate", "blood_boil", "return_friendly_to_hand"]
