@@ -14,4 +14,5 @@ extends RefCounted
 ## 4: Headshot card batch, damage-triggered Rummage, permanent card stats,
 ##    returned-card draw identity, and removal of Crypt Chapel.
 ## 5: Plated Soldier becomes 2/3; Frontier Medic becomes 1/3.
-const RULES_VERSION := 5
+## 6: Dump Scummer becomes 2/4; Debris Hauler loses unintended Cloaked.
+const RULES_VERSION := 6
