@@ -52,6 +52,18 @@ Pilot actions use the same validated `GameState.execute()` command in search, ro
 
 `--live-ai-test` (`main.gd`'s `_run_live_ai_test_cli()`) drives one real game through the actual `Board`/`GameManagerAutoload`/`AIController` glue instead of the headless `HeadlessTurn` path — tweens, `board.refresh()`, `board.log_action()` and all — forcing the human side to end its turn immediately each round so the AI's turn (the one place the other CLI hooks don't exercise) repeats back-to-back. It flags a stall via a structural state fingerprint (board/hand/health), not `turn_number`/`active_player_id`, since those legitimately hold steady for the whole multi-action span of a real AI turn. This is the tool that originally reproduced the "AI turn reads as a hang" issue tree reuse (above) fixes: `godot --headless --path <project> -- --live-ai-test`.
 
+## Opening-rule balance experiment
+
+Run `GODOT_BIN=<godot> node server/second_player_balance.js --pairs=25 --level=5 --seed=42 --output=opening-results.json` from the project root. On PowerShell, set `$env:GODOT_BIN` first. The output filename must be new. `--checks-only` runs the opening/clone checks without sampling games; `--max-actions=1000` sets the per-game action cap. Bounds are 1–250 blocks, levels 1–10, seeds 0–2147483000, and 1–10000 actions.
+
+The control uses live opening rules (three/four cards, ordinary mana growth). The experiment gives both players three cards and changes only second player's own-turn mana curve to 2/2/3/4, against first player's 1/2/3/4. It runs offline in an explicit fixture scene with isolated user data, without reporting ranked results or changing live rules.
+
+Each block plays four games: the same two published archetype decks and game/search seeds under both rules, with starting positions swapped. The first five blocks cover the five faction mirrors; 25 blocks cover all ordered faction pairs. Both seats use equal-level full-state MCTS, like MCTSBenchmark, rather than the live bots' filtered-view personalities. Wall-clock search caps mean identical inputs do not guarantee identical outcomes between executions.
+
+JSON records decks, seeds, starts, outcomes, per-condition totals and paired-block differences. `firstWinRate` excludes actual terminal draws. Action/turn/time caps and rejected commands fail the run with a nonzero exit and a partial report; they never count as draws. Cancellation or a process crash can prevent a report. A five-block pilot is only ten games per condition and cannot establish balance; use a larger sample before selecting live rules.
+
+The durable smoke test is `GODOT_BIN=<godot> node --test server/test/second_player_balance.test.js`. It checks real turn transitions, nested simulation copies, pending choices, a complete four-game block, legal decks and failure accounting.
+
 ## Actions are values, not objects
 
 `list_legal_actions()` emits dictionaries that name entities by `card_uid` /

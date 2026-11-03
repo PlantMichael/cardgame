@@ -2039,7 +2039,8 @@ func is_local_player_turn() -> bool:
 ## which serve wire serialization). Safe for a search rollout to mutate freely
 ## without affecting the real match.
 func duplicate_for_sim() -> GameState:
-	var gs := GameState.new(player.player_id, opponent.player_id, [], [])
+	var empty: Array[CardData] = []
+	var gs: GameState = get_script().new(player.player_id, opponent.player_id, empty, empty)
 	gs.player = player.duplicate_for_sim()
 	gs.opponent = opponent.duplicate_for_sim()
 	gs.current_phase = current_phase
