@@ -1,6 +1,6 @@
-# Patch notes: Headshot card update
+# Patch 0.0.1: Headshot card update
 
-November 2, 2026 · `codex/headshot-cards`
+November 3, 2026
 
 Ten new cards, a new keyword, and the removal of Crypt Chapel.
 
