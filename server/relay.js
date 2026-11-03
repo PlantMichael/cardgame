@@ -934,6 +934,9 @@ async function main() {
                 console.warn('Ranked bot AI refusal', JSON.stringify({ bot: player.bot_profile.id, reason: 'invalid_admission',
                   admissionMatches: !!admission && admission.matchId === matchId && admission.playerId === player.id,
                   decksValid: !!aiMatch && validBotAIDecks(aiMatch), levelMatches: !!aiMatch && aiMatch.ai_level === admission?.level,
+                  deckSizes: aiMatch ? [aiMatch.player_deck.length, aiMatch.opponent_deck.length] : [],
+                  playerDeckValid: !!aiMatch && validBotAIDecks({ ...aiMatch, opponent_deck: aiMatch.player_deck }),
+                  opponentDeckValid: !!aiMatch && validBotAIDecks({ ...aiMatch, player_deck: aiMatch.opponent_deck }),
                   rulesMatch: !!aiMatch && aiMatch.rules_version === auth?.rulesVersion,
                   engineMatches: !!aiMatch && aiMatch.ai_version === auth?.manager?.host?.engineVersion }));
                 sendTo(ws, { type: 'ranked_result_ack', success: false, message: 'Invalid bot AI admission.' }); return;
