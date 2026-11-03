@@ -1,5 +1,7 @@
 # Deck matchup API: website developer contract
 
+The [Moon bots API](../server/MOON_BOTS.md#website-api), `/data/stats/bot-matchups.json?mode=ranked&days=30`, supplies detailed genuine ranked results for Io, Callisto, Europa and Ganymede with anonymous human-opponent buckets. Their initial release is `1.0`; stored results retain bot/rules/engine versions. By owner request, genuine ranked-bot games also contribute to the existing combined deck/card statistics below, so the default stats page shows their results alongside human and local ranked-AI games. Explicit filtered AI/human-PvP views retain their cohorts. `mode=simulation` (the bot API default) retains isolated non-ranked simulations, which remain outside shared ranked statistics. No data is fabricated before activation.
+
 Build the stats site around exact starting decks and their opponent records. Exact deck lists and aggregate results are public. Player identities, match IDs and individual histories are not returned. This contract describes the implemented API; hosted availability requires deploying the updated relay and catalog.
 
 ## Origins and routes
@@ -49,9 +51,9 @@ Older AI summaries lack `ai_version` and/or `first_player`. Missing policy versi
 
 ## Combined playtest results
 
-Explicit mode=all pools eligible ranked-AI and authoritative-player matches within the chosen date window and rules version. It includes every AI difficulty/policy, including missing historical policy metadata. Latest rules resolves across the union; it does not pool different rules versions. AI-specific query parameters are invalid. API calls without mode retain the old ranked-AI default for compatibility.
+Explicit mode=all pools eligible ranked-AI, authoritative-player and genuine automated ranked-bot matches within the chosen date window and rules version. It includes every AI difficulty/policy, including missing historical policy metadata. Latest rules resolves across the union; it does not pool different rules versions. AI-specific query parameters are invalid. API calls without mode retain the old ranked-AI default for compatibility. Isolated simulations remain excluded.
 
-Both controller types contribute to each exact composition's combined record. Physical games are counted once; both deck results contribute, including mirrors. Distinct testers union real participants across sources, never sums of already-aggregated tester counts. Raw source/provenance and AI metadata remain stored; all is a read-only view, not a historical rewrite. Pooled playtest data can reflect repeated AI or player habits and does not establish causal card strength.
+All controller types contribute to each exact composition's combined record. Physical games are counted once; both deck results contribute, including mirrors. Distinct testers union real human participants across sources, excluding bot seats using immutable match snapshots, never sums of already-aggregated counts. A bot-only record has zero human testers; mixed human/bot games count their human participant. Raw source/provenance and AI metadata remain stored; all is a read-only view, not a historical rewrite. Repeated automated games can dominate playtest samples and do not establish causal card strength.
 
 ## Response and joins
 

@@ -126,28 +126,63 @@ test('local filters: role, faction, card search, exclusion, minimum sample, stab
   assert.deepEqual(S.sortDecks(snapshot.decks, 'bogus', 'desc').map((d) => d.matches), S.sortDecks(snapshot.decks, 'matches', 'desc').map((d) => d.matches));
 });
 
-test('readable deck labels distinguish faction lists without exposing hashes and can be searched', () => {
+test('archetype labels use compositions, share names without merging lists and can be searched', () => {
   const deck = snapshot.decks.find((d) => d.role === 'human');
   const variant = { ...deck, id: 'different-list' };
   const decks = [...snapshot.decks, variant];
-  const labels = S.indexSnapshot({ ...snapshot, decks }).labels;
+  const labeledIndex = S.indexSnapshot({ ...snapshot, decks }, cards);
+  const labels = labeledIndex.labels;
   const name = S.deckLabel(deck, labels);
-  assert.match(name, / deck [1-9][0-9]*$/);
-  assert.notEqual(name, S.deckLabel(variant, labels));
+  assert.equal(name, `${S.factionLabel(deck)} ${S.deckArchetype(deck, cards)}`);
+  assert.equal(name, S.deckLabel(variant, labels));
+  assert.equal(S.findDeck(labeledIndex, variant.id, variant.role), variant, 'same label preserves distinct exact lists');
+  assert.notEqual(labeledIndex.variants.get(deck.id), labeledIndex.variants.get(variant.id), 'exact-list choices retain distinct discriminators');
+  assert.deepEqual(S.indexSnapshot({ ...snapshot, decks: [...decks].reverse() }, cards).variants, labeledIndex.variants, 'list numbers ignore input order and duplicate roles');
   assert.equal(S.deckLabel({ ...deck, role: 'ai' }, labels), name);
-  assert.equal(S.deckLabel(deck, S.deckLabels([...decks].reverse())), name, 'input order does not change the label');
+  assert.equal(S.deckLabel(deck, S.deckLabels([...decks].reverse(), cards)), name, 'input order does not change the label');
   assert.ok(!name.includes(S.shortId(deck.id)));
   const route = { ...S.routeFromSearch('?mode=ranked_ai'), q: name.toUpperCase() };
-  assert.deepEqual(S.filterDecks({ ...snapshot, decks }, cards, route).map((d) => d.id), [deck.id]);
+  assert.deepEqual(S.filterDecks({ ...snapshot, decks }, cards, route).map((d) => d.id).sort(), [deck.id, variant.id].sort());
   assert.ok(S.filterDecks(snapshot, cards, { ...route, q: S.factionLabel(deck) }).some((d) => d.id === deck.id));
 });
 
-test('a single-game 100% deck keeps its sample and is not hidden by default', () => {
+test('estimated archetypes distinguish real printed card packages and do not guess with missing data', () => {
+  const deck = (ids, faction = 'BLACK') => ({ id: ids.join(','), factions: [faction], cards: ids.map(id => ({id,copies:1})) });
+  const aggressive = deck(['o_001','o_002','o_019','o_021','o_022','o_025'], 'ORANGE');
+  assert.equal(S.deckLabel(aggressive, S.deckLabels([aggressive], cards)), 'Gundari Aggro');
+  const tempo = deck(['b_007','b_018','b_019','b_001','b_012','b_003']);
+  assert.equal(S.deckLabel(tempo, S.deckLabels([tempo], cards)), 'Junklings Tempo');
+  assert.equal(S.deckArchetype(deck(['o_003','o_004','o_013','o_014','o_015','o_016'], 'ORANGE'), cards), 'Combo');
+  assert.equal(S.deckArchetype(deck(['b_002','b_006','b_010','b_013','b_str_003']), cards), 'Control');
+  assert.equal(S.deckArchetype(deck(['b_003','b_005','b_012','b_024']), cards), 'Midrange');
+  assert.equal(S.deckArchetype(deck(['b_017']), cards), 'Midrange', 'a payoff alone does not establish a combo package');
+  assert.equal(S.deckArchetype(aggressive, new Map()), 'Unclassified');
+  const incomplete = new Map(cards); incomplete.delete('o_001');
+  assert.equal(S.deckArchetype(aggressive, incomplete), 'Unclassified');
+  assert.equal(S.deckArchetype({...tempo,cards:[...tempo.cards].reverse()}, cards), 'Tempo');
+  // Copies, rather than distinct card IDs, determine the mana curve.
+  const weighted = deck(['o_001','o_002','o_019','o_021','o_022','o_025','o_010','o_011'], 'ORANGE');
+  assert.equal(S.deckArchetype(weighted, cards), 'Aggro');
+  weighted.cards.find(c=>c.id==='o_010').copies=2;
+  weighted.cards.find(c=>c.id==='o_011').copies=2;
+  assert.equal(S.deckArchetype(weighted, cards), 'Tempo');
+});
+
+test('leaderboard starts at five games, keeps explicit smaller samples and preserves detail access', () => {
   const lone = snapshot.matchups.find((m) => m.matches === 1 && m.winRate === 1);
   assert.ok(lone);
   assert.equal(S.pct(lone.winRate), '100.0%');
   assert.equal(lone.matches, 1);
-  assert.equal(S.routeFromSearch('').min, 1, 'minimum sample starts at 1');
+  const sample = { decks: [1, 4, 5].map(matches => ({ ...snapshot.decks[0], id: String(matches), matches })), matchups: [] };
+  const defaultRoute = S.routeFromSearch('?mode=ranked_ai');
+  assert.deepEqual(S.filterDecks(sample, cards, defaultRoute).map(d => d.matches), [5]);
+  assert.ok(!new URLSearchParams(S.searchFromRoute(defaultRoute)).has('min'));
+  const all = S.routeFromSearch('?mode=ranked_ai&min=1');
+  assert.equal(S.filterDecks(sample, cards, all).length, 3);
+  assert.equal(S.routeFromSearch(S.searchFromRoute(all)).min, 1, 'explicit 1 survives sharing');
+  assert.equal(S.routeFromSearch(S.searchFromRoute(defaultRoute)).min, 5);
+  assert.equal(S.findDeck(S.indexSnapshot(sample), '1', 'human').matches, 1);
+  for (const view of ['deck', 'matrix', 'cards']) assert.equal(S.routeFromSearch(`?view=${view}`).min, 1);
 });
 
 test('mana curve comes from the composition and totals the card count', () => {
@@ -225,7 +260,8 @@ test('combined defaults and pooled fixture keep exact identities, mirrors and mi
   assert.equal(S.routeFromSearch('').cohort.mode,'all');
   assert.equal(S.routeFromSearch('').who,'combined');
   assert.deepEqual([...S.serverQuery(S.DEFAULT_COHORT).keys()].sort(),['days','mode','rulesVersion']);
-  assert.equal(S.filterDecks(mixed,cards,S.routeFromSearch('')).length,3);
+  assert.equal(S.filterDecks(mixed,cards,S.routeFromSearch('')).length,1);
+  assert.equal(S.filterDecks(mixed,cards,S.routeFromSearch('?min=1')).length,3);
   assert.equal(mixed.decks.reduce((n,d)=>n+d.matches,0),mixed.games*2);
   assert.equal(mixed.decks.reduce((n,d)=>n+d.wins,0),mixed.games);
   const axes=S.matrixAxes(mixed,'all',8,8),grid=S.buildMatrix(mixed,axes.rowDecks,axes.colDecks);
@@ -254,6 +290,12 @@ test('card metrics weight copies and win rate by appearances and distinguish mis
 test('card filters and sorting survive shared URLs; legacy AI/PvP cohorts remain selectable by URL',()=>{
   const route=S.routeFromSearch('?view=cards&mode=all&q=Slime&faction=BLACK&sort=deckWinRate&dir=asc');
   assert.deepEqual(S.routeFromSearch(S.searchFromRoute(route)),route);
+  assert.equal(route.showGenerics,true);
+  assert.ok(!new URLSearchParams(S.searchFromRoute(route)).has('generics'));
+  const noGenerics=S.routeFromSearch('?view=cards&generics=0&q=Slime&faction=BLACK');
+  assert.equal(noGenerics.showGenerics,false);
+  assert.deepEqual(S.routeFromSearch(S.searchFromRoute(noGenerics)),noGenerics);
+  assert.ok(!S.serverQuery(noGenerics.cohort).has('generics'),'visibility stays local to the card table');
   const legacy=S.routeFromSearch('?mode=ranked_ai&aiVersion=1&aiLevel=4&view=cards');
   assert.equal(legacy.cohort.aiLevel,'4');
   assert.deepEqual(S.routeFromSearch(S.searchFromRoute(legacy)),legacy);

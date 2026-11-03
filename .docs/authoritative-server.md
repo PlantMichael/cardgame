@@ -1,5 +1,7 @@
 # Server-Authoritative Ranked Matches
 
+The optional [ranked Moon bots worker](../server/MOON_BOTS.md#ranked-mode) uses four real accounts and ordinary ranked commands/matchmaking/rewards. Server-owned account mappings identify them; canonical matches snapshot their profiles/engine version under mode `ranked_bots`. These genuine ranked games also feed the combined stats page and card aggregates, while explicit human-only filters and isolated simulations stay separate. Bot opponents are visibly labeled. Filtered views remain the policy input; no privileged bot-command endpoint is added. Joined views include the authenticated seat's last `client_seq`, and bot queue refusals can return its own active match ID. Initial host recovery finishes before accepting queues; creation reserves players/capacity during asynchronous pairing.
+
 Ranked human-vs-human matches run their **rules on the server**, so a modified
 client cannot change a rule, see a hidden card or fake a result. Everything here
 is behind one switch (`RANKED_AUTHORITATIVE`); with the switch off the relay

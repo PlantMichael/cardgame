@@ -42,6 +42,9 @@ const DDL = [
     detail JSONB
   )`,
   'CREATE INDEX IF NOT EXISTS ranked_matches_status_idx ON ranked_matches (status)',
+  `ALTER TABLE ranked_matches ADD COLUMN IF NOT EXISTS bot_a JSONB;
+   ALTER TABLE ranked_matches ADD COLUMN IF NOT EXISTS bot_b JSONB;
+   ALTER TABLE ranked_matches ADD COLUMN IF NOT EXISTS engine_version INTEGER;`,
 ];
 
 async function initSchema(pool) {
@@ -54,10 +57,11 @@ class PgStore {
   async createMatch(m) {
     await this.pool.query(
       `INSERT INTO ranked_matches (match_id, status, rules_version, seed, first_seat,
-         seat_a_player_id, seat_b_player_id, deck_a, deck_b)
-       VALUES ($1, 'waiting', $2, $3, $4, $5, $6, $7, $8)`,
+         seat_a_player_id, seat_b_player_id, deck_a, deck_b, mode, bot_a, bot_b, engine_version)
+       VALUES ($1, 'waiting', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [m.match_id, m.rules_version, m.seed, m.first_seat, m.seat_a_player_id, m.seat_b_player_id,
-        JSON.stringify(m.deck_a), JSON.stringify(m.deck_b)],
+        JSON.stringify(m.deck_a), JSON.stringify(m.deck_b), m.mode ?? 'authoritative',
+        m.bot_a ? JSON.stringify(m.bot_a) : null, m.bot_b ? JSON.stringify(m.bot_b) : null, m.engine_version ?? null],
     );
   }
 
@@ -118,6 +122,11 @@ class PgStore {
       [player_id, deck_name],
     );
     return rows[0] ? { faction_idx: rows[0].faction_idx, card_ids: rows[0].card_ids } : null;
+  }
+
+  async loadBot(playerId) {
+    const { rows } = await this.pool.query('SELECT profile FROM ranked_bot_accounts WHERE player_id=$1', [playerId]);
+    return rows[0]?.profile ?? null;
   }
 }
 

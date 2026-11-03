@@ -51,7 +51,7 @@ export function buildSite(destination = outputRoot, { relayUrl = process.env.CAR
   writeFileSync(path.join(destination, 'media/stats-demo-combined.json'), JSON.stringify(combinedDemo));
   writeFileSync(path.join(destination, 'media/stats-demo.json'), JSON.stringify(demoSnapshot));
   writeFileSync(path.join(destination, 'media/stats-demo-cards.json'), JSON.stringify(printed));
-  for (const name of ['style.css', 'app.js', 'account.js', 'stats.js', 'stats-core.mjs']) cpSync(path.join(projectRoot, 'website', name), path.join(destination, name));
+  for (const name of ['style.css', 'app.js', 'account.js', 'stats.js', 'stats-core.mjs', 'bots.js', 'bots-core.mjs', 'ranked-data.mjs']) cpSync(path.join(projectRoot, 'website', name), path.join(destination, name));
   cpSync(path.join(projectRoot, 'assets/cardgame/Ranks/cardgame-logo.png'), path.join(destination, 'media/logo.png'));
   cpSync(path.join(projectRoot, 'assets/fonts/Orbitron.ttf'), path.join(destination, 'media/Orbitron.ttf'));
   for (const name of cardAssetNames) cpSync(path.join(projectRoot, 'assets/card_assets', name), path.join(destination, 'media', name));

@@ -26,6 +26,7 @@
 // expired, server_error.
 const crypto = require('node:crypto');
 const { OAuth2Client } = require('google-auth-library');
+const { reservedBotName } = require('./ranked_bot_accounts');
 
 const MAX_CREDENTIAL_LENGTH = 8192;
 const VERIFY_TIMEOUT_MS = 5000;
@@ -202,6 +203,9 @@ function createGoogleAuth(deps, config) {
     }
     if (typeof msg.username !== 'string' || !usernameRe.test(msg.username)) {
       fail(ws, reply, 'invalid_username', 'Username must be 3-20 letters, numbers, or underscores.'); return;
+    }
+    if (reservedBotName(msg.username)) {
+      fail(ws, reply, 'username_taken', 'That username is reserved for a ranked bot.'); return;
     }
     let player;
     try {

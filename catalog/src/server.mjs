@@ -11,6 +11,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cardWinrates, STATS_PATH } from './card-winrates.mjs';
 import { deckMatchups, deckQuery, DECK_STATS_PATH } from './deck-matchups.mjs';
+import { botMatchups, botQuery, BOT_STATS_PATH } from './bot-matchups.mjs';
+import { botStatus, BOT_STATUS_PATH } from './bot-status.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const REVALIDATE = 'no-cache';
@@ -108,6 +110,22 @@ export function createCatalogServer(root, options = {}) {
     }
 
     const pathname = (req.url ?? '/').split('?')[0];
+    if (pathname === BOT_STATUS_PATH) {
+      if (new URLSearchParams((req.url ?? '').split('?').slice(1).join('?')).size) {
+        json(400, { error: 'invalid bot status query' }); return;
+      }
+      try { json(200, await botStatus(options)); }
+      catch { json(503, { error: 'bot status unavailable' }); }
+      return;
+    }
+    if (pathname === BOT_STATS_PATH) {
+      const search = (req.url ?? '').split('?').slice(1).join('?');
+      try { botQuery(search); }
+      catch { json(400, { error: 'invalid stats query' }); return; }
+      try { json(200, await botMatchups(root, search, options), { 'Cache-Control': REVALIDATE }); }
+      catch { json(503, { error: 'bot statistics unavailable' }); }
+      return;
+    }
     if (pathname === DECK_STATS_PATH) {
       const search = (req.url ?? '').split('?').slice(1).join('?');
       try { deckQuery(search); }

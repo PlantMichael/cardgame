@@ -97,11 +97,11 @@ func _handle_frame(c: Client, line: String) -> void:
 			_drop_client(c)
 			return
 		c.authed = true
-		_reply(c, rid, {"ok": true, "rules_version": RulesVersion.RULES_VERSION, "capacity": MAX_MATCHES})
+		_reply(c, rid, {"ok": true, "rules_version": RulesVersion.RULES_VERSION, "engine_version": AIController.POLICY_VERSION, "capacity": MAX_MATCHES})
 		return
 	match op:
 		"hello":
-			_reply(c, rid, {"ok": true, "rules_version": RulesVersion.RULES_VERSION, "capacity": MAX_MATCHES})
+			_reply(c, rid, {"ok": true, "rules_version": RulesVersion.RULES_VERSION, "engine_version": AIController.POLICY_VERSION, "capacity": MAX_MATCHES})
 		"create":
 			_reply(c, rid, _op_create(msg))
 		"command":

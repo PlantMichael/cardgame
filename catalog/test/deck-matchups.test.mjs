@@ -52,6 +52,9 @@ test('deck proxy projects the public contract and rejects malformed or unavailab
       if (mode === 'play_bound') data.playStats.cards[0].plays = 1000001;
     }
     if (mode === 'counts') data.decks[0].wins = 2;
+    if (mode === 'zero_testers' || mode === 'negative_testers') {
+      for (const row of [...data.decks, ...data.matchups]) row.testers = mode === 'zero_testers' ? 0 : -1;
+    }
     if (mode === 'card') data.decks[0].cards[0].id = 'unpublished_card';
     if (mode === 'identity') data.decks[0].id = 'wrong_hash';
     if (mode === 'reference') data.matchups[0].opponentDeckId = 'missing';
@@ -95,6 +98,12 @@ test('deck proxy projects the public contract and rejects malformed or unavailab
   assert.deepEqual(combined.playStats, { totalSeats: 2, trackedSeats: 1, completeSeats: 0, cards: [{ id: 'g_001', plays: 2 }] });
   assert.equal(combined.methodology.source, 'mixed');
   assert.equal(combined.methodology.rolesSeparated, false);
+  mode = 'zero_testers';
+  const botOnly = await (await fetch(combinedUrl)).json();
+  assert.ok(botOnly.decks.every(d => d.testers === 0) && botOnly.matchups.every(m => m.testers === 0));
+  assert.equal((await fetch(url)).status, 503, 'zero human testers is valid only for combined records');
+  mode = 'negative_testers';
+  assert.equal((await fetch(combinedUrl)).status, 503);
   for (mode of ['coverage', 'play_count', 'play_card', 'play_duplicate', 'play_bound']) {
     assert.equal((await fetch(combinedUrl)).status, 503, mode);
   }

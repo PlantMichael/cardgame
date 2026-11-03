@@ -37,7 +37,11 @@ function go(patch, { replace = false } = {}) {
   if (needsFetch()) fetchCohort(); else render();
   if (!replace) window.scrollTo({ top: 0 });
 }
-const link = (patch, text, props = {}) => h('a', { href: here({ ...route, ...patch }), data: { statsLink: '1' }, ...props }, text);
+const link = (patch, text, props = {}) => {
+  const next = { ...route, ...patch };
+  if (patch.view === 'explorer' && route.view !== 'explorer') next.min = patch.min ?? S.DEFAULT_MIN_GAMES;
+  return h('a', { href: here(next), data: { statsLink: '1' }, ...props }, text);
+};
 
 document.addEventListener('click', (e) => {
   const a = e.target.closest?.('a[data-stats-link]');
@@ -86,7 +90,7 @@ async function fetchCohort(force = false) {
 }
 function setLoaded(mySeq, key, demo, snapshot) {
   if (mySeq !== seq) return;
-  load = { status: snapshot.games === 0 ? 'empty' : 'ok', snapshot, index: S.indexSnapshot(snapshot), code: 200, key, demo };
+  load = { status: snapshot.games === 0 ? 'empty' : 'ok', snapshot, index: S.indexSnapshot(snapshot, catalog.cards), code: 200, key, demo };
   render();
 }
 function fail(mySeq, key, demo, code) {
@@ -105,6 +109,7 @@ async function fetchCatalog() {
     if (!Array.isArray(body.cards)) throw new Error('shape');
     catalog = { status: 'ok', cards: S.cardsById(body), list: body.cards };
   } catch { catalog = { status: 'failed', cards: new Map(), list: [] }; }
+  if (load.snapshot) load.index = S.indexSnapshot(load.snapshot, catalog.cards);
   render();
 }
 
@@ -130,6 +135,8 @@ function featuredCards(deck) {
   return [...deck.cards].sort((a, b) => (catalog.cards.get(b.id)?.manaCost ?? -1) - (catalog.cards.get(a.id)?.manaCost ?? -1) || a.id.localeCompare(b.id))
     .slice(0, 2).map(({ id }) => cardName(id)).join(' · ');
 }
+const deckHint = deck => `${load.index.variants.has(deck.id) ? `List ${load.index.variants.get(deck.id)} · ` : ''}${featuredCards(deck)}`;
+const exactDeckName = deck => `${deckName(deck)} · ${deckHint(deck)}`;
 function curveBars(deck) {
   const buckets = S.manaCurve(deck, catalog.cards);
   const max = Math.max(1, ...buckets);
@@ -168,15 +175,15 @@ function resolvedLine() {
     h('p', { class: 'resolved' }, `${S.MODES[f.mode] || f.mode} · Last ${f.days} days · ${load.snapshot.games} game${load.snapshot.games === 1 ? '' : 's'} recorded`),
     h('details', { class: 'stats-disclosure' }, h('summary', {}, 'About these results'),
       h('p', { class: 'foot' }, parts.join(' · ')),
-      h('p', { class: 'foot' }, m.source === 'mixed' ? 'Combined playtest results from AI and player games. AI results are client-reported; player results are verified by the game server.' : m.source === 'server_verified' ? 'Results verified by the game server.' : 'These results are reported by the game client, rather than verified by the server.'),
-      h('p', { class: 'foot' }, `${seatGames} deck appearances: each game contributes one result to each deck that played. Repeat games by the same players can skew results. These numbers are a playtest guide, not proof that a deck is balanced.`),
-      h('p', { class: 'foot' }, `Updated ${when(load.snapshot.generatedAt)}. Deck names describe factions, with numbers to separate different card lists in these results. Saved player deck names are not published.`)));
+      h('p', { class: 'foot' }, m.source === 'mixed' ? 'Combined playtest results include human games and automated ranked bots. Local AI results are client-reported; ranked player and bot games are verified by the game server.' : m.source === 'server_verified' ? 'Results verified by the game server.' : 'These results are reported by the game client, rather than verified by the server.'),
+      h('p', { class: 'foot' }, `${seatGames} deck appearances: each game contributes one result to each deck that played. Repeated human or bot games can dominate the sample. These numbers are a playtest guide, not proof that a deck is balanced.`),
+      h('p', { class: 'foot' }, `Updated ${when(load.snapshot.generatedAt)}. Deck names estimate archetypes from the cards and mana curve. Lists with the same name keep separate results; featured cards and list numbers distinguish them in these results. List numbers may change with the selected results. Missing card data shows Unclassified. Saved player deck names are not published.`)));
 }
 
 // ---- states ------------------------------------------------------------------------------------
 function statusPanel() {
   if (load.status === 'loading') return h('p', { class: 'state', role: 'status' }, 'Loading results…');
-  if (load.status === 'bad') return h('div', { class: 'state error', role: 'alert' }, h('p', {}, 'The server rejected these filters (400). Reset them to continue.'), link({ cohort: S.DEFAULT_COHORT, view: 'explorer', opp: '' }, 'Reset filters', { class: 'button small' }));
+  if (load.status === 'bad') return h('div', { class: 'state error', role: 'alert' }, h('p', {}, 'The server rejected these filters (400). Reset them to continue.'), link({ cohort: S.DEFAULT_COHORT, view: 'explorer', min: S.DEFAULT_MIN_GAMES, opp: '' }, 'Reset filters', { class: 'button small' }));
   if (load.status === 'unavailable') {
     const why = load.code === 404 ? 'The deck results are not available on this server yet.'
       : load.code === 503 ? 'The statistics service is unavailable or the request was too large (503). This does not mean no games were played.'
@@ -197,7 +204,7 @@ function explorer() {
   const rows = S.sortDecks(S.filterDecks(snap, catalog.cards, route, load.index.labels), route.sort, route.dir);
   const factions = ['GREEN', 'CRIMSON', 'BLACK', 'ORANGE', 'TEAL'];
   const patch = (p) => go(p, { replace: true });
-  const advancedActive = (route.cohort.mode !== 'all' && route.who !== 'human') || route.x || route.min > 1 || !['matches', 'winRate'].includes(route.sort);
+  const advancedActive = (route.cohort.mode !== 'all' && route.who !== 'human') || route.x || route.min !== S.DEFAULT_MIN_GAMES || !['matches', 'winRate'].includes(route.sort);
   const filters = h('div', { class: 'filter-row simple-filters' },
     h('label', { class: 'cohort-field' }, h('span', {}, 'Faction'), h('select', { onchange: (e) => patch({ faction: e.target.value }) },
       option('', 'Any faction', route.faction), factions.map((f) => option(f, S.FACTION_NAMES[f], route.faction)))),
@@ -223,13 +230,13 @@ function explorer() {
     h('caption', { class: 'sr-only' }, 'Deck results'),
     h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, 'Deck'), th('winRate', 'Win rate'), th('matches', 'Games played'))),
     h('tbody', {}, rows.map((d) => h('tr', {},
-      h('th', { scope: 'row' }, deckLink(d), h('small', { class: 'deck-preview' }, featuredCards(d)),
+      h('th', { scope: 'row' }, deckLink(d), h('small', { class: 'deck-preview' }, deckHint(d)),
         small(d.matches) ? h('small', { class: 'sample-note' }, sampleNote(d)) : null),
       h('td', { class: 'num strong' }, S.pct(d.winRate)), sampleCell(d))))));
   return h('section', {},
     filters, moreFilters,
     rows.length ? table : h('p', { class: 'state', role: 'status' }, 'No decks match. Try another faction or clear your search and extra filters.'),
-    h('p', { class: 'foot', role: 'status' }, rows.length + ' ' + (route.who === 'combined' ? '' : route.who === 'human' ? 'player ' : 'AI ') + 'deck' + (rows.length === 1 ? '' : 's') + ' shown.'));
+    h('p', { class: 'foot', role: 'status' }, rows.length + ' ' + (route.who === 'combined' ? '' : route.who === 'human' ? 'player ' : 'AI ') + 'deck' + (rows.length === 1 ? '' : 's') + ` shown. Minimum ${route.min} recorded game${route.min === 1 ? '' : 's'} per deck.`));
 }
 
 // ---- deck detail ------------------------------------------------------------------------------------
@@ -268,6 +275,7 @@ function deckDetail() {
       const on = selected && opponent && opponent.id === selected.id && opponent.role === selected.role;
       return h('tr', { class: on ? 'selected' : '' },
         h('th', { scope: 'row' }, opponent ? link({ opp: opponent.id, oppRole: opponent.role }, `${route.cohort.mode === 'all' ? '' : roleWord(opponent.role)+' · '}${deckName(opponent)}`, { ariaCurrent: on ? 'true' : undefined, class: 'deck-link' }) : `${roleWord(matchup.opponentRole)} deck`,
+          opponent ? h('small', { class: 'deck-preview' }, deckHint(opponent)) : null,
           small(matchup.matches) ? h('small', { class: 'sample-note' }, sampleNote(matchup)) : null),
         h('td', { class: 'num strong' }, S.pct(matchup.winRate)), sampleCell(matchup));
     }))));
@@ -279,6 +287,7 @@ function deckDetail() {
       : null);
   return h('section', {}, back,
     h('h2', {}, deckName(deck)),
+    h('p', { class: 'foot' }, deckHint(deck)),
     h('p', { class: 'lede' }, `${S.cardCount(deck)} cards · Played by ${deck.role === 'combined' ? 'players and AI in the combined results' : deck.role === 'ai' ? 'AI' : 'players'}`),
     h('dl', { class: 'stat-grid' },
       statBlock('Win rate', S.pct(deck.winRate), `${deck.wins} wins · ${deck.losses} losses`),
@@ -315,6 +324,7 @@ function matrixView() {
     h('thead',{},h('tr',{},...['Opponent','Win rate','Games played'].map(t=>h('th',{scope:'col'},t)))),
     h('tbody',{},opponents.map(({matchup,opponent})=>h('tr',{class:selected?.id===opponent?.id && selected?.role===opponent?.role?'selected':''},
       h('th',{scope:'row'},opponent ? link({deck:deck.id,role:deck.role,opp:opponent.id,oppRole:opponent.role},opponentName(opponent),{class:'deck-link'}) : 'Unknown deck',
+        opponent ? h('small',{class:'deck-preview'},deckHint(opponent)) : null,
         small(matchup.matches)?h('small',{class:'sample-note'},sampleNote(matchup)):null),
       h('td',{class:'num strong'},S.pct(matchup.winRate)),sampleCell(matchup))))));
   const detail = deck && selected ? h('div',{class:'matrix-detail',role:'region',ariaLabel:'Selected matchup'},
@@ -332,17 +342,17 @@ function matrixView() {
     h('div',{class:'filter-row'},h('label',{class:'cohort-field'},h('span',{},'Deck rows'),gridSize('rows',route.rows)),
       h('label',{class:'cohort-field'},h('span',{},'Opponent columns'),gridSize('cols',route.cols))),
     h('div',{class:'table-wrap'},h('table',{class:'matrix'},h('caption',{class:'sr-only'},'Deck comparison grid'),
-      h('thead',{},h('tr',{},h('td',{}),colDecks.map(d=>h('th',{scope:'col'},opponentName(d))))),
-      h('tbody',{},rowDecks.map((d,r)=>h('tr',{},h('th',{scope:'row'},deckName(d)),colDecks.map((enemy,c)=>{
+      h('thead',{},h('tr',{},h('td',{}),colDecks.map(d=>h('th',{scope:'col'},opponentName(d),h('small',{class:'deck-preview'},deckHint(d)))))),
+      h('tbody',{},rowDecks.map((d,r)=>h('tr',{},h('th',{scope:'row'},deckName(d),h('small',{class:'deck-preview'},deckHint(d))),colDecks.map((enemy,c)=>{
         const match=grid[r][c]; const on=deck?.id===d.id && selected?.id===enemy.id && selected?.role===enemy.role;
         return h('td',{},h('button',{type:'button',class:'cell heat-'+S.heat(match?.winRate)+(match?'':' none')+(on?' on':''),ariaPressed:String(on),
-          ariaLabel:deckName(d)+' against '+opponentName(enemy)+': '+(match?S.pct(match.winRate)+', '+match.matches+' games':'no games recorded'),
+          ariaLabel:exactDeckName(d)+' against '+opponentName(enemy)+' · '+deckHint(enemy)+': '+(match?S.pct(match.winRate)+', '+match.matches+' games':'no games recorded'),
           onclick:()=>go({deck:d.id,role:d.role,opp:enemy.id,oppRole:enemy.role},{replace:true})},
           h('b',{},match?S.pct(match.winRate):'No games'),match?h('small',{},match.matches+' games'):null));
       })))))));
   return h('section',{},h('h2',{class:'sr-only'},'Deck matchups'),
     h('div',{class:'filter-row'},h('label',{class:'cohort-field matchup-picker'},h('span',{},'Your deck'),
-      h('select',{onchange:e=>go({deck:e.target.value,role:ownRole,opp:''})},option('','Choose a deck',deck?.id||''),choices.map(d=>option(d.id,deckName(d),deck?.id))))),
+      h('select',{onchange:e=>go({deck:e.target.value,role:ownRole,opp:''})},option('','Choose a deck',deck?.id||''),choices.map(d=>option(d.id,exactDeckName(d),deck?.id))))),
     deck ? (opponents.length?table:h('p',{class:'state'},'No opponent results for this deck yet.')) : h('p',{class:'state'},'Choose a deck with results for these filters.'),
     detail,comparison);
 }
@@ -354,7 +364,7 @@ function cardsView() {
   const ids = catalog.list.filter(c=>c.collectible && !c.isToken).map(c=>c.id);
   const sort = S.CARD_SORT_KEYS.includes(route.sort)?route.sort:'timesPlayed';
   const rows = S.sortCardMetrics(S.cardMetrics(snap,ids).map(row=>({...row,name:cardName(row.id)})),sort,route.dir)
-    .filter(row=>catalog.cards.has(row.id) && (!route.faction||catalog.cards.get(row.id).color===route.faction) && (!q||row.name.toLowerCase().includes(q)));
+    .filter(row=>catalog.cards.has(row.id) && (route.showGenerics||catalog.cards.get(row.id).color!=='GENERIC') && (!route.faction||catalog.cards.get(row.id).color===route.faction) && (!q||row.name.toLowerCase().includes(q)));
   const coverage = snap.playStats || {totalSeats:snap.games*2,trackedSeats:0,completeSeats:0};
   const heading = (key,label,help)=>h('th',{scope:'col',ariaSort:sort===key?(route.dir==='asc'?'ascending':'descending'):'none'},
     h('button',{type:'button',class:'sort',title:help,onclick:()=>go({sort:key,dir:sort===key&&route.dir==='desc'?'asc':'desc'},{replace:true})},label,sort===key?(route.dir==='asc'?' ▲':' ▼'):''));
@@ -362,6 +372,10 @@ function cardsView() {
     h('div',{class:'filter-row simple-filters'},
       h('label',{class:'cohort-field'},h('span',{},'Faction'),h('select',{onchange:e=>go({faction:e.target.value},{replace:true})},option('','Any faction',route.faction),
         ['GREEN','CRIMSON','BLACK','ORANGE','TEAL','GENERIC'].map(f=>option(f,S.FACTION_NAMES[f],route.faction)))),
+      h('label',{class:'filter-check'},h('input',{id:'stats-show-generics',type:'checkbox',checked:route.showGenerics,onchange:e=>{
+        go({showGenerics:e.target.checked},{replace:true});
+        document.getElementById('stats-show-generics')?.focus({preventScroll:true});
+      }}),'Show generic cards'),
       h('form',{class:'deck-search',onsubmit:e=>{e.preventDefault();go({q:e.currentTarget.elements.q.value},{replace:true});}},
         h('label',{class:'cohort-field'},h('span',{},'Find a card'),h('input',{name:'q',type:'search',value:route.q,placeholder:'Card name'})),
         h('button',{type:'submit',class:'button small'},h('span',{},'Search')))),
@@ -374,7 +388,7 @@ function cardsView() {
       h('p',{class:'foot'},coverage.completeSeats+' of '+coverage.totalSeats+' deck results have complete play tracking; '+(coverage.trackedSeats-coverage.completeSeats)+' have partial tracking. Missing history is not counted as zero.')),
     catalog.status==='failed'?h('div',{class:'state error'},h('p',{},'Could not load card names.'),h('button',{type:'button',class:'button small',onclick:fetchCatalog},'Retry'))
       :catalog.status==='loading'?h('p',{class:'state',role:'status'},'Loading card names…')
-      :!rows.length?h('p',{class:'state',role:'status'},'No cards match. Clear your search or choose another faction.')
+      :!rows.length?h('p',{class:'state',role:'status'},'No cards match. Adjust your search, faction or generic card setting.')
       :h('div',{class:'table-wrap'},h('table',{class:'stats-table card-statistics'},h('caption',{class:'sr-only'},'Card statistics'),
         h('thead',{},h('tr',{},heading('name','Card','Sort by card name'),heading('inDecks','In % of decks','Share of deck appearances containing this card'),
           heading('averageCopies','Avg. copies','Average copies among decks containing the card'),heading('deckWinRate','Deck win rate','Win rate of decks containing the card'),heading('timesPlayed','Times played','Actual recorded plays; older history can be incomplete'))),
@@ -392,7 +406,8 @@ function tabs() {
   const items = [['explorer', 'Decks'], ['matrix', 'Matchups'], ['cards', 'Cards']];
   const current = route.view === 'deck' ? 'explorer' : route.view;
   return h('nav', { class: 'stats-tabs', ariaLabel: 'Statistics views' }, items.map(([view, label]) =>
-    link({ view, deck: '', opp: '', q:'', sort:view==='cards'?'timesPlayed':'matches', dir:'desc' }, label, { ariaCurrent: current === view ? 'page' : undefined })));
+    link({ view, deck: '', opp: '', q:'', sort:view==='cards'?'timesPlayed':'matches', dir:'desc' }, label, { ariaCurrent: current === view ? 'page' : undefined })),
+    h('a', { href: '/stats/bots/' }, 'Check on the bots'));
 }
 
 function render() {
@@ -400,9 +415,9 @@ function render() {
   const body = [];
   if (route.demo) body.push(h('p', { class: 'demo-banner', role: 'note' }, 'DEMO DATA: synthetic results for previewing the layout. These are not recorded games.', ' ', link({ demo: false }, 'Leave demo', { class: 'text-link' })));
   const heading = route.view === 'cards' ? 'Card statistics' : route.view === 'matrix' ? 'Deck matchups' : 'Deck results';
-  const intro = route.view === 'cards' ? 'See card popularity, deck win rates and recorded plays.' : route.view === 'matrix' ? 'Pick a deck to see which opponents it beats.' : 'See which decks are winning. Pick one to see its cards and what it beats.';
+  const intro = route.view === 'cards' ? 'See card popularity, deck win rates and recorded plays.' : route.view === 'matrix' ? 'Pick a deck to see which opponents it beats.' : null;
   body.push(h('header', { class: 'stats-head' }, h('p', { class: 'eyebrow' }, 'Playtest statistics'), h('h1', {}, heading),
-    h('p', { class: 'lede' }, intro)));
+    intro ? h('p', { class: 'lede' }, intro) : null));
   body.push(tabs());
   body.push(h('div', { class: 'stats-toolbar' }, resolvedLine(), cohortBar()));
   const status = statusPanel();

@@ -6,11 +6,13 @@ const path = require('node:path');
 const WebSocket = require('ws');
 const { SETTLING_REASONS } = require('./authoritative/settle');
 const { DECK_STATS_PATH, parseQuery, createDeckMatchups } = require('./deck_matchups');
+const { BOT_STATS_PATH, botQuery, createBotStats } = require('./bot_stats');
+const { BOT_STATUS_PATH, createBotStatus } = require('./bot_status');
 
 const STATS_PATH = '/data/stats/card-winrates.json';
 const PUBLIC_ROOT = path.join(__dirname, '..', 'catalog', 'public');
 const METHODOLOGY = {
-  metric: 'starting_deck_inclusion', modes: ['ranked_ai', 'authoritative_pvp'],
+  metric: 'starting_deck_inclusion', modes: ['ranked_ai', 'authoritative_pvp', 'ranked_bots'],
   aiSeats: 'both', copies: 'once_per_player_game', rulesVersions: 'combined',
   minSample: 1, preliminary: true,
   privacy: 'No raw identities or deck lists. Small sample changes may reveal deck inclusion or outcomes.',
@@ -33,8 +35,11 @@ async function aggregate(pool, root, now) {
       CASE WHEN s.player_id = m.seat_a_player_id THEN m.deck_a
            WHEN s.player_id = m.seat_b_player_id THEN m.deck_b END AS deck
     FROM ranked_settlements s JOIN ranked_matches m USING (match_id)
-    WHERE s.ai_match IS NULL AND m.mode = 'authoritative' AND m.status = 'finished'
-      AND m.winner_seat IN ('a', 'b') AND m.end_reason = ANY($2::text[])` : '';
+    JOIN ranked_settlements sa ON sa.match_id=m.match_id AND sa.player_id=m.seat_a_player_id AND sa.ai_match IS NULL
+    JOIN ranked_settlements sb ON sb.match_id=m.match_id AND sb.player_id=m.seat_b_player_id AND sb.ai_match IS NULL
+    WHERE s.ai_match IS NULL AND m.mode IN ('authoritative','ranked_bots') AND m.status = 'finished'
+      AND m.winner_seat IN ('a', 'b') AND m.end_reason = ANY($2::text[])
+      AND sa.won=(m.winner_seat='a') AND sb.won=(m.winner_seat='b')` : '';
   const { rows } = await pool.query(`WITH perspectives AS (
     SELECT s.match_id, s.player_id, seat.side, seat.won, seat.deck
     FROM ranked_settlements s
@@ -62,8 +67,10 @@ async function aggregate(pool, root, now) {
 }
 
 // HTTP and websocket upgrades use the same listener and existing relay port.
-function createRelayServer({ pool, publicRoot = PUBLIC_ROOT, now = Date.now }) {
+function createRelayServer({ pool, publicRoot = PUBLIC_ROOT, now = Date.now, botActivity }) {
   const deckMatchups = createDeckMatchups({ pool, publicRoot, now });
+  const botStats = createBotStats({ pool, publicRoot, now });
+  const botStatus = createBotStatus({ pool, activity: botActivity, now });
   let cached, expires = 0, refreshing;
   function snapshot() {
     if (cached && now() < expires) return Promise.resolve(cached);
@@ -74,7 +81,7 @@ function createRelayServer({ pool, publicRoot = PUBLIC_ROOT, now = Date.now }) {
   }
   const server = http.createServer(async (req, res) => {
     const pathname = (req.url ?? '/').split('?')[0];
-    if (pathname !== STATS_PATH && pathname !== DECK_STATS_PATH) {
+    if (![STATS_PATH, DECK_STATS_PATH, BOT_STATS_PATH, BOT_STATUS_PATH].includes(pathname)) {
       res.writeHead(426, { 'Content-Length': 16, 'Content-Type': 'text/plain' });
       res.end('Upgrade Required'); return;
     }
@@ -90,6 +97,22 @@ function createRelayServer({ pool, publicRoot = PUBLIC_ROOT, now = Date.now }) {
     }
     if (!['GET', 'HEAD'].includes(req.method)) {
       send(405, { error: 'method not allowed' }, { Allow: 'GET, HEAD, OPTIONS' }); return;
+    }
+    if (pathname === BOT_STATUS_PATH) {
+      if (new URLSearchParams((req.url ?? '').split('?').slice(1).join('?')).size) {
+        send(400, { error: 'invalid bot status query' }); return;
+      }
+      try { send(200, await botStatus()); }
+      catch { send(503, { error: 'bot status unavailable' }); }
+      return;
+    }
+    if (pathname === BOT_STATS_PATH) {
+      let query;
+      try { query = botQuery((req.url ?? '').split('?').slice(1).join('?')); }
+      catch { send(400, { error: 'invalid stats query' }); return; }
+      try { send(200, await botStats(query), { 'Cache-Control': 'no-cache' }); }
+      catch { send(503, { error: 'bot statistics unavailable' }); }
+      return;
     }
     if (pathname === DECK_STATS_PATH) {
       let query;

@@ -29,9 +29,9 @@ function result(row) {
   return { matches: row.matches, wins: row.wins, losses: row.losses, winRate: row.matches ? row.wins / row.matches : null };
 }
 
-function statistics(row) {
+function statistics(row, allowNoHumans = false) {
   const base = result(row);
-  if (!base.matches || !count(row.testers) || !row.testers || row.testers > 2 * base.matches ||
+  if (!base.matches || !count(row.testers) || (!allowNoHumans && !row.testers) || row.testers > 2 * base.matches ||
       !count(row.turnSamples) || row.turnSamples > base.matches ||
       (row.turnSamples ? !Number.isFinite(row.averageTurns) || row.averageTurns <= 0 || row.averageTurns > 1000000 : row.averageTurns !== null)) fail();
   const first = result(row.first), second = result(row.second), unknownFirst = result(row.unknownFirst);
@@ -43,7 +43,7 @@ function statistics(row) {
     testers: row.testers, averageTurns: row.averageTurns, turnSamples: row.turnSamples, first, second, unknownFirst };
 }
 
-function composition(row, catalog) {
+export function composition(row, catalog) {
   if (!Array.isArray(row.cards) || !row.cards.length || row.cards.length > 40) fail();
   const pairs = [], factions = new Set();
   let total = 0, previous = '';
@@ -99,7 +99,7 @@ export function projectDeckMatchups(data, catalog, query) {
   const byKey = new Map();
   const decks = data.decks.map(row => {
     if (!(mode === 'all' ? ['combined'] : mode === 'authoritative_pvp' ? ['human'] : ['human', 'ai']).includes(row.role)) fail();
-    const deck = { ...composition(row, catalog), role: row.role, ...statistics(row) };
+    const deck = { ...composition(row, catalog), role: row.role, ...statistics(row, mode === 'all') };
     const key = `${deck.id}/${deck.role}`;
     if (byKey.has(key)) fail();
     byKey.set(key, { ...deck, pairMatches: 0, pairWins: 0 });
@@ -111,7 +111,7 @@ export function projectDeckMatchups(data, catalog, query) {
     if (!own || !enemy || (mode === 'ranked_ai' && row.role === row.opponentRole)) fail();
     const key = `${row.deckId}/${row.role}/${row.opponentDeckId}/${row.opponentRole}`;
     if (pairs.has(key)) fail();
-    const stats = statistics(row);
+    const stats = statistics(row, mode === 'all');
     pairs.set(key, { ...row, ...stats });
     own.pairMatches += stats.matches; own.pairWins += stats.wins;
     return { deckId: row.deckId, opponentDeckId: row.opponentDeckId, role: row.role, opponentRole: row.opponentRole, ...stats };

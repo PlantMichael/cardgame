@@ -13,6 +13,9 @@ const { Pool } = require('pg');
 const WebSocket = require('ws');
 const { normalizeAIRecord } = require('../ranked_ai_record');
 const { initLegacySchema } = require('../schema_legacy');
+const { initSchema } = require('../authoritative/schema');
+const { provisionRankedBots } = require('../ranked_bot_accounts');
+const { resetMatchData } = require('../reset_match_data');
 const { loadCards } = require('../authoritative/decks');
 const { disposableDatabase, PROJECT_DIR, killTree } = require('./helpers');
 
@@ -21,7 +24,7 @@ const summary = () => ({ player_deck: ['g_001', 'g_002'], opponent_deck: ['cr_00
   ai_level: 3, turns: 7, rules_version: 1 });
 
 test('AI summaries bound input and project server-owned provenance', () => {
-  const input = { ...summary(), mode: 'authoritative', source: 'server', player_id: 999, verified: true };
+  const input = { ...summary(), mode: 'authoritative', source: 'server', player_id: 999, verified: true, bot_profile: { id: 'io' } };
   const record = normalizeAIRecord(input, 'ai_1700000000_42', cards);
   assert.deepEqual(record, { ...summary(), mode: 'ranked_ai', source: 'client_reported' });
   input.player_deck.pop();
@@ -128,19 +131,26 @@ test('real relay records AI summaries atomically and preserves legacy settlement
   assert.equal(fresh.rows[0].ai_match, null, 'new schema accepts legacy records');
   // Recreate the old shape with a populated row, then exercise the actual boot upgrade twice.
   await pool.query('ALTER TABLE ranked_settlements DROP COLUMN ai_match');
+  await pool.query('DROP TABLE ranked_result_tombstones');
   await initLegacySchema(pool);
   await initLegacySchema(pool);
+  assert.equal((await pool.query('SELECT count(*) AS n FROM ranked_result_tombstones')).rows[0].n, '0', 'populated legacy upgrade adds empty replay protection without altering results');
   assert.deepEqual((await pool.query('SELECT won, ai_match FROM ranked_settlements')).rows,
     [{ won: false, ai_match: null }], 'upgrade preserves existing results and is repeatable');
 
   const port = await freePort();
   let log = '';
-  relay = spawn(process.execPath, [path.join(PROJECT_DIR, 'server', 'relay.js')], {
+  const launchRelay = () => {
+    log = '';
+    const child = spawn(process.execPath, [path.join(PROJECT_DIR, 'server', 'relay.js')], {
     env: { ...process.env, DATABASE_URL: isolatedUrl.toString(), PORT: String(port), RANKED_AUTHORITATIVE: '0' },
     stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  relay.stdout.on('data', (data) => { log += data; });
-  relay.stderr.on('data', (data) => { log += data; });
+    });
+    child.stdout.on('data', (data) => { log += data; });
+    child.stderr.on('data', (data) => { log += data; });
+    return child;
+  };
+  relay = launchRelay();
   const url = `ws://127.0.0.1:${port}`;
   let ws;
   for (let attempt = 0; attempt < 100; attempt++) {
@@ -241,4 +251,45 @@ test('real relay records AI summaries atomically and preserves legacy settlement
   } else {
     t.diagnostic('Godot producer test not run: set GODOT_BIN to enable it');
   }
+
+  // Real maintenance boundary: preserve accounts/decks/rewards and replay keys,
+  // remove all public history, then retry an already awarded human outbox entry.
+  await initSchema(pool); await provisionRankedBots(pool);
+  await pool.query(`UPDATE players SET currency=123,dust=45,rank_bracket=9,rank_lp=67,rating=1700,
+    ranked_wins=9,ranked_losses=4,ranked_win_streak=2 WHERE id IN (SELECT player_id FROM ranked_bot_accounts)`);
+  const humanBefore = (await pool.query('SELECT * FROM players WHERE id=$1', [player])).rows[0];
+  const dry = await resetMatchData(pool);
+  assert.equal(dry.applied, false); assert.ok(dry.before.ranked_settlements > 0);
+  assert.equal(Number((await pool.query('SELECT count(*) AS n FROM ranked_settlements')).rows[0].n), dry.before.ranked_settlements, 'default preview preserves recorded history');
+  const lock = await pool.connect(); await lock.query('SELECT pg_advisory_lock(731204,2)');
+  await assert.rejects(resetMatchData(pool, { apply: true }), /Stop all bot workers/);
+  await lock.query('SELECT pg_advisory_unlock(731204,2)'); lock.release();
+  for (const socket of sockets) socket.terminate();
+  const stopped = once(relay, 'exit'); relay.kill(); await stopped;
+  const reset = await resetMatchData(pool, { apply: true });
+  assert.equal(reset.preserved, true); assert.equal(reset.botsReset, 4);
+  assert.ok(Object.values(reset.after).every(n => n === 0));
+  assert.deepEqual((await pool.query('SELECT * FROM players WHERE id=$1', [player])).rows[0], humanBefore);
+  assert.ok((await pool.query(`SELECT * FROM players WHERE id IN (SELECT player_id FROM ranked_bot_accounts)`)).rows
+    .every(p => p.rank_bracket === 0 && p.rank_lp === 0 && p.rating === 1000 && p.ranked_wins === 0 && p.currency === 123 && p.dust === 45));
+  relay = launchRelay();
+  let afterReset;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (relay.exitCode !== null) throw new Error(log);
+    try { afterReset = await openSocket(url); break; } catch { await new Promise(r => setTimeout(r,100)); }
+  }
+  assert.ok(afterReset); sockets.push(afterReset);
+  const oldRetry = await request(afterReset, report);
+  assert.equal(oldRetry.success, true); assert.equal(oldRetry.replayed, true, 'existing Auth outboxes can clear the acknowledged old report');
+  assert.deepEqual((await pool.query('SELECT * FROM players WHERE id=$1', [player])).rows[0], humanBefore);
+  assert.equal((await pool.query('SELECT count(*) AS n FROM ranked_settlements')).rows[0].n, '0');
+  assert.equal((await request(afterReset, { ...report, match_id: 'ai_1800000000_123' })).success, true);
+  assert.equal((await pool.query('SELECT count(*) AS n FROM ranked_settlements')).rows[0].n, '1', 'fresh reports remain eligible');
+  await pool.query(`CREATE FUNCTION corrupt_reset_reward() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN IF NEW.username='Io' THEN NEW.currency := NEW.currency+1; END IF; RETURN NEW; END $$;
+    CREATE TRIGGER corrupt_reset_reward BEFORE UPDATE ON players FOR EACH ROW EXECUTE FUNCTION corrupt_reset_reward()`);
+  await assert.rejects(resetMatchData(pool, { apply: true }), /preservation check failed/);
+  assert.equal((await pool.query('SELECT count(*) AS n FROM ranked_settlements')).rows[0].n, '1', 'failed preservation rolls history deletion back');
+  assert.equal((await pool.query("SELECT count(*) AS n FROM ranked_result_tombstones WHERE match_id='ai_1800000000_123'")).rows[0].n, '0', 'failed reset rolls new replay keys back too');
+  assert.equal((await pool.query("SELECT currency FROM players WHERE username='Io'")).rows[0].currency, 123);
 });

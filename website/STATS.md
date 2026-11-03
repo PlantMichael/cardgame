@@ -13,9 +13,19 @@
 
 The cohort bar sends only `mode, days, rulesVersion, aiVersion, aiLevel` to the server. Switching to PvP removes the AI keys from the address and the request. Results are shown with the resolved `filters` from the response, not the requested "latest". A newer selection supersedes a slower older request, successful snapshots are reused for 60 seconds, and failures are shown as unavailable, never as zero games.
 
-Default mode=all pools eligible ranked-AI/player games and controller roles. The game-type/AI controls are removed. Date/rules controls are collapsed under “Date range and game version”; a short line identifies the resolved dataset and total games. Existing filtered API URLs and role keys remain supported. “About these results” retains source, version and sampling limitations. Public results do not contain saved player deck names: labels use the faction plus a number when distinct lists share it, with two high-cost card names beneath each list row for recognition. The same list has the same label in both roles. Numbers are local to the returned results and can change when the selected data changes; links continue to use the exact ID and role. No lists or outcomes are merged by their display labels.
+The deck leaderboard defaults to at least **five recorded games per exact list** in the selected dataset. The results count shows the current minimum. Under More filters, lower “At least this many games” to 1 (`min=1` in shared links) to inspect smaller samples. This is a display filter: all records, card metrics, direct deck details and matchup views remain available.
+
+Default mode=all pools eligible ranked-AI, human PvP and automated ranked-bot games and controller roles. The bots' existing results contribute to deck records, matchups and card metrics without backfilling or changing stored versions. “Players recorded” counts distinct humans, so a bot-only record can show zero. The game-type/AI controls are removed. Date/rules controls are collapsed under “Date range and game version”; a short line identifies the resolved dataset and total games. Existing filtered API URLs and role keys remain supported. “About these results” explains the mixed sources and that repeated bot games can dominate samples. Public results do not contain saved player deck names: labels use faction plus an estimated archetype, such as Gundari Aggro or Junklings Tempo, with two high-cost card names beneath each list row for recognition. The same composition has the same label in both roles and across selected cohorts; labels never depend on a bot's personality or win rate. Lists sharing a label remain separate by exact ID and role. Isolated non-ranked simulations remain separate.
+
+`stats-core.mjs` estimates Aggro, Combo, Control, Tempo or Midrange from copy-weighted printed costs, creature count and aggression/defense or complementary ability packages. These describe composition, not observed play or the original random draft choice, which historical results do not store. It uses the public catalog's existing abilities and printed stratagem descriptions; no new game/API metadata is required. Missing printed cards yield Unclassified, and the catalog arriving after results updates labels/search. Labels are searchable. The heuristic is intentionally approximate and may change with future card definitions; links and numerical results do not.
+
+When several exact lists share an archetype, a secondary List 1/List 2 discriminator and featured cards distinguish them in the explorer, matchup selector, opponent tables and comparison axes. These numbers are local to the returned results and may change with filters; they are not part of the archetype name or the stable deck ID. Both roles of one composition use the same discriminator.
 
 ## Configuration and build
+
+The named bots alternate normal ranked queue games with AI games at their current tier's difficulty. Both feed the combined page; bot AI records remain client-reported and do not count as human testers. The bot page labels admitted local games **Playing ranked AI**. A history reset clears source records while preserving minimal private replay keys, so old client retries cannot resurrect recorded games or award ranks twice. See [bot operations](../server/MOON_BOTS.md#reset-recorded-history) for the destructive maintenance command and preserved account data.
+
+Every Statistics view links to **Check on the bots** at `/stats/bots/`. Its four cards show the current public profile, activity and visible rank/LP (or Legend band/points), using the existing ladder names and artwork. `bots.js` refreshes `/data/bots/status.json` every ten seconds while visible, supports manual refresh, and cancels superseded or hidden-page requests. Loading and errors keep all four names with unknown status/rank; Retry never substitutes offline or stale ranks. The timestamp identifies the last successful snapshot. No login is required.
 
 `CARDGAME_CATALOG_ORIGIN` (default `https://cardgame-catalog-production.up.railway.app`) is baked into the page as `<meta name="cg-catalog">` at build time. No key or login is needed.
 
@@ -26,7 +36,7 @@ Default mode=all pools eligible ranked-AI/player games and controller roles. The
 ## Tests
 
 ```sh
-node --test website/test/stats.test.mjs website/test/site.test.mjs
+node --test website/test/stats.test.mjs website/test/bots.test.mjs website/test/site.test.mjs
 ```
 
 `stats.test.mjs` covers the arithmetic and routing rules from the API contract against the synthetic fixture: the same deck in both roles, reversed matchup perspectives, a real 0% record against a missing matchup, null turns, 2 of 3 as 66.7%, AI keys removed for PvP, address round trips, filters and sorting, and rejection of malformed snapshots. The rendering and request-race code in `stats.js` was checked by hand in a browser at desktop and phone widths, not by automated DOM tests.
@@ -36,5 +46,7 @@ node --test website/test/stats.test.mjs website/test/site.test.mjs
 The configured catalog must serve `/data/stats/deck-matchups.json`. If unavailable, the live page shows an error and Retry; it never substitutes demo results or treats a failed request as zero games. Deploy the compatible relay/catalog additions before switching the website to mode=all. See the catalog developer contract for pooling, privacy, count bounds and partial historical play coverage.
 
 ## Card statistics
+
+The Cards tab's **Show generic cards** checkbox starts checked. Unchecking it hides generic rows while preserving the faction/search filters and all metric denominators. Shared links and reloads retain the unchecked setting as `generics=0`; this display preference is not sent to the API.
 
 Card metrics weight exact starting lists by recorded deck appearances. Average copies is conditional on inclusion; deck win rate measures outcomes of the whole deck. Times played uses actual recorded events, including replays/generated copies, and is independent of inclusion. No play coverage displays an em dash; incomplete coverage displays a lower bound (≥) with a visible note and exact coverage under About card statistics. Old AI games lack these events; older PvP history can be partial. Never turn unavailable/unknown recording into a zero. Definitions and formulas are in [the API contract](../catalog/stats-website-spec.md#recorded-plays-and-card-table-formulas).

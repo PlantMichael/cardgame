@@ -7,13 +7,13 @@ const button = (label, href, secondary = false) => `<a class="button${secondary 
 // Set by renderPages: where the relay is and which portraits the game offers.
 let siteConfig = { relayUrl: '', portraits: [], catalogOrigin: '' };
 
-function shell(title, active, content, description) {
+function shell(title, active, content, description, moduleSrc = active === 'Stats' ? '/stats.js' : null) {
   const nav = [['Home', '/'], ['Ranked', '/ranked/'], ['Glossary', '/glossary/'], ['Stats', '/stats/'], ['Patch notes', '/patch-notes/']];
   const playing = active === 'Play';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${title === 'Home' ? 'cardgame — Space-age card battles in your browser' : `${title} — cardgame`}</title>
   <meta name="description" content="${escapeHtml(description)}"><meta name="theme-color" content="#060814">
-  <link rel="icon" href="/media/logo.png" type="image/png"><meta name="cg-relay" content="${escapeHtml(siteConfig.relayUrl)}"><link rel="stylesheet" href="/style.css"><script type="application/json" data-portraits>${JSON.stringify(siteConfig.portraits).replace(/</g, '\\u003c')}</script><script src="/app.js" defer></script><script src="/account.js" defer></script>${active === 'Stats' ? `<meta name="cg-catalog" content="${escapeHtml(siteConfig.catalogOrigin)}"><script type="module" src="/stats.js"></script>` : ''}</head>
+  <link rel="icon" href="/media/logo.png" type="image/png"><meta name="cg-relay" content="${escapeHtml(siteConfig.relayUrl)}"><link rel="stylesheet" href="/style.css"><script type="application/json" data-portraits>${JSON.stringify(siteConfig.portraits).replace(/</g, '\\u003c')}</script><script src="/app.js" defer></script><script src="/account.js" defer></script>${active === 'Stats' ? `<meta name="cg-catalog" content="${escapeHtml(siteConfig.catalogOrigin)}">` : ''}${moduleSrc ? `<script type="module" src="${escapeHtml(moduleSrc)}"></script>` : ''}</head>
   <body${playing ? ' class="play-page"' : ''}><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="wrap header-inner">
   <a class="brand" href="/" aria-label="cardgame home"><img src="/media/logo.png" width="40" height="40" alt=""><span class="brand-word">CARD<b>GAME</b></span></a>
   <nav aria-label="Main navigation">${nav.map(([label, href]) => `<a href="${href}" ${active === label ? 'aria-current="page"' : ''}${playing && label !== 'Home' ? ' target="_blank" rel="noopener" aria-label="' + label + ' (opens in a new tab)"' : ''}>${label}</a>`).join('')}</nav>
@@ -54,7 +54,7 @@ function home(featured, cardCount) {
   </div><div class="hud-strip"><div class="wrap hud-inner"><span><b>${cardCount}</b> cards</span><span><b>5</b> factions</span><span><b>40</b> card decks</span><span>Versus AI or friends</span></div></div></section>
   <section id="factions" class="factions-section"><div class="wrap section-top"><h2>Choose your faction</h2><a class="text-link" href="/rulebook/#deckbuilding">How decks work ${arrow}</a></div>
   <div class="faction-rail">${factions.map(([number, name, color, art, line, copy, keyword, anchor]) => `<article class="faction ${color}" style="--art:url(/media/art/${art}.jpg)"><div class="faction-body"><span class="faction-number">${number}</span><h3>${name}</h3><h4>${line}</h4><p>${copy}</p><a class="keyword-chip" href="/glossary/#${anchor}">${keyword} ${arrow}</a></div></article>`).join('')}</div></section>
-  <section class="wrap basics"><div class="basics-copy"><h2>Simple to start.<br>Hard to master.</h2><p>Play creatures, cast stratagems and use Locations to shape the board. Spend your mana, choose your attacks and bring the other hero to zero.</p></div>
+  <section class="wrap basics"><div class="basics-copy"><h2>Early access online card game</h2><p>Play creatures, cast stratagems and use Locations to shape the board. Spend your mana, choose your attacks and bring the other hero to zero.</p></div>
   <div class="readouts"><div class="readout"><strong>30</strong><span>hero health</span></div><div class="readout"><strong>7</strong><span>board slots</span></div><div class="readout"><strong>10</strong><span>mana cap</span></div></div></section>
   <section class="wrap learn-grid"><a class="learn-tile" style="--art:url(/media/art/coven.jpg)" href="/rulebook/"><span class="tile-tag">Rulebook</span><h3>Learn the rules.</h3><p>From your opening hand to your last attack.</p><span class="text-link">Open the rulebook ${arrow}</span></a>
   <a class="learn-tile" style="--art:url(/media/art/mokotai.jpg)" href="/glossary/"><span class="tile-tag">Glossary</span><h3>Know your keywords.</h3><p>Guardian, Rummage, Pilot, Challenge and every other ability on the cards.</p><span class="text-link">Browse the glossary ${arrow}</span></a></section>
@@ -128,5 +128,11 @@ export function renderPages({ featured, keywords, relayUrl = '', portraits = [],
     'ranked/index.html': ranked(),
     'patch-notes/index.html': patchNotesPage(patchNotes),
     'stats/index.html': shell('Stats', 'Stats', '<div class="wrap stats-page" data-stats-app><p class="state"><noscript>The statistics pages need JavaScript. </noscript>Loading…</p></div>', 'Exact-deck results from cardgame playtests: win rates, opponents and matchups, with sample sizes.'),
+    'stats/bots/index.html': shell('Check on the bots', 'Stats', `<section class="wrap stats-page bot-page" data-bots-app>
+      <header class="stats-head"><p class="eyebrow">The ranked regulars</p><h1>Check on the bots</h1><p class="lede">Four personalities. One ladder. See who's playing and where they've climbed.</p></header>
+      <div class="bot-toolbar"><a class="text-link" href="/stats/">← Back to statistics</a><div class="bot-controls"><p class="bot-update" data-bot-updated>Waiting for the first check</p><button class="button secondary small" type="button" data-bot-refresh>Refresh now</button></div></div>
+      <p class="bot-note">Updates every 10 seconds while this page is open. Activity reflects the relay's latest connection and match state.</p>
+      <p class="bot-error" role="status" data-bot-message></p><div class="bot-grid" aria-label="Ranked bots" aria-busy="true" data-bot-grid><p>Checking the four bots…</p></div>
+      <noscript><p>Enable JavaScript to see current bot activity and rank.</p></noscript></section>`, 'Check the current activity and ranked progress of Io, Callisto, Europa and Ganymede.', '/bots.js'),
     'account/index.html': shell('Account', 'Account', '<section class="wrap profile-page" data-profile><p class="profile-message"><noscript>Your profile needs JavaScript. </noscript>Loading your account…</p></section>', 'Your cardgame account: rank, balances, profile picture and sign-in methods.') };
 }

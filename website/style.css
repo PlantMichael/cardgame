@@ -1,4 +1,33 @@
 @layer reset, base, components, responsive;
+@layer components {
+  .stats-page.bot-page { gap: 0; padding-block: 28px 60px; }
+  .bot-page .stats-head h1 { font-size: clamp(30px, 3.2vw, 42px); }
+  .bot-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-block: 18px 8px; }
+  .bot-controls { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .bot-update { color: var(--paper); font-size: 13px; }
+  .bot-note { color: var(--muted); font-size: 13px; max-width: 740px; margin-top: 4px; }
+  .bot-error { color: var(--ember); min-height: 1.7em; font-size: 14px; margin-block: 6px 8px; }
+  .bot-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; min-height: 420px; }
+  .bot-card { border: 1px solid var(--line); background: var(--panel); padding: 18px; min-width: 0; }
+  .bot-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .bot-card h2 { font-size: 24px; overflow-wrap: anywhere; }
+  .bot-version, .bot-personality { color: var(--muted); font-size: 13px; }
+  .bot-personality { margin-top: 6px; text-transform: capitalize; }
+  .bot-activity { margin-block: 12px; color: var(--muted); font-weight: 600; }
+  .bot-activity.playing, .bot-activity.playing_ai, .bot-activity.queued, .bot-activity.joining { color: var(--cyan); }
+  .bot-rank { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--line-soft); padding-top: 12px; }
+  .bot-rank-icon { width: 48px; height: 48px; flex: 0 0 48px; }
+  .bot-rank-icon img { width: 48px; height: 48px; }
+  .bot-rank-copy { min-width: 0; overflow-wrap: anywhere; }
+  .bot-rank-name { color: var(--paper); font: 700 20px/1.35 var(--display); }
+  .bot-rank-progress { color: var(--muted); font-size: 13px; margin-top: 4px; }
+}
+@layer responsive {
+  @media (max-width: 680px) {
+    .bot-grid { grid-template-columns: 1fr; gap: 14px; }
+    .bot-card { padding: 20px; }
+  }
+}
 @layer reset {
   *, *::before, *::after { box-sizing: border-box; }
   body, h1, h2, h3, h4, p, figure, dl, dd { margin: 0; }
@@ -46,10 +75,11 @@
   .brand-word b { font-weight: 900; color: var(--cyan); }
   .brand.small .brand-word { font-size: 16px; }
   .header-inner nav { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+  .header-inner > .brand, .header-inner nav, .nav-play { flex-shrink: 0; }
   .header-inner nav a { text-decoration: none; color: var(--muted); font: 700 11px/1 var(--display); letter-spacing: .16em; text-transform: uppercase; padding: 10px 12px; position: relative; }
   .header-inner nav a:hover, .header-inner nav a[aria-current] { color: var(--paper); }
   .header-inner nav a[aria-current]::after { content: ''; position: absolute; height: 2px; left: 12px; right: 12px; bottom: 0; background: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
-  .nav-play { font: 800 11px/1 var(--display); letter-spacing: .18em; text-transform: uppercase; text-decoration: none; color: #04101c; background: var(--cyan); padding: 10px 18px; clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); transition: filter .15s, background .15s; }
+  .nav-play { font: 800 11px/1 var(--display); letter-spacing: .18em; text-transform: uppercase; text-decoration: none; color: #04101c; background: var(--cyan); padding: 10px 18px; white-space: nowrap; clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); transition: filter .15s, background .15s; }
   .nav-play:hover { color: #04101c; filter: drop-shadow(0 0 12px #5ee6ffaa) brightness(1.1); }
   .nav-play[aria-current] { background: var(--violet); color: white; }
 
@@ -234,13 +264,13 @@
   .game-window { display: block; width: 100%; height: 100%; min-height: 0; border: 0; background: black; }
 }
 @layer components {
-  .account-slot { display: flex; align-items: center; justify-content: flex-end; gap: 14px; font-size: 14px; min-width: 0; }
-  .account-slot:empty { display: none; }
+  .account-slot { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; min-width: 0; min-height: 40px; margin-left: auto; }
   .account-link, .text-button { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 8px 4px; font-size: 14px; text-decoration: underline; text-underline-offset: 4px; }
   .account-link.strong { color: var(--gold); }
+  .account-slot .account-link { white-space: nowrap; }
   .account-link:hover, .text-button:hover { color: var(--paper); }
   .account-loading, .account-notice { color: var(--muted); font-size: 13px; }
-  .account-profile { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; min-width: 0; }
+  .account-profile { display: inline-flex; align-items: center; flex-shrink: 0; gap: 10px; text-decoration: none; min-width: 0; }
   .account-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 1px solid var(--line); background: var(--panel); }
   .account-name { max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--paper); font-weight: 600; }
   .account-rank { display: inline-flex; align-items: center; gap: 8px; }
@@ -295,6 +325,7 @@
   @media (max-width: 1480px) {
     .header-inner { flex-wrap: wrap; gap: 4px 20px; padding-block: 8px 6px; min-height: 0; }
     .header-inner nav { gap: 2px; }
+    .nav-play { margin-left: auto; }
     .account-slot { order: 3; flex-basis: 100%; justify-content: flex-end; flex-wrap: wrap; gap: 6px 18px; padding-bottom: 4px; }
   }
   @media (max-width: 1100px) {
@@ -367,6 +398,8 @@
   .demo-banner { border: 1px dashed var(--ember); color: var(--ember); padding: 10px 14px; font: 700 12px/1.5 var(--display); letter-spacing: .08em; background: #ff9a3c14; }
   .cohort-bar, .filter-row { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: end; padding: 16px; background: linear-gradient(160deg, #101840, #0a0f28); border: 1px solid var(--line); }
   .filter-row { margin: 18px 0 14px; padding: 12px 16px; background: #0a0f28; border-color: var(--line-soft); }
+  .filter-check { display: flex; align-items: center; gap: 8px; min-height: 40px; font-size: 14px; color: var(--paper); cursor: pointer; }
+  .filter-check input { width: 18px; height: 18px; accent-color: var(--cyan); cursor: pointer; }
   .cohort-field { display: grid; gap: 5px; font-size: 12px; color: var(--muted); min-width: 0; }
   .cohort-field > span { font: 700 10px/1 var(--display); letter-spacing: .16em; text-transform: uppercase; color: var(--cyan); }
   .cohort-field select, .cohort-field input { background: #080d24; color: var(--paper); border: 1px solid var(--line); padding: 9px 10px; font-size: 14px; min-width: 120px; max-width: 100%; }
