@@ -1,15 +1,15 @@
 import { TIERS, SUB_RANKS, LEGEND_TIERS, LP, divisionName } from './ranked-data.mjs';
-export const BOT_NAMES = { io: 'Io', callisto: 'Callisto', europa: 'Europa', ganymede: 'Ganymede' };
+export const BOT_NAMES = { io: 'Io', callisto: 'Callisto', europa: 'Europa', ganymede: 'Ganymede', amalthea: 'Amalthea' };
 export const ACTIVITIES = { queued: 'Queued for ranked', joining: 'Joining a match', playing: 'Playing ranked',
   playing_ai: 'Playing ranked AI', idle: 'Between matches', reconnecting: 'Reconnecting', offline: 'Offline', not_started: 'Not started' };
 export function validStatus(data) {
   if (typeof data?.generatedAt !== 'string' || !Number.isFinite(Date.parse(data.generatedAt)) ||
-      !Array.isArray(data.bots) || data.bots.length !== 4) return false;
+      !Array.isArray(data.bots) || data.bots.length !== Object.keys(BOT_NAMES).length) return false;
   const seen = new Set();
   return data.bots.every(b => {
     if (!Object.hasOwn(BOT_NAMES, b?.id) || seen.has(b.id) || b.name !== BOT_NAMES[b.id] ||
         !Object.hasOwn(ACTIVITIES, b.activity) || typeof b.version !== 'string' || !/^[A-Za-z0-9._-]{1,32}$/.test(b.version) ||
-        !Number.isInteger(b.level) || b.level < 1 || b.level > 10 || !['tempo','combo','aggro','random',''].includes(b.style)) return false;
+        !Number.isInteger(b.level) || b.level < 1 || b.level > 10 || !['tempo','combo','aggro','budget','random',''].includes(b.style)) return false;
     seen.add(b.id);
     if (b.activity === 'not_started') return b.rank === null;
     const r = b.rank;

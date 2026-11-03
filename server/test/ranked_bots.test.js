@@ -84,8 +84,22 @@ test('trusted bot provisioning is atomic, preserves ranks and never adopts a hum
   assert.deepEqual((await pool.query('SELECT username FROM players')).rows.map(r => r.username), ['CALLISTO']);
   assert.equal((await pool.query('SELECT count(*) AS n FROM sessions')).rows[0].n, '0');
   await pool.query("DELETE FROM players WHERE username='CALLISTO'"); // This test owns the synthetic fixture.
+  await pool.query("INSERT INTO players (username,password_hash,salt) VALUES ('AMALTHEA','synthetic','synthetic')");
+  await assert.rejects(provisionRankedBots(pool), /already owned/);
+  assert.deepEqual((await pool.query('SELECT username FROM players')).rows.map(r => r.username), ['AMALTHEA']);
+  assert.equal((await pool.query('SELECT count(*) AS n FROM sessions')).rows[0].n, '0');
+  await pool.query("DELETE FROM players WHERE username='AMALTHEA'");
+  // Existing four-account fleet: adding the new profile preserves its identities/ranks.
+  for (const profile of profiles.filter(p => p.id !== 'amalthea')) {
+    const { rows: [player] } = await pool.query(`INSERT INTO players (username,password_hash,salt,rating)
+      VALUES ($1,'synthetic','synthetic',1234) RETURNING id`, [profile.name]);
+    await pool.query('INSERT INTO ranked_bot_accounts (bot_id,player_id,profile) VALUES ($1,$2,$3)', [profile.id,player.id,profile]);
+  }
+  const existing = (await pool.query('SELECT id,username,rating FROM players ORDER BY id')).rows;
   const accounts = await provisionRankedBots(pool);
-  assert.deepEqual(accounts.map(a => a.id), ['io', 'callisto', 'europa', 'ganymede']);
+  assert.deepEqual(accounts.map(a => a.id), ['io', 'callisto', 'europa', 'ganymede', 'amalthea']);
+  assert.deepEqual((await pool.query("SELECT id,username,rating FROM players WHERE username<>'Amalthea' ORDER BY id")).rows, existing);
+  assert.equal((await pool.query("SELECT rating FROM players WHERE username='Amalthea'")).rows[0].rating, 1000);
   assert.deepEqual(await rankedBotSessions(pool, accounts), accounts, 'legacy services keep their existing refusal path');
   await pool.query("UPDATE players SET rating=100,ranked_losses=9 WHERE username='Ganymede'");
   await initLegacySchema(pool); await initSchema(pool); await initSchema(pool);
@@ -104,7 +118,7 @@ test('trusted bot provisioning is atomic, preserves ranks and never adopts a hum
     seat_a_player_id:owned.find(b=>b.bot_id==='io').player_id,seat_b_player_id:ganyId,
     deck_a:['g_001'],deck_b:['cr_002'],mode:'ranked_bots',bot_a:profiles[0],bot_b:legacy,engine_version:2 });
   const again = await provisionRankedBots(pool);
-  assert.equal((await pool.query('SELECT count(*) AS n FROM players')).rows[0].n, '4');
+  assert.equal((await pool.query('SELECT count(*) AS n FROM players')).rows[0].n, '5');
   const gany = (await pool.query("SELECT rating,ranked_losses FROM players WHERE username='Ganymede'")).rows[0];
   assert.deepEqual(gany, { rating: 100, ranked_losses: 9 });
   assert.ok(again.every(a => !accounts.some(old => old.token === a.token)));
@@ -122,7 +136,7 @@ test('trusted bot provisioning is atomic, preserves ranks and never adopts a hum
   assert.deepEqual(await rankedBotSessions(pool,again),again, 'completed matches cannot retain an old policy');
 });
 
-test('four real ranked clients queue, play, settle normally, reconnect and publish a separate ranked cohort', {
+test('five real ranked clients queue, play, settle normally, reconnect and publish a separate ranked cohort', {
   skip: dbSkip || (!process.env.GODOT_BIN ? 'requires GODOT_BIN' : false), timeout: 480000,
 }, async t => {
   const { pool, url, cleanup } = await database(t, 'ranked_bots_live', false);
@@ -161,7 +175,7 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
     Pool.prototype.query = async function(sql, values, ...rest) {
       const result = await query.call(this, sql, values, ...rest);
       if (typeof sql === 'string' && sql.includes('p.rating, b.profile AS bot_profile') &&
-          result.rows[0]?.bot_profile && values[0] !== process.env.QUEUE_FAULT_SKIP && failed.size < 4 && !failed.has(values[0])) {
+          result.rows[0]?.bot_profile && values[0] !== process.env.QUEUE_FAULT_SKIP && failed.size < ${profiles.length} && !failed.has(values[0])) {
         failed.add(values[0]);
         throw new Error('synthetic first queue lookup failure');
       }
@@ -249,11 +263,11 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   }, 'fresh workers start with rank-matched AI and expose their actual activity', 20000);
   const { validStatus } = await import('../../website/bots-core.mjs');
   assert.ok(validStatus(fleet));
-  assert.deepEqual(fleet.bots.map(b => b.id), ['io','callisto','europa','ganymede']);
+  assert.deepEqual(fleet.bots.map(b => b.id), ['io','callisto','europa','ganymede','amalthea']);
   const found = await human.take('ranked_match_found', null, 180000);
   assert.equal(found.server_run, true);
   assert.ok(found.opponent_name.endsWith(`[Bot ${found.opponent_bot.version}]`));
-  assert.ok(['io', 'callisto', 'europa', 'ganymede'].includes(found.opponent_bot.id));
+  assert.ok(['io', 'callisto', 'europa', 'ganymede', 'amalthea'].includes(found.opponent_bot.id));
   human.send({ type: 'match_join', match_id: found.match_id });
   const view = await human.take('match_view', found.match_id);
   const first = (await pool.query('SELECT * FROM ranked_matches WHERE match_id=$1', [found.match_id])).rows[0];
@@ -311,15 +325,15 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
 
   await until(() => {
     if (workerFailure) throw workerFailure;
-    return ['io', 'callisto', 'europa', 'ganymede'].every(id => events.filter(e => e.event === 'queued' && e.bot === id).length >= 2);
-  }, 'all four retry queue entry after transient database failure', 180000);
-  for (const id of ['io','callisto','europa','ganymede']) {
+    return ['io', 'callisto', 'europa', 'ganymede', 'amalthea'].every(id => events.filter(e => e.event === 'queued' && e.bot === id).length >= 2);
+  }, 'all five retry queue entry after transient database failure', 180000);
+  for (const id of ['io','callisto','europa','ganymede','amalthea']) {
     const own = events.filter(e => e.bot === id);
     assert.equal(own.find(e => e.event === 'ai_started').ai_level, 3);
     const aiDone = own.findIndex(e => e.event === 'completed' && e.opponent === 'ranked_ai');
     assert.ok(aiDone >= 0 && aiDone < own.findIndex(e => e.event === 'queued'));
   }
-  await until(() => ['io','callisto','europa','ganymede'].some(id => {
+  await until(() => ['io','callisto','europa','ganymede','amalthea'].some(id => {
     const own = events.filter(e => e.bot === id), done = own.findIndex(e => e.event === 'completed' && !e.opponent);
     return done >= 0 && own.slice(done + 1).some(e => e.event === 'ai_started');
   }), 'queue completion returns to AI', 180000);
@@ -372,6 +386,8 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   const anonymous = await Client.open(wsUrl); clients.push(anonymous);
   anonymous.send({ type: 'register', username: 'EUROPA', password: 'synthetic-password' });
   assert.equal((await anonymous.take('register_result')).success, false);
+  anonymous.send({ type: 'register', username: 'AmAlThEa', password: 'synthetic-password' });
+  assert.equal((await anonymous.take('register_result')).success, false);
   await assert.rejects(runRankedBots({ pool, godotBin: process.env.GODOT_BIN, relayUrl: wsUrl }), /another ranked bot worker/);
   const { createCatalogServer } = await import('../../catalog/src/server.mjs');
   const proxy = createCatalogServer(path.join(PROJECT_DIR, 'catalog/public'), { statsOrigin: httpUrl });
@@ -383,6 +399,7 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   const ranked = JSON.parse(body);
   assert.equal(ranked.mode, 'ranked'); assert.equal(ranked.methodology.source, 'mixed');
   assert.ok(ranked.bots.some(b => b.id === 'standard' && b.level === 3));
+  assert.ok(ranked.bots.some(b => b.id === 'amalthea' && b.version === '1.0' && b.level === 6 && b.style === 'budget'), 'Amalthea completion passes the real catalog statistics projection');
   assert.ok(ranked.games >= 3); assert.ok(ranked.bots.some(b => b.id === 'human' && b.level === null));
   assert.ok(!body.includes('ranked_human') && !body.includes('player_id') && !body.includes('match_id'));
   const { projectBotStats } = await import('../../catalog/src/bot-matchups.mjs');
@@ -437,7 +454,7 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   await until(() => workerFailure, 'lock heartbeat stops worker despite silently open socket', 15000);
   await assert.rejects(worker, /database lock lost/);
   assert.equal((await pool.query('SELECT count(*) AS n FROM sessions s JOIN ranked_bot_accounts b ON b.player_id=s.player_id')).rows[0].n, '0');
-  assert.equal((await pool.query('SELECT count(*) AS n FROM players')).rows[0].n, '5');
+  assert.equal((await pool.query('SELECT count(*) AS n FROM players')).rows[0].n, '6');
   // No client may accidentally enter the legacy peer-hosted queue.
   const ended = once(relay, 'exit'); killTree(relay); await ended;
   relay = launchRelay('0');
@@ -445,5 +462,5 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   const decksBefore = (await pool.query('SELECT count(*) AS n FROM decks')).rows[0].n;
   await assert.rejects(runRankedBots({ pool, godotBin: process.env.GODOT_BIN, relayUrl: wsUrl, log: () => {} }), /authoritative-ranked service/);
   assert.equal((await pool.query('SELECT count(*) AS n FROM decks')).rows[0].n, decksBefore, 'legacy refusal occurs before drafting or queueing');
-  t.diagnostic(`All four queued; ${finished.length} autonomous match completed; normal human/bot outcomes and private ranked stats verified`);
+  t.diagnostic(`All five queued; ${finished.length} autonomous match completed; normal human/bot outcomes and private ranked stats verified`);
 });

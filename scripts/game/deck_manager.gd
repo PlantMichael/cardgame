@@ -55,6 +55,58 @@ func build_deck_from_ids(ids: Array[String]) -> Array[CardData]:
 	deck.shuffle()
 	return deck
 
+# Budget decks keep interaction and a midrange curve before favoring bears.
+const BUDGET_REMOVAL_EFFECTS := ["deal_damage", "deal_damage_all_enemy", "destroy_all_creatures",
+	"deal_damage_all_creatures", "destroy_all_rummage_creature", "sludge_spray",
+	"bloodlet", "exsanguinate", "deal_damage_all_enemy_draw_yeti"]
+
+func is_bear(card: CardData) -> bool:
+	if card.card_type != CardData.CardType.CREATURE:
+		return false
+	for ability in card.abilities:
+		if ability != card.tribe:
+			return false
+	return true
+
+func _budget_bucket(card: CardData) -> int:
+	return 3 if card.cost >= 7 else 2 if card.cost >= 5 else 1 if card.cost >= 3 else 0
+
+func _budget_take(entries: Array[CardData], count: int) -> Array[CardData]:
+	var weights: Array[float] = []
+	for card in entries:
+		weights.append(_score_card(card, Archetype.MIDRANGE) * (12.0 if is_bear(card) else 1.0))
+	return _weighted_take(entries, weights, count)
+
+func build_budget_deck(faction_color: CardData.CardColor, allowed_ids: Dictionary) -> Array[CardData]:
+	if allowed_ids.is_empty():
+		return []
+	var creatures: Array[CardData] = []
+	var removal: Array[CardData] = []
+	for card in _faction_pool(faction_color, true, allowed_ids):
+		if card.rarity == CardData.CardRarity.LEGENDARY:
+			continue
+		for _i in max_copies_for(card):
+			if card.card_type == CardData.CardType.CREATURE:
+				creatures.append(card)
+			elif card.card_type == CardData.CardType.STRATAGEM and card.effect in BUDGET_REMOVAL_EFFECTS:
+				removal.append(card)
+	var deck := _budget_take(removal, 6)
+	if deck.size() < 6:
+		return deck # A restricted pool must not relax the hard exclusions.
+	var targets := [12, 12, 8, 2]
+	for bucket in 4:
+		var entries: Array[CardData] = []
+		for card in creatures:
+			if _budget_bucket(card) == bucket:
+				entries.append(card)
+		var chosen := _budget_take(entries, targets[bucket])
+		deck.append_array(chosen)
+		for card in chosen:
+			creatures.erase(card)
+	# Sparse allowed pools may miss a bucket; never duplicate already used copies.
+	deck.append_array(_budget_take(creatures, MAX_DECK_SIZE - deck.size()))
+	return deck
+
 # ── Archetype deck builder ────────────────────────────────────────────
 # Picks an archetype the faction's card pool actually supports, then
 # weighted-samples a deck that leans into that archetype's tags and curve.

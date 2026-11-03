@@ -43,7 +43,7 @@ func _ready() -> void:
 	_url = OS.get_environment("RANKED_BOT_URL")
 	var sessions = JSON.parse_string(OS.get_environment("RANKED_BOT_SESSIONS"))
 	var profiles := Bots.roster()
-	if not sessions is Array or sessions.size() != 4 or not (_url.begins_with("ws://") or _url.begins_with("wss://")):
+	if not sessions is Array or sessions.size() != profiles.size() - 1 or not (_url.begins_with("ws://") or _url.begins_with("wss://")):
 		_fail("Invalid ranked bot configuration")
 		return
 	var seen := {}

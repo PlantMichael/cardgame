@@ -1,19 +1,19 @@
 import { DEFAULT_ORIGIN } from './card-winrates.mjs';
 export const BOT_STATUS_PATH = '/data/bots/status.json';
-const NAMES = { io: 'Io', callisto: 'Callisto', europa: 'Europa', ganymede: 'Ganymede' };
+const NAMES = { io: 'Io', callisto: 'Callisto', europa: 'Europa', ganymede: 'Ganymede', amalthea: 'Amalthea' };
 const STATES = ['queued', 'joining', 'playing', 'playing_ai', 'idle', 'reconnecting', 'offline', 'not_started'];
 const count = n => Number.isSafeInteger(n) && n >= 0;
 const fail = () => { throw new Error('invalid bot status'); };
 
 export function projectBotStatus(data) {
   if (typeof data?.generatedAt !== 'string' || !Number.isFinite(Date.parse(data.generatedAt)) ||
-      !Array.isArray(data.bots) || data.bots.length !== 4) fail();
+      !Array.isArray(data.bots) || data.bots.length !== Object.keys(NAMES).length) fail();
   const seen = new Set();
   const bots = data.bots.map(row => {
     if (!Object.hasOwn(NAMES, row?.id) || seen.has(row.id) || row.name !== NAMES[row.id] ||
         typeof row.version !== 'string' || !/^[A-Za-z0-9._-]{1,32}$/.test(row.version) ||
         !Number.isInteger(row.level) || row.level < 1 || row.level > 10 ||
-        !['tempo', 'combo', 'aggro', 'random', ''].includes(row.style) || !STATES.includes(row.activity)) fail();
+        !['tempo', 'combo', 'aggro', 'budget', 'random', ''].includes(row.style) || !STATES.includes(row.activity)) fail();
     seen.add(row.id);
     let rank = null;
     if (row.activity === 'not_started') { if (row.rank !== null) fail(); }

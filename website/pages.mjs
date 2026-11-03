@@ -129,10 +129,10 @@ export function renderPages({ featured, keywords, relayUrl = '', portraits = [],
     'patch-notes/index.html': patchNotesPage(patchNotes),
     'stats/index.html': shell('Stats', 'Stats', '<div class="wrap stats-page" data-stats-app><p class="state"><noscript>The statistics pages need JavaScript. </noscript>Loading…</p></div>', 'Exact-deck results from cardgame playtests: win rates, opponents and matchups, with sample sizes.'),
     'stats/bots/index.html': shell('Check on the bots', 'Stats', `<section class="wrap stats-page bot-page" data-bots-app>
-      <header class="stats-head"><p class="eyebrow">The ranked regulars</p><h1>Check on the bots</h1><p class="lede">Four personalities. One ladder. See who's playing and where they've climbed.</p></header>
+      <header class="stats-head"><p class="eyebrow">The ranked regulars</p><h1>Check on the bots</h1><p class="lede">Five personalities. One ladder. See who's playing and where they've climbed.</p></header>
       <div class="bot-toolbar"><a class="text-link" href="/stats/">← Back to statistics</a><div class="bot-controls"><p class="bot-update" data-bot-updated>Waiting for the first check</p><button class="button secondary small" type="button" data-bot-refresh>Refresh now</button></div></div>
       <p class="bot-note">Updates every 10 seconds while this page is open. Activity reflects the relay's latest connection and match state.</p>
-      <p class="bot-error" role="status" data-bot-message></p><div class="bot-grid" aria-label="Ranked bots" aria-busy="true" data-bot-grid><p>Checking the four bots…</p></div>
-      <noscript><p>Enable JavaScript to see current bot activity and rank.</p></noscript></section>`, 'Check the current activity and ranked progress of Io, Callisto, Europa and Ganymede.', '/bots.js'),
+      <p class="bot-error" role="status" data-bot-message></p><div class="bot-grid" aria-label="Ranked bots" aria-busy="true" data-bot-grid><p>Checking the five bots…</p></div>
+      <noscript><p>Enable JavaScript to see current bot activity and rank.</p></noscript></section>`, 'Check the current activity and ranked progress of Io, Callisto, Europa, Ganymede and Amalthea.', '/bots.js'),
     'account/index.html': shell('Account', 'Account', '<section class="wrap profile-page" data-profile><p class="profile-message"><noscript>Your profile needs JavaScript. </noscript>Loading your account…</p></section>', 'Your cardgame account: rank, balances, profile picture and sign-in methods.') };
 }

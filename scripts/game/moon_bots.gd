@@ -25,6 +25,8 @@ static func build_deck(profile: Dictionary, faction: int, allowed: Dictionary) -
 	if allowed.is_empty():
 		return [] # Never let an unavailable publication filter become unrestricted.
 	match str(profile["style"]):
+		"budget":
+			return DeckManager.build_budget_deck(faction, allowed)
 		"random":
 			return DeckManager.build_random_faction_deck(faction, allowed)
 		"tempo":
@@ -38,6 +40,11 @@ static func build_deck(profile: Dictionary, faction: int, allowed: Dictionary) -
 			var archetype: int = DeckManager.Archetype.TRIBAL if tribal >= value else DeckManager.Archetype.VALUE
 			return DeckManager.build_archetype_deck(faction, archetype, allowed)
 	return DeckManager.build_archetype_deck(faction, -1, allowed)
+
+## Budget describes the draft, not a search personality.
+static func search_engine(player_id: String, profile: Dictionary) -> MCTSEngine:
+	var style := str(profile["style"])
+	return MCTSEngine.new(player_id, int(profile["level"]), "" if style == "budget" else style)
 
 static func choose_action(gs: GameState, engine: MCTSEngine, profile: Dictionary, policy_rng: RandomNumberGenerator) -> Dictionary:
 	if str(profile["id"]) == "standard":
@@ -115,7 +122,7 @@ static func choose_view_action(view: Dictionary, my_id: String, own_deck: Array[
 		return {"type": "answer_choice", "choice_id": choice["id"], "selection": selection}
 	if gs.active_player_id != my_id:
 		return {}
-	var engine := MCTSEngine.new(my_id, int(profile["level"]), str(profile["style"]))
+	var engine := search_engine(my_id, profile)
 	engine._search_rng.seed = planning_seed
 	return await choose_action(gs, engine, profile, rng)
 
@@ -155,7 +162,7 @@ static func play(a: Dictionary, b: Dictionary, faction_a: int, faction_b: int, f
 			return result
 		var actor := gs.active_player_id
 		var profile := a if actor == "a" else b
-		var engine := MCTSEngine.new(actor, int(profile["level"]), str(profile["style"]))
+		var engine := search_engine(actor, profile)
 		engine._search_rng.seed = policy_rng.randi()
 		var ended := false
 		for _action in 100:
