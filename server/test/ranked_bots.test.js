@@ -262,7 +262,7 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   const aiOutcome = (await pool.query(`SELECT match_id,won,outcome,ai_match FROM ranked_settlements WHERE player_id=$1 AND ai_match IS NOT NULL ORDER BY settled_at LIMIT 1`, [opponentId])).rows[0];
   const aiOnly = await (await fetch(httpUrl + '/data/stats/deck-matchups.json?mode=all&days=29')).json();
   assert.ok(aiOnly.games > 0 && aiOnly.decks.every(d => d.testers === 0), 'bot AI games feed pooled results without inventing human testers');
-  assert.equal((await (await fetch(httpUrl + `/data/stats/deck-matchups.json?mode=ranked_ai&aiLevel=3&rulesVersion=${liveRulesVersion}&aiVersion=2`)).json()).games, 0, 'the human-only AI filter excludes bot-controlled games');
+  assert.equal((await (await fetch(httpUrl + `/data/stats/deck-matchups.json?mode=ranked_ai&aiLevel=3&rulesVersion=${liveRulesVersion}&aiVersion=${aiOutcome.ai_match.ai_version}`)).json()).games, 0, 'the human-only AI filter excludes bot-controlled games');
   const retriedAI = await Client.open(wsUrl); clients.push(retriedAI);
   retriedAI.token = (await pool.query('SELECT token FROM sessions WHERE player_id=$1 ORDER BY created_at DESC LIMIT 1', [opponentId])).rows[0].token;
   retriedAI.send({ type: 'ranked_bot_ai_start', match_id: aiOutcome.match_id });
