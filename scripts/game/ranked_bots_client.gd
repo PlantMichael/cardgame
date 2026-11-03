@@ -190,7 +190,7 @@ func _receive(c: BotConnection, msg: Dictionary, now: int) -> void:
 				_join(c, c.match_id, now)
 			elif not c.ai_match_id.is_empty():
 				_start_ai(c, now)
-			elif c.deck.is_empty():
+			elif c.deck.size() != DeckManager.MAX_DECK_SIZE:
 				_draft(c, now)
 			else:
 				_next_opponent(c, now)

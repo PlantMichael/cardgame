@@ -221,6 +221,19 @@ static func run() -> int:
 		"ranked_bot_ai": true, "decks": [{"name": "Moon Bot 1.0", "faction_idx": 1, "card_ids": ["cr_002"]}]}, 0)
 	check("Policy upgrade authenticates current profile and rejoins old match with its saved draft",
 		driver.sent.back().get("match_id", "") == "old_policy" and upgraded.deck.size() == 1 and upgraded.deck[0].id == "cr_002")
+	var incomplete := RankedClient.BotConnection.new()
+	incomplete.profile = profiles["europa"]
+	var short_deck: Array[String] = []
+	for card in Bots.build_deck(incomplete.profile, 2, Bots.published_ids()):
+		short_deck.append(card.id)
+	short_deck.pop_back()
+	driver._receive(incomplete, {"type": "login_result", "success": true, "username": "Europa",
+		"bot_profile": incomplete.profile, "ranked_authoritative": true, "rules_version": RulesVersion.RULES_VERSION,
+		"ranked_bot_ai": true, "decks": [{"name": "Moon Bot 1.0", "faction_idx": 2, "card_ids": short_deck}]}, 0)
+	check("Incomplete restored deck is redrafted and saved before a new game",
+		incomplete.stage == "saving" and incomplete.deck.size() == DeckManager.MAX_DECK_SIZE
+		and driver.sent.back().get("type", "") == "save_deck"
+		and driver.sent.back().get("card_ids", []).size() == DeckManager.MAX_DECK_SIZE)
 	# Network reconstruction resolves printed card IDs; use a real published body.
 	var network_game := position()
 	var real_body := Minion.new(CardDatabase.get_card("g_001").new_instance("network-attacker"), "a")
