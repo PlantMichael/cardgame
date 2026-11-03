@@ -205,6 +205,11 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   const human = await Client.open(wsUrl); clients.push(human);
   human.send({ type: 'register', username: 'ranked_human', password: 'synthetic-password' });
   const registered = await human.take('register_result'); assert.equal(registered.success, true); human.token = registered.token;
+  human.send({ type: 'resume_session' });
+  const resumed = await human.take('login_result');
+  assert.equal(resumed.success, true);
+  const liveRulesVersion = resumed.rules_version;
+  assert.ok(Number.isInteger(liveRulesVersion) && liveRulesVersion > 0, 'use the rules advertised by the actual relay/host handshake');
   human.send({ type: 'save_deck', name: 'human', faction_idx: 0, card_ids: ['g_001', 'g_002'] });
   assert.equal((await human.take('save_deck_result')).success, true);
   human.send({ type: 'ranked_bot_ai_start', match_id: 'ai_1_1' });
@@ -213,11 +218,11 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   await pool.query("UPDATE players SET rank_bracket=20,rank_in_legend=true WHERE username='Io'");
   probe.send({ type: 'ranked_bot_ai_start', match_id: 'ai_1_2' });
   assert.equal((await probe.take('ranked_bot_ai_ready')).ai_level, 10, 'relay selects Legend difficulty from the persisted rank');
-  probe.send({ type: 'queue_ranked', deck_name: 'Sapiens Starter', rules_version: 3 });
+  probe.send({ type: 'queue_ranked', deck_name: 'Sapiens Starter', rules_version: liveRulesVersion });
   assert.equal((await probe.take('ranked_refused')).reason, 'in_ai_match');
   const starters = require('../../data/starters.json');
   const probeSummary = { player_deck: starters[0].card_ids, opponent_deck: starters[1].card_ids,
-    ai_level: 10, ai_version: 2, rules_version: 3, turns: 1, first_player: 'player' };
+    ai_level: 10, ai_version: 2, rules_version: liveRulesVersion, turns: 1, first_player: 'player' };
   for (const invalid of [{ ai_match: { ...probeSummary, ai_level: 3 } },
     { ai_match: { ...probeSummary, player_deck: ['g_001'] } },
     { token: probeAccounts.find(a => a.id === 'callisto').token, ai_match: probeSummary }]) {
@@ -228,7 +233,7 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   probe.send({ type: 'ranked_bot_ai_cancel', match_id: 'ai_1_2' }); probe.ws.terminate();
   await pool.query('DELETE FROM sessions WHERE token=ANY($1::text[])', [probeAccounts.map(a => a.token)]);
   await pool.query("UPDATE players SET rank_bracket=0,rank_in_legend=false WHERE username='Io'");
-  human.send({ type: 'queue_ranked', deck_name: 'human', rules_version: 3, bot_profile: { id: 'io', version: '1.0' } });
+  human.send({ type: 'queue_ranked', deck_name: 'human', rules_version: liveRulesVersion, bot_profile: { id: 'io', version: '1.0' } });
   let workerFailure;
   const startWorker = () => {
     workerFailure = undefined;
@@ -256,7 +261,7 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   const aiOutcome = (await pool.query(`SELECT match_id,won,outcome,ai_match FROM ranked_settlements WHERE player_id=$1 AND ai_match IS NOT NULL ORDER BY settled_at LIMIT 1`, [opponentId])).rows[0];
   const aiOnly = await (await fetch(httpUrl + '/data/stats/deck-matchups.json?mode=all&days=29')).json();
   assert.ok(aiOnly.games > 0 && aiOnly.decks.every(d => d.testers === 0), 'bot AI games feed pooled results without inventing human testers');
-  assert.equal((await (await fetch(httpUrl + '/data/stats/deck-matchups.json?mode=ranked_ai&aiLevel=3&rulesVersion=3&aiVersion=2')).json()).games, 0, 'the human-only AI filter excludes bot-controlled games');
+  assert.equal((await (await fetch(httpUrl + `/data/stats/deck-matchups.json?mode=ranked_ai&aiLevel=3&rulesVersion=${liveRulesVersion}&aiVersion=2`)).json()).games, 0, 'the human-only AI filter excludes bot-controlled games');
   const retriedAI = await Client.open(wsUrl); clients.push(retriedAI);
   retriedAI.token = (await pool.query('SELECT token FROM sessions WHERE player_id=$1 ORDER BY created_at DESC LIMIT 1', [opponentId])).rows[0].token;
   retriedAI.send({ type: 'ranked_bot_ai_start', match_id: aiOutcome.match_id });
@@ -284,7 +289,7 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
   assert.deepEqual(wonRow, { rating: expectedBot.rating, rank_lp: expectedBot.rank_lp, ranked_wins: expectedBot.ranked_wins }, 'bot receives normal full ranked win after its AI game');
 
   // A human win receives ordinary rewards too, through a canonical concede.
-  human.send({ type: 'queue_ranked', deck_name: 'human', rules_version: 3 });
+  human.send({ type: 'queue_ranked', deck_name: 'human', rules_version: liveRulesVersion });
   const secondFound = await human.take('ranked_match_found', null, 180000);
   human.send({ type: 'match_join', match_id: secondFound.match_id });
   const secondView = await human.take('match_view', secondFound.match_id);
@@ -351,7 +356,7 @@ test('four real ranked clients queue, play, settle normally, reconnect and publi
     const playerId = active.bot_a ? active.seat_a_player_id : active.seat_b_player_id;
     const token = (await pool.query('SELECT token FROM sessions WHERE player_id=$1 ORDER BY created_at DESC LIMIT 1', [playerId])).rows[0].token;
     const reconnect = await Client.open(wsUrl); clients.push(reconnect); reconnect.token = token;
-    reconnect.send({ type: 'queue_ranked', deck_name: 'Moon Bot 1.0', rules_version: 3 });
+    reconnect.send({ type: 'queue_ranked', deck_name: 'Moon Bot 1.0', rules_version: liveRulesVersion });
     const refused = await reconnect.take('ranked_refused');
     assert.equal(refused.reason, 'already_in_match'); assert.equal(refused.match_id, active.match_id);
     reconnect.send({ type: 'match_join', match_id: active.match_id });
