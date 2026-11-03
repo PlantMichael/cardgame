@@ -110,18 +110,25 @@ test('untrusted keyword content is escaped in the generated public HTML', () => 
   assert.ok(html.includes('A &amp; B &lt;script&gt;alert(2)&lt;/script&gt;'));
 });
 
-test('published patch notes render newest first with escaped titles and changes', () => {
+test('published patch notes render newest first with categorized headings and escaped content', () => {
   const featured = ['GREEN','CRIMSON','TEAL'].map(color => ({ color, card_name: 'Example', cost: 1, attack: 1, health: 1,
     card_type: 'CREATURE', description: 'Example', image: '/example.png' }));
   const patchNotes = [
-    { date: '2026-10-31', title: 'Older release', changes: ['First change'] },
-    { date: '2026-11-03', title: 'Newest <release>', changes: ['A & B <script>alert(1)</script>'] },
-    { date: '2026-11-01', title: 'Middle release', changes: ['Second change'] },
+    { date: '2026-10-31', title: 'Older release', sections: [{ title: 'New Cards', changes: ['First change'] }] },
+    { date: '2026-11-03', title: 'Newest <release>', sections: [
+      { title: 'New Cards', changes: ['New creature'] },
+      { title: 'Balance Changes', changes: ['Health reduced'] },
+      { title: 'Bug Fixes <script>', changes: ['A & B <script>alert(1)</script>'] },
+    ] },
+    { date: '2026-11-01', title: 'Middle release', sections: [{ title: 'Bug Fixes', changes: ['Second change'] }] },
   ];
   const html = renderPages({featured, keywords: {}, patchNotes})['patch-notes/index.html'];
   assert.ok(html.indexOf('Newest &lt;release&gt;') < html.indexOf('Middle release'));
   assert.ok(html.indexOf('Middle release') < html.indexOf('Older release'));
   assert.ok(html.includes('November 3, 2026'));
+  assert.match(html, /<h3>New Cards<\/h3><ul><li>New creature<\/li><\/ul><\/section>/);
+  assert.match(html, /<h3>Balance Changes<\/h3><ul><li>Health reduced<\/li><\/ul><\/section>/);
+  assert.match(html, /<h3>Bug Fixes &lt;script&gt;<\/h3><ul><li>A &amp; B/);
   assert.ok(html.includes('A &amp; B &lt;script&gt;alert(1)&lt;/script&gt;'));
   assert.ok(!html.includes('<script>alert(1)</script>'));
   assert.ok(!html.includes('No patch notes yet.'));

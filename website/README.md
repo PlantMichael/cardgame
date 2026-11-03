@@ -1,6 +1,6 @@
 # cardgame website
 
-`/patch-notes/` lists published updates newest first and is linked in the top navigation. To publish an entry, add an object to `website/patch-notes.json` with `date` (`YYYY-MM-DD`), `title`, and `changes` (an array of plain-text strings), then rebuild. Entries are sorted by date during the build; content is escaped as text. An empty collection shows the empty state. The draft root `PATCH_NOTES.md` is not automatically published.
+`/patch-notes/` lists published updates newest first and is linked in the top navigation. To publish an entry, add an object to `website/patch-notes.json` with `date` (`YYYY-MM-DD`), `title`, and `sections`. Each section has a `title` (such as New Cards, Balance Changes, or Bug Fixes) and `changes` (an array of plain-text strings). Sections appear in the authored order under their own headings. Entries are sorted by date during the build; content is escaped as text. An empty collection shows the empty state. The draft root `PATCH_NOTES.md` is not automatically published.
 
 The public home, rulebook and glossary wrap the existing Godot Web export on the same Vercel project. Node 20+ is sufficient; no package installation or framework is needed.
 
