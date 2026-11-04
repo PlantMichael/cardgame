@@ -527,7 +527,7 @@
 	{
 		"id": "t_str_002",
 		"card_name": "Snow Bank",
-		"cost": 3,
+		"cost": 2,
 		"color": "TEAL",
 		"card_type": "STRATAGEM",
 		"rarity": "COMMON",
@@ -550,7 +550,7 @@
 		"card_type": "STRATAGEM",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "Make a yeti you control challenge. If it wins, give it +2/+2",
+		"description": "Give a Yeti you control +2/+2 and make it Challenge.",
 		"flavor_text": "",
 		"artist_name": "",
 		"attack": 0,

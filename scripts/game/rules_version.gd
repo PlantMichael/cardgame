@@ -17,4 +17,5 @@ extends RefCounted
 ## 6: Dump Scummer becomes 2/4; Debris Hauler loses unintended Cloaked.
 ## 7: Human ranked second-player opening choice; named bot games keep baseline.
 ## 8: Moon bots use the same opening choice in ranked, ranked AI and simulations.
-const RULES_VERSION := 8
+## 9: Patch 0.0.2 eight-card buff batch; Icewhip buffs before Challenge.
+const RULES_VERSION := 9

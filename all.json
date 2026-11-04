@@ -31,7 +31,7 @@
       "description": "Ambush",
       "flavor_text": "",
       "artist_name": "",
-      "attack": 1,
+      "attack": 2,
       "health": 1,
       "abilities": [
         "ambush"
@@ -68,7 +68,7 @@
       "card_type": "STRATAGEM",
       "rarity": "COMMON",
       "tribe": "",
-      "description": "Give a friendly creature +0/+3.",
+      "description": "Give a friendly creature +0/+4.",
       "flavor_text": "",
       "artist_name": "",
       "attack": 0,
@@ -76,7 +76,7 @@
       "abilities": [],
       "art": "res://assets/green/kevlar.png",
       "effect": "buff_health",
-      "effect_value": 3
+      "effect_value": 4
     },
     {
       "id": "g_026",
@@ -294,20 +294,20 @@
     {
       "id": "g_str_001",
       "card_name": "Supply Drop",
-      "cost": 3,
+      "cost": 2,
       "color": "GREEN",
       "card_type": "STRATAGEM",
       "rarity": "COMMON",
       "tribe": "",
-      "description": "Give a friendly creature +2/+2.",
+      "description": "Give a friendly creature +3/+0.",
       "flavor_text": "",
       "artist_name": "",
       "attack": 0,
       "health": 0,
       "abilities": [],
       "art": "res://assets/green/supplydrop.png",
-      "effect": "buff_creature",
-      "effect_value": 2
+      "effect": "buff_attack",
+      "effect_value": 3
     },
     {
       "id": "g_030",
@@ -2191,7 +2191,7 @@
     {
       "id": "o_003",
       "card_name": "Junior Pilot",
-      "cost": 2,
+      "cost": 1,
       "color": "ORANGE",
       "card_type": "CREATURE",
       "rarity": "COMMON",
@@ -2251,7 +2251,7 @@
     {
       "id": "o_str_003",
       "card_name": "Panic Button",
-      "cost": 2,
+      "cost": 1,
       "color": "ORANGE",
       "card_type": "STRATAGEM",
       "rarity": "RARE",
@@ -2386,7 +2386,7 @@
     {
       "id": "o_str_002",
       "card_name": "Nanotech",
-      "cost": 3,
+      "cost": 2,
       "color": "ORANGE",
       "card_type": "STRATAGEM",
       "rarity": "COMMON",
@@ -2782,7 +2782,7 @@
       "card_type": "STRATAGEM",
       "rarity": "COMMON",
       "tribe": "",
-      "description": "Make a yeti you control challenge. If it wins, give it +2/+2",
+      "description": "Give a Yeti you control +2/+2 and make it Challenge.",
       "flavor_text": "",
       "artist_name": "",
       "attack": 0,
@@ -2973,7 +2973,7 @@
     {
       "id": "t_str_002",
       "card_name": "Snow Bank",
-      "cost": 3,
+      "cost": 2,
       "color": "TEAL",
       "card_type": "STRATAGEM",
       "rarity": "COMMON",

@@ -864,7 +864,7 @@ func _input(event: InputEvent) -> void:
 									elif _stratagem_needs_friendly_mech(card.data):
 										_highlight_friendly_mech_targets(true)
 									elif _stratagem_needs_friendly_creature_only(card.data):
-										_highlight_stratagem_minions(player_board_zone, true, card.data.effect in ["sanguine", "heal", "give_ability", "return_friendly_to_hand"])
+										_highlight_stratagem_minions(player_board_zone, true, card.data.effect in ["sanguine", "heal", "give_ability", "buff_attack", "return_friendly_to_hand"])
 									else:
 										_highlight_stratagem_minions(player_board_zone, true)
 										_highlight_stratagem_minions(opponent_board_zone, true)
@@ -1496,7 +1496,7 @@ func _on_card_dropped(card: Card) -> void:
 							if zone != player_board_zone:
 								continue
 							# A Location is on the board but is not a creature.
-							if card.data.effect == GameState.EFFECT_RETURN_FRIENDLY and target_card.minion.is_location():
+							if card.data.effect in [GameState.EFFECT_RETURN_FRIENDLY, "buff_attack"] and target_card.minion.is_location():
 								continue
 						var card_data_to_play = card.data
 						var target_minion = target_card.minion

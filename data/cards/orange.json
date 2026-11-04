@@ -96,7 +96,7 @@
 	{
 		"id": "o_003",
 		"card_name": "Junior Pilot",
-		"cost": 2,
+		"cost": 1,
 		"color": "ORANGE",
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
@@ -507,7 +507,7 @@
 	{
 		"id": "o_str_002",
 		"card_name": "Nanotech",
-		"cost": 3,
+		"cost": 2,
 		"color": "ORANGE",
 		"card_type": "STRATAGEM",
 		"rarity": "COMMON",
@@ -525,7 +525,7 @@
 	{
 		"id": "o_str_003",
 		"card_name": "Panic Button",
-		"cost": 2,
+		"cost": 1,
 		"color": "ORANGE",
 		"card_type": "STRATAGEM",
 		"rarity": "RARE",

@@ -728,7 +728,7 @@ func _resolve_challenge(choice: Dictionary, target: Minion) -> void:
 	if challenger == null or challenger.owner_id != actor_id or target == null:
 		return
 	apply_challenge(challenger, target)
-	# "If it wins" bonus (Icewhip, Rampage's win-buff creature): the challenger
+	# "If it wins" bonus for win-buff creatures: the challenger
 	# survived and the challenged creature did not.
 	if amount > 0 and find_minion(challenger.instance_id) != null and find_minion(target.instance_id) == null:
 		challenger.current_attack += amount
@@ -1243,7 +1243,7 @@ func play_creature(acting_player_id: String, card: CardData, at_index: int = -1)
 # Adding a new effect that grants health means calling one of these, not
 # copying a four-line sequence and hoping it is the current one.
 
-## +amount to BOTH current and maximum health (a buff: Supply Drop, Apothecary,
+## +amount to BOTH current and maximum health (a buff: Icewhip, Apothecary,
 ## tank specialist, the on-play and death-trigger buffs).
 func gain_max_health(target: Minion, amount: int) -> void:
 	if target == null or amount <= 0:
@@ -1318,7 +1318,7 @@ const EFFECT_DAMAGE_ENEMIES_DRAW_YETI := "deal_damage_all_enemy_draw_yeti"
 ## and BEFORE any mana is spent or the card consumed.
 func _stratagem_target_error(card: CardData, target: Minion, target_player_id: String,
 							 actor: PlayerState) -> String:
-	if card.effect == EFFECT_RETURN_FRIENDLY:
+	if card.effect in [EFFECT_RETURN_FRIENDLY, "buff_attack"]:
 		if not target_player_id.is_empty():
 			return "a hero is not a legal target"
 		if target == null:
@@ -1330,7 +1330,7 @@ func _stratagem_target_error(card: CardData, target: Minion, target_player_id: S
 		# The play removes this card from hand first, so the returned card
 		# needs the slot that frees. A hand at capacity cannot exist with the
 		# card still in it, but the rule is stated rather than assumed.
-		if actor.hand.size() > PlayerState.MAX_HAND_SIZE:
+		if card.effect == EFFECT_RETURN_FRIENDLY and actor.hand.size() > PlayerState.MAX_HAND_SIZE:
 			return "no room in hand"
 	elif card.effect == "force_challenge":
 		if target == null or target.owner_id != actor.player_id or target not in actor.board:
@@ -1677,6 +1677,9 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 				_try_heal_to_draw(target_minion, target_minion.current_health - pre)
 				_try_apothecary_bonus(target_minion.owner_id, target_minion)
 				_try_health_transform(target_minion)
+		"buff_attack":
+			if target_minion:
+				target_minion.current_attack += card.effect_value
 		"buff_health":
 			if target_minion:
 				var pre := target_minion.current_health
@@ -1767,9 +1770,11 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 				# Drain: ANOTHER friendly creature receives the health (never the donor).
 				request_choice(acting_player_id, CHOICE_HEAL_BUFF_TARGET, 2, null, {"exclude": donor_id})
 		"force_challenge":
-			# Icewhip: the chosen Yeti challenges; a win grants it +N/+N.
+			# Icewhip buffs before combat, even if no enemy can be challenged.
 			if target_minion != null and target_minion.has_ability(Abilities.YETI):
-				request_choice(acting_player_id, CHOICE_CHALLENGE, card.effect_value, target_minion)
+				target_minion.current_attack += card.effect_value
+				gain_max_health(target_minion, card.effect_value)
+				request_choice(acting_player_id, CHOICE_CHALLENGE, 0, target_minion)
 		"exsanguinate":
 			if target_minion:
 				damage_minion(target_minion, target_minion.current_health * card.effect_value)

@@ -287,6 +287,7 @@ Stratagem effects handled in `_apply_stratagem()`:
 - `"deal_damage"` — damages target minion or hero
 - `"buff_creature"` — increases attack and health
 - `"buff_health"` — increases health only
+- `"buff_attack"` — Supply Drop: increases attack only on a friendly creature; heroes, enemies and Locations are rejected before card or mana consumption.
 - `"give_ability"` — grants an ability from `card.abilities[0]` to the target minion
 - `"deal_damage_all_creatures"` — deals damage to every minion on both sides
 - `"buff_all_friendly_attack"` — gives all friendly creatures +N attack (no target needed)
@@ -304,7 +305,7 @@ Stratagem effects handled in `_apply_stratagem()`:
 - `"deal_damage_all_enemy"` — deals `effect_value` damage to every enemy minion (no target needed); e.g. Noxious Bombardment
 - `"return_friendly_to_hand"` — Emergency Extraction: moves a friendly *creature* (not a hero, enemy, or Location) back to hand via `return_minion_to_hand()`. Target legality is `_stratagem_target_error()`, checked in `validate()` and `play_stratagem()` before anything is spent
 - `"deal_damage_all_enemy_draw_yeti"` — Whiteout: `effect_value` damage (plus amp) to every enemy *creature* (Locations excluded); if any creature was at 0 health at that checkpoint — read before `_remove_dead_minions()`, so a Reinforce refill or a later deathrattle cannot change it — runs `draw_random_yeti()` once
-- `"force_challenge"` — prompts player to pick a friendly Yeti to immediately challenge a chosen enemy; if `effect_value > 0` and the target dies, the Yeti gains +`effect_value`/+`effect_value`; e.g. Icewhip
+- `"force_challenge"` — Icewhip: give the targeted friendly Yeti +`effect_value`/+`effect_value` before choosing an enemy to Challenge. The buff remains without combat, and winning grants no second bonus. Health-gain reactions use `gain_max_health()`.
 
 ## Observed card plays
 

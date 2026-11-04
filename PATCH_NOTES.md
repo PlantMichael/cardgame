@@ -1,8 +1,8 @@
-# Patch 0.0.2: Orange buffs
+# Patch 0.0.2: Card buffs
 
 Draft, not yet released.
 
-Orange has been one of the lowest-performing factions, with its cheap creatures and its mech support spell trailing the rest of the pool. This patch buffs five of its weakest cards.
+Buffs for underperforming cards across Orange, Green and Teal.
 
 ## Balance changes
 
@@ -17,6 +17,24 @@ Stats below are **attack/health**.
 | Scrap Rummager | 1 | Stats changed from **1/2 to 1/3**. Still has Rush. |
 | Morph Drones | 1 | Now has **Rush**, so it can attack the enemy player the turn it is played. Headshot is unchanged. |
 | Carbon Mesh | 2 | Now gives **all friendly mechs Shielded 2** instead of one friendly mech Shielded 3. Still lasts until the end of your opponent's next turn. |
+| Panic Button | **2 → 1** | Effect unchanged. |
+| Junior Pilot | **2 → 1** | Still a 1/1 with Pilot 2/2. |
+| Nanotech | **3 → 2** | Still gives +2/+2. |
+
+### Green
+
+| Card | Mana | Change |
+|---|---:|---|
+| Lone Operative | 1 | Stats changed from **1/1 to 2/1**. Still has Ambush. |
+| Kevlar | 2 | Now gives **+0/+4** instead of +0/+3. |
+| Supply Drop | **3 → 2** | Now gives **+3/+0** instead of +2/+2. |
+
+### Teal — Mokotai
+
+| Card | Mana | Change |
+|---|---:|---|
+| Snow Bank | **3 → 2** | Still gives +2/+2. |
+| Icewhip | 2 | Give a Yeti you control **+2/+2, then make it Challenge**. The buff no longer depends on winning. |
 
 ### Effect details
 

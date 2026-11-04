@@ -63,7 +63,7 @@
 - Mokotai (Teal) starter deck: 2× every non-legendary teal card + 1× Abominus + 1× each of the 5 generic cards = 40
 - `challenge_all` ability (Rampage): on play, challenges every enemy creature left-to-right; each challenge resolves fully before the next
 - `rummage_and_play` ability: retrieve a creature from graveyard and immediately play it to board (Greedy Junkling)
-- `force_challenge` stratagem effect: prompts a Yeti to challenge; if `effect_value > 0` and the Yeti kills the target, it gains that many +atk/+hp (Icewhip)
+- `force_challenge` stratagem effect: Icewhip buffs a friendly Yeti +2/+2 before it Challenges; the buff does not depend on winning.
 - `deal_damage_all_enemy` stratagem effect: deals damage to every enemy minion with no target prompt (Noxious Bombardment)
 - Rummage vs Fetch distinction: black rummage mechanics discount retrieved cards by 1 mana; orange/green fetch mechanics (`rummage_mech_on_death`, `deathrattle_return_stratagem`) do not
 - Stinkpile on-play sequencing: rummaged cards' on-play effects and all pending queues resolve between each rummage prompt

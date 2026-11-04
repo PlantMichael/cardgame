@@ -27,7 +27,7 @@ of these, not copying a four-line sequence:
 max-health transform check. Ten sites in `abilities.gd` used to open-code that
 sequence and all but one omitted the transform check, so a creature buffed over
 its threshold by an ability did not transform while the same creature buffed by
-Supply Drop did. `restore_health()` deliberately skips the transform check —
+Snow Bank did. `restore_health()` deliberately skips the transform check —
 `_try_health_transform()` triggers off `max_health`, which a pure heal cannot
 raise.
 
@@ -78,7 +78,7 @@ it saves keeps whatever returns it still had.
 **Crypt Hunger (Delos, `cr_019`) — "when this creature gains health, lose it
 and draw a card."** The gain is reverted in whatever stat was raised, then a
 card is drawn. `GameState._try_heal_to_draw(target, gained, max_gained)` takes
-both deltas: a +N/+N buff (Apothecary, Supply Drop, tank specialist) passes
+both deltas: a +N/+N buff (Apothecary, Snow Bank, tank specialist) passes
 both so the creature ends where it started, while a **pure heal** — restoring
 damage, capped at the existing maximum — passes `0` for `max_gained`. Passing
 the current-health gain for both is what used to shrink the creature: a

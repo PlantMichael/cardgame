@@ -361,6 +361,14 @@ static func _pick_stratagem_target(card: CardData, gs: GameState, acting_id: Str
 				elif no_guardians_bl:
 					result["player_id"] = enemy_id
 					result["ready"] = true
+		"buff_attack":
+			var creatures: Array[Minion] = []
+			for m in friendly_targetable:
+				if not m.is_location():
+					creatures.append(m)
+			if not creatures.is_empty():
+				result["minion"] = AIHeuristics.pick_strongest(creatures)
+				result["ready"] = true
 		"buff_creature":
 			if not friendly_targetable.is_empty():
 				result["minion"] = AIHeuristics.pick_strongest(friendly_targetable)

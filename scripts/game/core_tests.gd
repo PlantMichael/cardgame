@@ -1646,22 +1646,46 @@ static func _test_family_challenge(filler: String) -> void:
 		var n: int = r5["events"].filter(func(e): return e["type"] == "challenge").size()
 		_check("Rampage challenged every enemy with no prompt", not gs5.has_pending_choice() and n >= 1)
 
-	# Icewhip: friendly Yeti target, then the enemy; a win buffs by effect_value.
+	# Icewhip buffs before the Challenge, never a second time for winning.
 	var gs6 := _arena(filler)
 	var yeti6 := _put_on_board(gs6, gs6.player.player_id, "t_025")
 	var weak6 := _put_on_board(gs6, gs6.opponent.player_id, filler)
-	weak6.current_health = 1
+	weak6.max_health = yeti6.current_attack + 2
+	weak6.current_health = weak6.max_health
 	weak6.current_attack = 0
+	var attack_before := yeti6.current_attack
+	var hp_before := yeti6.max_health
 	var ice := _hand_add(gs6, gs6.player.player_id, "t_str_003")
 	var r6 := gs6.execute({"type": "play_stratagem", "actor": gs6.player.player_id, "card_uid": ice.uid, "target_instance_id": yeti6.instance_id})
 	_check("Icewhip on a Yeti opens a challenge", r6["ok"] and gs6.has_pending_choice() and gs6.pending_choice["effect"] == GameState.CHOICE_CHALLENGE)
-	var hp_before := yeti6.max_health
+	_check("Icewhip buffs both stats before combat", yeti6.current_attack == attack_before + ice.effect_value and yeti6.max_health == hp_before + ice.effect_value and yeti6.current_health == hp_before + ice.effect_value)
 	_answer(gs6, weak6.instance_id)
-	_check("a win grants +%d/+%d" % [ice.effect_value, ice.effect_value], yeti6.max_health == hp_before + ice.effect_value)
+	_check("the buff enables the kill without a second win bonus", gs6.find_minion(weak6.instance_id) == null and yeti6.current_attack == attack_before + ice.effect_value and yeti6.max_health == hp_before + ice.effect_value)
 	var gs7 := _arena(filler)
 	var plain := _put_on_board(gs7, gs7.player.player_id, filler)
 	var ice2 := _hand_add(gs7, gs7.player.player_id, "t_str_003")
 	_check("Icewhip on a non-Yeti is refused", not gs7.execute({"type": "play_stratagem", "actor": gs7.player.player_id, "card_uid": ice2.uid, "target_instance_id": plain.instance_id})["ok"])
+	for fight in ["loss", "no_enemy", "decline"]:
+		var state := _arena(filler)
+		var source := _put_on_board(state, "a", "t_025")
+		var start_attack := source.current_attack
+		var start_health := source.max_health
+		var foe: Minion = null
+		if fight != "no_enemy":
+			foe = _put_on_board(state, "b", filler)
+			foe.current_health = 100
+			foe.max_health = 100
+			foe.current_attack = 100
+		state.player.hand.clear()
+		var whip := _hand_add(state, "a", "t_str_003")
+		var action := HeadlessTurn.greedy_pick_action(state, "a") if fight == "loss" else {"type": "play_stratagem", "actor": "a", "card_uid": whip.uid, "target_instance_id": source.instance_id}
+		_check("Icewhip executes through shared rules: " + fight, state.execute(action)["ok"])
+		if fight != "no_enemy":
+			_check("Icewhip choice resolves: " + fight, _answer(state, foe.instance_id if fight == "loss" else "")["ok"])
+		if fight == "loss":
+			_check("AI Icewhip deals buffed damage even when its Yeti loses", source not in state.player.board and foe.current_health == 100 - start_attack - whip.effect_value)
+		else:
+			_check("Icewhip keeps buff without combat: " + fight, not state.has_pending_choice() and source.current_attack == start_attack + whip.effect_value and source.max_health == start_health + whip.effect_value)
 
 	# Overwatch queue entry becomes a two-step challenge for its owner.
 	var gs8 := _arena(filler)
@@ -1706,6 +1730,34 @@ static func _test_family_challenge(filler: String) -> void:
 	gs11._remove_dead_minions()
 	gs11.resolve_to_quiescence()
 	_check("control: with a normal enemy the overwatch pick opens", gs11.has_pending_choice() and gs11.pending_choice["effect"] == GameState.CHOICE_PICK_CHALLENGER)
+
+static func _test_attack_buff(filler: String) -> void:
+	print("[targeted attack-only buff]")
+	var gs := _arena(filler)
+	gs.player.hand.clear()
+	var body := _put_on_board(gs, "a", filler)
+	body.max_health = 5
+	body.current_health = 2
+	var foe := _put_on_board(gs, "b", filler)
+	var location_data := CardData.new()
+	location_data.card_type = CardData.CardType.LOCATION
+	location_data.health = 10
+	var location := Minion.new(location_data, "a")
+	gs.player.place_minion(location)
+	var spell := _hand_add(gs, "a", "g_str_001")
+	for target in [{"target_instance_id": foe.instance_id}, {"target_instance_id": location.instance_id}, {"target_player_id": "a"}, {}]:
+		var invalid := {"type": "play_stratagem", "actor": "a", "card_uid": spell.uid}
+		invalid.merge(target)
+		var before := gs.state_hash()
+		_check("attack buff rejects invalid target atomically", not gs.execute(invalid)["ok"] and gs.state_hash() == before)
+	var actions := HeadlessTurn.stratagem_actions(spell, gs, "a")
+	_check("AI offers only the friendly creature for the attack buff", actions.size() == 1 and actions[0]["target_instance_id"] == body.instance_id)
+	var action := HeadlessTurn.greedy_pick_action(gs, "a")
+	_check("greedy AI selects the attack buff", action.get("card_uid") == spell.uid and action.get("target_instance_id") == body.instance_id)
+	var attack_before := body.current_attack
+	_check("attack buff executes", gs.execute(action)["ok"])
+	_check("attack buff raises attack without healing or max-health gain", body.current_attack == attack_before + spell.effect_value and body.current_health == 2 and body.max_health == 5)
+	_check("attack buff consumes its card and mana", spell not in gs.player.hand and gs.player.current_mana == spell.effective_cost())
 
 static func _test_ai_pilot_actions(filler: String) -> void:
 	print("[AI pilot actions]")
@@ -2528,6 +2580,7 @@ static func run() -> int:
 	_test_state_hash(card_id)
 	_test_family_on_play_damage(card_id)
 	_test_family_challenge(card_id)
+	_test_attack_buff(card_id)
 	_test_ai_pilot_actions(card_id)
 	_test_family_pilot_swap_devour_transform(card_id)
 	_test_family_queues(card_id)
