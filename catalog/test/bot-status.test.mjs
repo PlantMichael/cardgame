@@ -6,12 +6,12 @@ import { fileURLToPath } from 'node:url';
 import { createCatalogServer } from '../src/server.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
-const names = { io: 'Io', callisto: 'Callisto', europa: 'Europa', ganymede: 'Ganymede' };
+const names = { io: 'Io', callisto: 'Callisto', europa: 'Europa', ganymede: 'Ganymede', amalthea: 'Amalthea' };
 const fixture = () => ({ generatedAt: new Date().toISOString(), token: 'private-secret', bots: Object.entries(names).map(([id,name]) =>
   ({ id,name,version:'1.0',level:8,style:'tempo',activity:'playing',player_id:123,match_id:'private-match',
     rank:{bracket:0,inLegend:false,legendRating:0,lp:34,rating:1000} })) });
 
-test('public bot status proxy projects only four identities and rejects unavailable or malformed data', async t => {
+test('public bot status proxy projects only five identities and rejects unavailable or malformed data', async t => {
   let mode = 'ok', calls = 0;
   const upstream = http.createServer((req,res) => {
     calls++; assert.equal(req.url, '/data/bots/status.json');
@@ -21,6 +21,7 @@ test('public bot status proxy projects only four identities and rejects unavaila
     if (mode === 'large') { res.end(' '.repeat(32769)); return; }
     const data = fixture();
     Object.assign(data.bots[3], {version:'1.1',level:4,style:''});
+    Object.assign(data.bots[4], {version:'1.0',level:6,style:'budget'});
     if (mode === 'duplicate') data.bots[1] = data.bots[0];
     if (mode === 'human') data.bots[0].name = 'Private Human';
     if (mode === 'unknown') data.bots[0].id = 'someone_else';
@@ -42,6 +43,8 @@ test('public bot status proxy projects only four identities and rejects unavaila
   const text = await response.text(), data = JSON.parse(text);
   assert.deepEqual(data.bots.map(b=>b.id),Object.keys(names));
   assert.equal(data.bots[0].rank.lp,34);
+  assert.equal(data.bots[4].style,'budget');
+  assert.equal(data.bots[4].level,6);
   assert.deepEqual([data.bots[3].version,data.bots[3].level,data.bots[3].style],['1.1',4,'']);
   for(const secret of ['token','player_id','match_id','private','rating"']) assert.ok(!text.includes(secret),secret);
   const before = calls;

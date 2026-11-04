@@ -51,7 +51,7 @@ test('owned bot status crosses storage, presence, catalog and page without leaki
   }
   async function io() { clock += 5001; return (await snapshot()).bots.find(b => b.id === 'io'); }
   const empty = await snapshot();
-  assert.deepEqual(empty.bots.map(b => b.id), ['io','callisto','europa','ganymede']);
+  assert.deepEqual(empty.bots.map(b => b.id), ['io','callisto','europa','ganymede','amalthea']);
   assert.ok(empty.bots.every(b => b.activity === 'not_started' && b.rank === null));
   assert.equal(rankDisplay(empty.bots[0].rank).name, 'Not ranked yet');
   await provisionRankedBots(pool);
@@ -128,5 +128,5 @@ test('owned bot status crosses storage, presence, catalog and page without leaki
   await pool.query('ALTER TABLE ranked_bot_accounts RENAME TO status_temporarily_unavailable'); clock += 5001;
   assert.equal((await fetch(catalog + BOT_STATUS_PATH)).status, 503, 'a failed lookup never fabricates offline bots');
   await pool.query('ALTER TABLE status_temporarily_unavailable RENAME TO ranked_bot_accounts');
-  assert.equal((await snapshot()).bots.length, 4, 'failure is not cached');
+  assert.equal((await snapshot()).bots.length, 5, 'failure is not cached');
 });

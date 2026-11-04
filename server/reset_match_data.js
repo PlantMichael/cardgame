@@ -34,7 +34,7 @@ async function resetMatchData(pool, { apply = false } = {}) {
     const before = await counts(client);
     if (!apply) { await client.query('ROLLBACK'); return { applied: false, before }; }
     const bots = (await client.query(`SELECT b.bot_id,p.username FROM ranked_bot_accounts b JOIN players p ON p.id=b.player_id`)).rows;
-    if (bots.length !== 4 || !profiles.every(p => bots.some(b => b.bot_id === p.id && b.username === p.name))) throw new Error('Expected exactly four trusted bot accounts');
+    if (bots.length !== profiles.length || !profiles.every(p => bots.some(b => b.bot_id === p.id && b.username === p.name))) throw new Error('Expected the exact trusted bot roster');
     const unchanged = await preserved(client);
     const tombstones = await client.query(`INSERT INTO ranked_result_tombstones (match_id,player_id)
       SELECT match_id,player_id FROM ranked_settlements ON CONFLICT DO NOTHING`);
@@ -44,7 +44,7 @@ async function resetMatchData(pool, { apply = false } = {}) {
       rank_legend_rating=0,rank_lp=0,ranked_win_streak=0,ranked_wins=0,ranked_losses=0
       WHERE id IN (SELECT player_id FROM ranked_bot_accounts)`);
     const after = await counts(client);
-    if (reset.rowCount !== 4 || Object.values(after).some(n => n !== 0) || unchanged !== await preserved(client)) throw new Error('Reset preservation check failed');
+    if (reset.rowCount !== profiles.length || Object.values(after).some(n => n !== 0) || unchanged !== await preserved(client)) throw new Error('Reset preservation check failed');
     await client.query('COMMIT');
     return { applied: true, before, after, botsReset: reset.rowCount, replayKeysRetained: tombstones.rowCount, preserved: true };
   } catch (error) { await client.query('ROLLBACK'); throw error; }

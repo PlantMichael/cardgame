@@ -13,14 +13,14 @@ const { createRelayServer } = require('../card_winrates');
 const { disposableDatabase, PROJECT_DIR } = require('./helpers');
 
 test('schedule covers each pairing, both first players and every faction combination', () => {
-  const jobs = Array.from({ length: 500 }, (_, i) => jobAt(i));
+  const jobs = Array.from({ length: 750 }, (_, i) => jobAt(i));
   const pairs = new Map();
   for (const j of jobs) {
     const key = `${j.a}/${j.b}`;
     if (!pairs.has(key)) pairs.set(key, new Set());
     pairs.get(key).add(`${j.factionA}/${j.factionB}/${j.first}`);
   }
-  assert.equal(pairs.size, 10);
+  assert.equal(pairs.size, 15);
   for (const seen of pairs.values()) assert.equal(seen.size, 50);
 });
 

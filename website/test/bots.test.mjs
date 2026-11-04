@@ -19,6 +19,8 @@ test('bot page refuses missing identities and invented activity or rank',()=>{
   assert.ok(validStatus(data));
   Object.assign(data.bots.find(b=>b.id==='ganymede'), {version:'1.1',level:4,style:''});
   assert.ok(validStatus(data), 'normal level-based policy is accepted');
+  Object.assign(data.bots.find(b=>b.id==='amalthea'), {version:'1.0',level:6,style:'budget'});
+  assert.ok(validStatus(data), 'budget drafting style is accepted');
   for(const mutate of [d=>d.bots.pop(),d=>{d.bots[1]=d.bots[0];},d=>{d.bots[0].activity='thinking_about_secrets';},
     d=>{d.bots[0].name='Someone else';},d=>{d.generatedAt='yesterday';},
     d=>{d.bots[0].activity='playing';},d=>{d.bots[3].style='invented';}]) {

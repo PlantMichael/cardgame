@@ -267,7 +267,7 @@ test('real relay records AI summaries atomically and preserves legacy settlement
   for (const socket of sockets) socket.terminate();
   const stopped = once(relay, 'exit'); relay.kill(); await stopped;
   const reset = await resetMatchData(pool, { apply: true });
-  assert.equal(reset.preserved, true); assert.equal(reset.botsReset, 4);
+  assert.equal(reset.preserved, true); assert.equal(reset.botsReset, 5);
   assert.ok(Object.values(reset.after).every(n => n === 0));
   assert.deepEqual((await pool.query('SELECT * FROM players WHERE id=$1', [player])).rows[0], humanBefore);
   assert.ok((await pool.query(`SELECT * FROM players WHERE id IN (SELECT player_id FROM ranked_bot_accounts)`)).rows

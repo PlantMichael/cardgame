@@ -24,7 +24,7 @@ function participant(p, engineVersion, historical) {
   if (!known && p.id !== 'standard') throw new Error('invalid bot id');
   if (p.name !== (known?.name ?? 'Standard AI') || !Number.isInteger(p.level) || p.level < 1 || p.level > 10 ||
       typeof p.version !== 'string' || !/^\d{1,6}(?:\.\d{1,6})?$/.test(p.version) ||
-      !['tempo', 'combo', 'aggro', 'random', ''].includes(p.style)) throw new Error('invalid bot metadata');
+      !['tempo', 'combo', 'aggro', 'budget', 'random', ''].includes(p.style)) throw new Error('invalid bot metadata');
   if (!historical && known && ['version', 'level', 'style'].some(key => p[key] !== known[key])) throw new Error('wrong release');
   if (p.id === 'standard' && (p.version !== String(engineVersion) || p.level !== 10 || p.style !== '')) throw new Error('invalid baseline');
   return { id: p.id, name: p.name, version: p.version, level: p.level, style: p.style };

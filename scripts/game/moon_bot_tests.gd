@@ -14,6 +14,87 @@ static func check(label: String, value: bool) -> void:
 	if not value:
 		failures += 1
 
+static func test_budget(profiles: Dictionary, allowed: Dictionary) -> void:
+	var profile: Dictionary = profiles["amalthea"]
+	var effects := {}
+	for card in CardDatabase.get_all_cards():
+		if not allowed.has(card.id) or card.effect not in DeckManager.BUDGET_REMOVAL_EFFECTS or effects.has(card.effect):
+			continue
+		effects[card.effect] = true
+		var gs := position()
+		gs.player.max_mana = 10
+		gs.player.current_mana = 0 # This engine stores mana already spent.
+		gs.player.hand = [card.new_instance(gs.player.mint_card_uid())]
+		var enemy := body(gs, "b", 4, 10)
+		var removes_enemy := false
+		for action in HeadlessTurn.list_legal_actions(gs, "a"):
+			if action["type"] != "play_stratagem": continue
+			var after := gs.duplicate_for_sim()
+			if HeadlessTurn.apply_action(after, action):
+				var target := after.find_minion(enemy.instance_id)
+				removes_enemy = removes_enemy or target == null or target.current_health < 10
+		check("Budget removal can actually damage/remove an enemy creature: %s" % card.effect, removes_enemy)
+	for faction in 5:
+		var legal := true
+		var curve_ok := true
+		var bears := 0
+		var available_bears := [0, 0, 0, 0]
+		for card in DeckManager._faction_pool(faction, true, allowed):
+			if card.rarity != CardData.CardRarity.LEGENDARY and DeckManager.is_bear(card):
+				var bucket := 0 if card.cost <= 2 else 1 if card.cost <= 4 else 2 if card.cost <= 6 else 3
+				available_bears[bucket] += 2
+		var max_bears := 0
+		for i in 4:
+			max_bears += mini(available_bears[i], [12, 12, 8, 2][i])
+		for draft_seed in 16:
+			seed(600 + draft_seed)
+			var deck := Bots.build_deck(profile, faction, allowed)
+			var counts := {}
+			var curve := [0, 0, 0, 0]
+			var removal := 0
+			legal = legal and deck.size() == 40
+			for card in deck:
+				counts[card.id] = int(counts.get(card.id, 0)) + 1
+				legal = legal and allowed.has(card.id) and not card.is_token and card.rarity != CardData.CardRarity.LEGENDARY
+				legal = legal and (card.color == faction or card.color == CardData.CardColor.GENERIC) and counts[card.id] <= 2
+				if card.card_type == CardData.CardType.CREATURE:
+					curve[0 if card.cost <= 2 else 1 if card.cost <= 4 else 2 if card.cost <= 6 else 3] += 1
+					if DeckManager.is_bear(card): bears += 1
+				elif card.card_type == CardData.CardType.STRATAGEM and card.effect in DeckManager.BUDGET_REMOVAL_EFFECTS:
+					removal += 1
+			curve_ok = curve_ok and curve == [12, 12, 8, 2] and removal == 6
+		check("Amalthea faction %s: 16 legal public nonlegendary drafts" % faction, legal)
+		check("Amalthea faction %s: six removals and a balanced creature curve" % faction, curve_ok)
+		check("Amalthea faction %s: strong bear preference" % faction, bears >= max_bears * 16 * 0.7)
+	for id in ["g_027", "cr_015", "cr_013", "o_025", "t_025", "t_026", "gen_001"]:
+		# Mortified Scout has Recon; tribal vanilla creatures have only a tribe marker.
+		check("Printed bear classification: %s" % id, DeckManager.is_bear(CardDatabase.get_card(id)) == (id != "gen_001"))
+	check("Budget empty publication fails closed", Bots.build_deck(profile, 0, {}).is_empty())
+	var limited := {"gen_str_001": true, "g_017": true, "gen_013": true}
+	var short := Bots.build_deck(profile, 0, limited)
+	check("Budget restricted pool never fills with legendaries or unpublished cards", short.size() < 40 and short.all(func(c): return limited.has(c.id) and c.rarity != CardData.CardRarity.LEGENDARY))
+	var sparse := allowed.duplicate()
+	for id in allowed:
+		if CardDatabase.get_card(str(id)).cost >= 7:
+			sparse.erase(id)
+	var fallback := Bots.build_deck(profile, 0, sparse)
+	var fallback_counts := {}
+	for card in fallback:
+		fallback_counts[card.id] = int(fallback_counts.get(card.id, 0)) + 1
+	check("Budget sparse curve fills legally from remaining eligible creatures", fallback.size() == 40 and fallback.all(func(c): return c.cost < 7 and c.rarity != CardData.CardRarity.LEGENDARY and sparse.has(c.id)) and fallback_counts.values().all(func(n): return n <= 2))
+	var gs := position()
+	body(gs, "a", 4, 5)
+	body(gs, "b", 2, 2)
+	for _i in 12:
+		gs.player.deck.append(CardDatabase.get_card("gen_013"))
+		gs.opponent.deck.append(CardDatabase.get_card("gen_013"))
+	var budget := Bots.search_engine("a", profile)
+	var neutral := MCTSEngine.new("a", 6)
+	var biased := MCTSEngine.new("a", 6, "budget")
+	var after := gs.duplicate_for_sim()
+	var score := budget._simulate(after, 2)
+	check("Budget uses ordinary level-six nonterminal rollout scoring", budget.ai_level == 6 and after.current_phase != GameState.Phase.GAME_OVER and is_equal_approx(score, neutral._simulate(gs.duplicate_for_sim(), 2)) and not is_equal_approx(score, biased._simulate(gs.duplicate_for_sim(), 2)))
+
 static func position() -> GameState:
 	var empty: Array[CardData] = []
 	var gs := GameState.new("a", "b", empty, empty, 17)
@@ -45,7 +126,7 @@ static func opening_state(first: String) -> GameState:
 static func test_opening(profiles: Dictionary) -> void:
 	for first in ["host", "guest"]:
 		var second := "guest" if first == "host" else "host"
-		for id in ["io", "callisto", "europa", "ganymede"]:
+		for id in ["io", "callisto", "europa", "ganymede", "amalthea"]:
 			var gs := opening_state(first)
 			var before := gs.state_hash()
 			var waiting := await Bots.choose_view_action(gs.to_net_dict(first), first, [], profiles[id])
@@ -131,6 +212,7 @@ static func run() -> int:
 	failures = 0
 	var profiles := Bots.roster()
 	var allowed := Bots.published_ids()
+	test_budget(profiles, allowed)
 	# Actual production drafting: full public decks across every profile/faction.
 	var means := {"io": 0.0, "europa": 0.0}
 	for profile in profiles.values():
@@ -212,7 +294,7 @@ static func run() -> int:
 	check("Callisto chooses the supporting combo play over raw stats", combo_action.get("card_uid", "") == setup.player.hand[0].uid)
 
 	gs.opponent.hero_health = 4
-	for id in ["io", "callisto", "europa", "ganymede"]:
+	for id in ["io", "callisto", "europa", "ganymede", "amalthea"]:
 		var profile: Dictionary = profiles[id]
 		var action := await Bots.choose_action(gs, MCTSEngine.new("a", int(profile["level"]), str(profile["style"])), profile, rng)
 		var after := gs.duplicate_for_sim()
@@ -236,7 +318,7 @@ static func run() -> int:
 	var old_url := OS.get_environment("RANKED_BOT_URL")
 	var old_sessions := OS.get_environment("RANKED_BOT_SESSIONS")
 	var sessions := []
-	for id in ["io", "callisto", "europa", "ganymede"]:
+	for id in ["io", "callisto", "europa", "ganymede", "amalthea"]:
 		var account := {"id": id, "token": "a".repeat(64)}
 		if id == "ganymede":
 			account["active_match"] = {"id": "old_policy", "profile": legacy}

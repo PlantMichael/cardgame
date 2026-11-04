@@ -29,7 +29,7 @@ function statistics(row) {
   return { matches: row.matches, wins: row.wins, losses: row.losses, draws: row.draws,
     winRate: row.wins + row.losses ? row.wins / (row.wins + row.losses) : null, averageTurns: row.averageTurns, first, second };
 }
-const names = { io: 'Io', callisto: 'Callisto', europa: 'Europa', ganymede: 'Ganymede', standard: 'Standard AI', human: 'Human players' };
+const names = { io: 'Io', callisto: 'Callisto', europa: 'Europa', ganymede: 'Ganymede', amalthea: 'Amalthea', standard: 'Standard AI', human: 'Human players' };
 
 export function projectBotStats(data, catalog, days, mode = 'simulation') {
   if ((data?.mode ?? 'simulation') !== mode || !(mode === 'ranked' ? ['server_verified','mixed'] : ['bot_simulation']).includes(data?.methodology?.source) || data.methodology.metric !== 'exact_starting_deck_matchup' ||
@@ -42,7 +42,7 @@ export function projectBotStats(data, catalog, days, mode = 'simulation') {
     const human = row.id === 'human';
     if (!Object.hasOwn(names, row.id) || row.name !== names[row.id] ||
         (human ? mode !== 'ranked' || row.version !== 'unversioned' || row.level !== null || row.style !== 'human'
-          : typeof row.version !== 'string' || !/^\d{1,6}(?:\.\d{1,6})?$/.test(row.version) || !Number.isInteger(row.level) || row.level < 1 || row.level > 10 || !['tempo', 'combo', 'aggro', 'random', ''].includes(row.style)) ||
+          : typeof row.version !== 'string' || !/^\d{1,6}(?:\.\d{1,6})?$/.test(row.version) || !Number.isInteger(row.level) || row.level < 1 || row.level > 10 || !['tempo', 'combo', 'aggro', 'budget', 'random', ''].includes(row.style)) ||
         !positive(row.rulesVersion) || !positive(row.engineVersion)) fail();
     const key = `${row.id}@${row.version}/L${row.level}/R${row.rulesVersion}/E${row.engineVersion}`;
     if (row.key !== key || botMap.has(key)) fail();
