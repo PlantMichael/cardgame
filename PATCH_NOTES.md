@@ -4,6 +4,10 @@ Draft, not yet released.
 
 Choose your advantage when going second, alongside buffs across Orange, Green and Teal and targeted nerfs.
 
+## Shop
+
+- The shop is disabled.
+
 ## Deck builder redesign
 
 - Refreshed the saved-deck hub, faction selection and editor to match the main menu.
