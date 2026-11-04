@@ -60,7 +60,6 @@ Stats below are **attack/health**.
 
 - Morph Drones with Rush can attack the player right away to trigger its Headshot (self-destruct and heal all friendly minions 2). It can still be held until it has a clear path to the enemy player.
 - Carbon Mesh still needs at least one friendly mech on the battlefield.
-- Stinkpile normally cannot Rummage the 8-mana Creeper Colossus at its new cost. Clutterpunk still allows equal-cost Rummage while it is on the field.
 
 ---
 
