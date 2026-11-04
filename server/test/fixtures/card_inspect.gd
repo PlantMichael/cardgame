@@ -83,6 +83,10 @@ func _run() -> void:
 		var previous_filter := screen._color_filter
 		await key(KEY_TAB)
 		check(screen._color_filter == previous_filter and not thumbnail.has_focus(), "keyboard focus stays in inspection")
+		var lore_scroll: ScrollContainer = screen._inspect_content.find_children("*", "ScrollContainer", true, false)[0]
+		var before_scroll := lore_scroll.scroll_vertical
+		await key(KEY_DOWN)
+		check(lore_scroll.scroll_vertical > before_scroll, "keyboard navigation scrolls overflowing flavor text")
 		get_tree().root.size = Vector2i(960, 640)
 		await get_tree().process_frame
 		await get_tree().process_frame

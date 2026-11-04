@@ -456,6 +456,11 @@ func _inspect_text_box(title_text: String, body_text: String, height: float, bod
 	column.add_child(title)
 	var scroll := ScrollContainer.new()
 	scroll.gui_input.connect(_inspect_backdrop_input)
+	var scrollbar := scroll.get_v_scroll_bar()
+	scrollbar.focus_mode = Control.FOCUS_ALL
+	scrollbar.custom_step = 24.0
+	scrollbar.accessibility_name = title_text.capitalize() + " scroll"
+	scrollbar.gui_input.connect(_inspect_backdrop_input)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.custom_minimum_size.y = body_height
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -493,8 +498,23 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		if event.is_action_pressed("ui_cancel"):
 			_close_inspect()
-		# Keep keyboard navigation and typing out of the list behind the modal.
-		get_viewport().set_input_as_handled()
+			get_viewport().set_input_as_handled()
+		elif event.is_action_pressed("ui_focus_next") or event.is_action_pressed("ui_focus_prev"):
+			_focus_inspect_scroll(-1 if event.is_action_pressed("ui_focus_prev") else 1)
+			get_viewport().set_input_as_handled()
+		# Other keys reach the focused native scrollbar (arrows, Home, End).
+
+func _focus_inspect_scroll(direction: int) -> void:
+	var scrollbars: Array[Control] = []
+	for pane in _inspect_content.find_children("*", "ScrollContainer", true, false):
+		var scrollbar: VScrollBar = pane.get_v_scroll_bar()
+		if scrollbar.is_visible_in_tree():
+			scrollbars.append(scrollbar)
+	if scrollbars.is_empty():
+		return
+	var current := scrollbars.find(get_viewport().gui_get_focus_owner())
+	var next := (0 if direction > 0 else scrollbars.size() - 1) if current < 0 else wrapi(current + direction, 0, scrollbars.size())
+	scrollbars[next].grab_focus()
 
 func _inspect_backdrop_input(event: InputEvent) -> void:
 	# GUI dispatch owns coordinate conversion and hit testing. The card holder
