@@ -19,6 +19,50 @@ async function listen(server) {
   return `http://127.0.0.1:${server.address().port}`;
 }
 
+test('large combined aggregates cross both HTTP boundaries without truncation and retain a size ceiling', { timeout: 30000 }, async t => {
+  const root = path.join(PROJECT_DIR, 'catalog/public');
+  const release = JSON.parse(readFileSync(path.join(root, 'data/cards.json'), 'utf8'));
+  const ids = release.cards.filter(c => c.collectible && !c.isToken && ['GREEN', 'GENERIC'].includes(c.color)).map(c => c.id);
+  const cards = loadCards(), records = [];
+  for (let a = 0; a < ids.length && records.length < 15000; a++) {
+    for (let b = a + 1; b < ids.length && records.length < 15000; b++) {
+      for (let c = b + 1; c < ids.length && records.length < 15000; c++) {
+        const ai_match = normalizeAIRecord({ player_deck: ['cr_002'], opponent_deck: [ids[a], ids[b], ids[c]],
+          ai_level: 10, ai_version: 3, rules_version: 8, turns: 12, first_player: 'player' }, `ai_1_${records.length + 1}`, cards);
+        assert.ok(ai_match);
+        records.push({ player_id: 1, won: true, ai_match });
+      }
+    }
+  }
+  assert.equal(records.length, 15000, 'published cards supply enough distinct legal lists for the size fixture');
+  let count = 3500;
+  const pool = { query: async query => {
+    if (typeof query === 'string' && query.includes("to_regclass('ranked_matches')")) return { rows: [{ available: false }] };
+    if (query.text?.startsWith('SELECT player_id, won, ai_match')) return { rows: records.slice(0, count) };
+    throw new Error('unexpected statistics query');
+  } };
+  const relay = createRelayServer({ pool, publicRoot: root });
+  const upstream = await listen(relay.server);
+  const { createCatalogServer } = await import('../../catalog/src/server.mjs');
+  const proxy = createCatalogServer(root, { statsOrigin: upstream });
+  const catalog = await listen(proxy);
+  t.after(async () => {
+    await new Promise(resolve => relay.wss.close(resolve));
+    for (const server of [proxy, relay.server]) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+  });
+  const response = await fetch(catalog + DECK_STATS_PATH + '?mode=all');
+  const body = await response.text();
+  assert.equal(response.status, 200, body);
+  assert.ok(Buffer.byteLength(body) > 4 * 1024 * 1024, 'exercises the production failure above the old ceiling');
+  assert.ok(Buffer.byteLength(body) < 16 * 1024 * 1024);
+  const data = JSON.parse(body);
+  assert.equal(data.games, count);
+  assert.equal(data.decks.length, count + 1);
+  assert.equal(data.matchups.length, count * 2);
+  count = records.length;
+  assert.equal((await fetch(upstream + DECK_STATS_PATH + '?mode=all&days=29')).status, 503, 'producer still rejects aggregates above 16 MiB');
+});
+
 test('exact decks and matchups survive storage, cohort filtering, and both public HTTP boundaries', {
   skip: !process.env.DATABASE_URL || !disposableDatabase() ? 'requires disposable DATABASE_URL' : false,
   timeout: 45000,
