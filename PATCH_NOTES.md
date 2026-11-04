@@ -1,8 +1,20 @@
-# Patch 0.0.2: Balance update
+# Patch 0.0.2: Opening choices and balance
 
 Draft, not yet released.
 
-Buffs for underperforming cards across Orange, Green and Teal, plus targeted Junk nerfs.
+Choose your advantage when going second, alongside buffs across Orange, Green and Teal and targeted Junk nerfs.
+
+## Going second: choose your opening bonus
+
+In ranked matches against players or AI opponents, the player going second chooses one option **before the mulligan**:
+
+| Option | Starting hand | Bonus |
+|---|---|---|
+| Coin | **4 cards + a Coin** | A **0-mana** card that grants **1 extra mana for the turn you play it**. You can save it for a later turn. |
+| Extra card | **5 cards total** | One additional card from your deck, with no Coin or Recruit. |
+| Recruit | **4 cards** | Start with a **1/1 Recruit** on your battlefield. It cannot attack on your first turn; it can attack on your second turn. |
+
+The Coin is added to your hand after the mulligan, so it cannot be exchanged. Its mana bonus expires at the end of the turn; it does not permanently increase your mana.
 
 ## Balance changes
 
@@ -21,7 +33,7 @@ Stats below are **attack/health**.
 | Junior Pilot | **2 → 1** | Still a 1/1 with Pilot 2/2. |
 | Nanotech | **3 → 2** | Still gives +2/+2. |
 
-### Green
+### Green — Sapiens
 
 | Card | Mana | Change |
 |---|---:|---|
