@@ -87,12 +87,21 @@ move the dummy display's pointer; native Windows execution with viewport mouse
 warping exercised the actual drop path successfully. The disposable fixture was
 removed from source before export and is absent from the pack inventory.
 
-Web pack: 66,653,856 bytes, SHA256
-`EFCD3D2CD3FBD4A5A51B8BCB997279ED1F036B190CC34304A4F679148E131FEF`.
+Web pack: 66,653,904 bytes, SHA256
+`5E927BF449705A9DD2EB24C3EFDCA837F9D4FD9EFBF41645494854DF58191020`.
 Inspected/restored import-only generated defaults. All 19 changed packed scenes
 compare identically after normalizing resource/node identifiers; other packed
 deltas are the intended JSON and compiled scripts. Existing texture-UID fallback
 warnings occurred in both before/after scene dumps; referenced paths and assets
 are unchanged. Raw evidence and disposable proofs use private card-buffs-* scratch
 files. No new permanent harness; retained tests protect attack-only targeting and
-Icewhip sequencing through GameState.execute. Implementation reviews pending.
+Icewhip sequencing through GameState.execute.
+
+Inner review found a stale greedy readiness guard: Icewhip was skipped on an
+empty enemy board despite its guaranteed buff. The correction retains Poke Bear's
+enemy requirement and lets Icewhip target a friendly Yeti without enemies. The
+existing no-enemy case now selects through greedy AI before execution, so the old
+guard fails its buff assertion. Rebuilt the pack, reran source/packed core
+(940/0 each) and bot checks (163/0); catalog and Board proof remain valid because
+their consumers/data did not change. Rechecked all 19 final packed scenes for
+equivalence after identifier normalization. Final raw logs carry the -final suffix.

@@ -1678,7 +1678,7 @@ static func _test_family_challenge(filler: String) -> void:
 			foe.current_attack = 100
 		state.player.hand.clear()
 		var whip := _hand_add(state, "a", "t_str_003")
-		var action := HeadlessTurn.greedy_pick_action(state, "a") if fight == "loss" else {"type": "play_stratagem", "actor": "a", "card_uid": whip.uid, "target_instance_id": source.instance_id}
+		var action := HeadlessTurn.greedy_pick_action(state, "a") if fight != "decline" else {"type": "play_stratagem", "actor": "a", "card_uid": whip.uid, "target_instance_id": source.instance_id}
 		_check("Icewhip executes through shared rules: " + fight, state.execute(action)["ok"])
 		if fight != "no_enemy":
 			_check("Icewhip choice resolves: " + fight, _answer(state, foe.instance_id if fight == "loss" else "")["ok"])

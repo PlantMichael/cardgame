@@ -424,7 +424,8 @@ static func _pick_stratagem_target(card: CardData, gs: GameState, acting_id: Str
 				result["ready"] = true
 		"force_challenge", "poke_bear":
 			for m in acting.board:
-				if m.has_ability(Abilities.YETI) and not enemy.board.is_empty():
+				# Icewhip's buff is useful even without an enemy to Challenge.
+				if m.has_ability(Abilities.YETI) and (card.effect == "force_challenge" or not enemy.board.is_empty()):
 					result["minion"] = m
 					result["ready"] = true
 					break
