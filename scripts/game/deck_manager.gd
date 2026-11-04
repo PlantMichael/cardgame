@@ -141,6 +141,7 @@ const ARCHETYPE_TAG_WEIGHTS := {
 		"growvin_aura": 2.0, "broodtender_aura": 2.0, "tactical_officer": 1.0,
 	},
 	Archetype.VALUE: {
+		"on_play_aoe_all_1": 2.0,
 		"guardian": 2.0, "rummage": 3.0, "rummage_buff": 2.0, "rummage_draw": 2.0,
 		"rummage_spell": 2.0, "rummage_and_play": 2.0, "rummage_equal_cost": 2.0,
 		"reinforce": 2.0, "recon": 1.0, "heal": 2.0, "heal_to_draw": 2.0,

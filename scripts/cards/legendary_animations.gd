@@ -163,7 +163,7 @@ static func _stinkpile_landing(card: Card, board: Node2D, target_scale: Vector2)
 	await impact.finished
 	# Hold past the squash so the splash's outward burst is actually on
 	# screen before this returns and board.gd lets StinkPile's own on-play
-	# Rummage 3 picker open over it. The remaining ~2s of hold-and-retract
+	# Rummage picker open over it. The remaining ~2s of hold-and-retract
 	# keeps playing underneath on its own - see _spawn_sludge() on why that
 	# tail is deliberately not awaited.
 	await card.get_tree().create_timer(SLUDGE_SPLASH_TIME + 0.2).timeout

@@ -65,6 +65,7 @@ const HEADSHOT_SHUFFLE_SELF := "headshot_shuffle_self"
 const HEADSHOT_SELF_DESTRUCT_HEAL := "headshot_self_destruct_heal"
 const HEADSHOT_CHALLENGE := "headshot_challenge"
 const DAMAGE_RUMMAGE := "damage_rummage"
+const ON_PLAY_AOE_ALL_1 := "on_play_aoe_all_1"
 const ON_PLAY_GRAVEYARD_HEALTH := "on_play_graveyard_health"
 const ON_PILOT_RESTORE_HEALTH := "on_pilot_restore_health"
 
@@ -156,6 +157,7 @@ const DEFINITIONS: Dictionary = {
 	END_TURN_YETI_DISCOUNT:           { "display": "Provision",      "color": Color(0.45, 0.70, 0.85) },
 	TWO_SLOT:                         { "display": "Colossal",       "color": Color(0.45, 0.70, 0.85) },
 	TRAMPLE:                          { "display": "Trample",        "color": Color(0.70, 0.30, 0.10) },
+	ON_PLAY_AOE_ALL_1: { "display": "On Play:", "color": Color(0.55, 0.12, 0.12) },
 }
 
 const ON_PLAY_DAMAGE             = "on_play_damage"
@@ -437,6 +439,15 @@ func get_transform_health_threshold(ability: String) -> int:
 func fire_on_play(minion: Minion, owner: PlayerState, gs: GameState) -> void:
 	for ability in minion.abilities:
 		match ability:
+			ON_PLAY_AOE_ALL_1:
+				# Both-board damage is symmetric and unamplified, like the
+				# existing both-board death effects. Include this creature.
+				for p in [gs.player, gs.opponent]:
+					for target in p.board.duplicate():
+						if not target.is_location():
+							gs.damage_minion(target, 1)
+				gs._remove_dead_minions()
+				gs._check_win_condition()
 			ON_PLAY_GRAVEYARD_HEALTH:
 				if owner.graveyard.size() > 10:
 					minion.data = minion.data.clone_instance()

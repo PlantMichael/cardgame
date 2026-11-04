@@ -88,8 +88,8 @@ the current-health gain for both is what used to shrink the creature: a
 player's own board adds to damage **they** deal to the enemy. It applies to
 on-play damage (`apply_on_play_damage`), combat (`attack`/`apply_challenge`),
 and on-play area damage that hits only enemy creatures. It is **not** applied
-to the two deathrattle effects that damage both boards symmetrically
-(`DEATHRATTLE_AOE_TRANSFORM`, deathrattle-damage-all-except-mech): there is no
+to effects that damage both boards symmetrically
+(`ON_PLAY_AOE_ALL_1`, `DEATHRATTLE_AOE_TRANSFORM`, deathrattle-damage-all-except-mech): there is no
 single amplifier that applies to both halves. Amplifying only the enemy half is
 defensible but has not been decided — flagged, not silently chosen.
 
@@ -164,6 +164,7 @@ Abilities are plain strings stored on `CardData.abilities` and copied to `Minion
 | `CHALLENGE_ALL` | `"challenge_all"` | On play: challenge every enemy creature left-to-right in sequence; each challenge resolves fully (including deathrattles) before the next; displayed as "Rampage" |
 | `ON_PLAY_CHALLENGE_WIN_BUFF` | `"on_play_challenge_win_buff"` | On play: fight a chosen enemy minion; if this minion wins (target dies and this survives), gain +1/+1 |
 | `ON_PLAY_AOE_ENEMY` | `"on_play_aoe_enemy_N"` (e.g. `"on_play_aoe_enemy_2"`) | On play: deal N damage to all enemy minions |
+| `ON_PLAY_AOE_ALL_1` | `"on_play_aoe_all_1"` | Decaying Junkling: deal 1 damage to every creature on both boards, including itself; excludes heroes/Locations and follows the existing unamplified symmetric-area rule. Damage is applied to the whole group before death cleanup. |
 | `ON_REINFORCE_DAMAGE` | `"on_reinforce_damage_N"` (e.g. `"on_reinforce_damage_2"`) | On reinforce death trigger: deal N damage to a chosen target |
 | `ON_ANY_REINFORCE_SHOT` | `"on_any_reinforce_shot_N"` (e.g. `"on_any_reinforce_shot_1"`) | Passive: whenever any friendly creature reinforces, deal N damage to a chosen target |
 | `PILOT_GIVES_RUSH` | `"pilot_gives_rush"` | When this pilot merges into a Mech: grant the Mech Rush |
@@ -252,4 +253,4 @@ even a fatal one; prevented/zero damage and destruction do not queue it.
 when the graveyard has more than ten cards, then applies the live health buff.
 `on_pilot_restore_health` (Morphling Flyer) restores the Mech after Pilot bonuses.
 Rust Grenade resolves destruction/deaths, then queues normal lesser-cost
-creature-only Rummage with the existing put-into-play behavior.
+non-legendary-creature Rummage with the existing put-into-play behavior.

@@ -310,13 +310,13 @@
 		"card_type": "CREATURE",
 		"rarity": "COMMON",
 		"tribe": "",
-		"description": "On play: Deal 2 damage to all enemy creatures.",
+		"description": "On play: Deal 1 damage to all creatures.",
 		"flavor_text": "",
 		"artist_name": "",
 		"attack": 2,
 		"health": 2,
 		"abilities": [
-			"on_play_aoe_enemy_2"
+			"on_play_aoe_all_1"
 		],
 		"art": "res://assets/black/decayingjunkling.png",
 		"effect": "",
@@ -449,18 +449,17 @@
 	{
 		"id": "b_017",
 		"card_name": "StinkPile, Lord of Garbage",
-		"cost": 9,
+		"cost": 8,
 		"color": "BLACK",
 		"card_type": "CREATURE",
 		"rarity": "LEGENDARY",
 		"tribe": "",
-		"description": "When a card is rummaged, put it on the battlefield instead. On play: Rummage 3.",
+		"description": "When a card is rummaged, put it on the battlefield instead. On play: Rummage 2.",
 		"flavor_text": "",
 		"artist_name": "",
-		"attack": 7,
+		"attack": 6,
 		"health": 5,
 		"abilities": [
-			"rummage",
 			"rummage",
 			"rummage",
 			"stinkpile_passive"
@@ -595,7 +594,7 @@
 		"card_type": "STRATAGEM",
 		"rarity": "RARE",
 		"tribe": "",
-		"description": "Destroy all minions, then Rummage a creature and put it on the battlefield.",
+		"description": "Destroy all minions, then Rummage a non-legendary creature and put it on the battlefield.",
 		"flavor_text": "",
 		"artist_name": "",
 		"attack": 0,

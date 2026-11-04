@@ -19,4 +19,5 @@ extends RefCounted
 ## 8: Moon bots use the same opening choice in ranked, ranked AI and simulations.
 ## 9: Patch 0.0.2 eight-card buff batch; Icewhip buffs before Challenge.
 ## 10: Remaining Orange 0.0.2 buffs, Rush Morph Drones and board-wide Carbon Mesh.
-const RULES_VERSION := 10
+## 11: Stinkpile/Rust Grenade nerfs and Decaying Junkling's symmetric on-play damage.
+const RULES_VERSION := 11

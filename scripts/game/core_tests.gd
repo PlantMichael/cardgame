@@ -2379,15 +2379,56 @@ static func _test_damage_rummage_cards() -> void:
 	var wipe := _fresh_match("g_001")
 	wipe.player.max_mana = 10
 	var revive := _put_on_board(wipe, "a", "b_026")
+	_put_on_board(wipe, "a", "b_027")
 	_put_on_board(wipe, "b", "b_009")
 	wipe.player.graveyard.append(CardDatabase.get_card("g_str_001").new_instance(wipe.player.mint_card_uid()))
 	var grenade := _hand_add(wipe, "a", "b_str_004")
 	var blast := wipe.execute({"type": "play_stratagem", "actor": "a", "card_uid": grenade.uid})
 	_check("Rust Grenade wipes both boards before its Rummage", blast["ok"] and wipe.player.board.is_empty() and wipe.opponent.board.is_empty() and wipe.has_pending_choice())
 	if wipe.has_pending_choice():
-		_check("Grenade can select its newly destroyed creature but no stratagem", "b_026" in wipe.pending_choice["options"] and "g_str_001" not in wipe.pending_choice["options"] and "b_str_004" not in wipe.pending_choice["options"])
+		_check("Grenade can select its newly destroyed creature but no legendary or stratagem", "b_026" in wipe.pending_choice["options"] and "b_027" not in wipe.pending_choice["options"] and "g_str_001" not in wipe.pending_choice["options"] and "b_str_004" not in wipe.pending_choice["options"])
+		var before := wipe.state_hash()
+		_check("Grenade rejects a forged legendary choice without mutation", not _answer(wipe, "b_027")["ok"] and wipe.state_hash() == before)
 		_answer(wipe, "b_026")
 		_check("Grenade revives the creature without inventing a damage trigger", wipe.player.board.size() == 1 and wipe.player.board[0].data.id == "b_026" and wipe.player.board[0].current_health == 6 and not wipe.has_pending_choice() and revive not in wipe.player.board)
+	var legends_only := _arena("g_001")
+	legends_only.player.graveyard.append(CardDatabase.get_card("b_017").new_instance(legends_only.player.mint_card_uid()))
+	var no_revival := _hand_add(legends_only, "a", "b_str_004")
+	_check("Grenade with only legendary corpses leaves no impossible choice", _play_stratagem(legends_only, "a", no_revival)["ok"] and not legends_only.has_pending_choice() and legends_only.player.board.is_empty())
+
+static func _test_black_nerfs() -> void:
+	print("[Stinkpile and Decaying Junkling balance]")
+	for clutter in [false, true]:
+		var gs := _arena("g_001")
+		if clutter:
+			_put_on_board(gs, "a", "b_019")
+		for id in ["b_009", "b_002", "b_007", "b_006"]:
+			gs.player.graveyard.append(CardDatabase.get_card(id).new_instance(gs.player.mint_card_uid()))
+		_check("Stinkpile plays", _play(gs, "b_017")["ok"])
+		_check("Stinkpile cannot Rummage Colossus without fielded Clutterpunk", gs.has_pending_choice() and ("b_006" in gs.pending_choice["options"]) == clutter)
+		_check("first Stinkpile Rummage resolves", _answer(gs, "b_009")["ok"])
+		_check("second Stinkpile Rummage resolves", _answer(gs, "b_002")["ok"])
+		_check("Stinkpile Rummages exactly twice, retaining its summon passive", not gs.has_pending_choice() and gs.player.board.any(func(m): return m.data.id == "b_009") and gs.player.board.any(func(m): return m.data.id == "b_002") and gs.player.graveyard.any(func(c): return c.id == "b_007"))
+	var blast := _arena("g_001")
+	var friendly := _put_on_board(blast, "a", "b_002")
+	var enemy := _put_on_board(blast, "b", "b_002")
+	var dying := _put_on_board(blast, "b", "b_026")
+	dying.current_health = 1
+	blast.opponent.graveyard.append(CardDatabase.get_card("b_009").new_instance(blast.opponent.mint_card_uid()))
+	# Existing symmetric area effects do not amplify either half.
+	friendly.abilities.append("enemy_damage_amp_2")
+	var location_data := CardData.new()
+	location_data.card_type = CardData.CardType.LOCATION
+	location_data.health = 5
+	var location := Minion.new(location_data, "b")
+	blast.opponent.place_minion(location)
+	var friendly_before := friendly.current_health
+	var enemy_before := enemy.current_health
+	var result := _play(blast, "b_013")
+	_check("Decaying Junkling plays", result["ok"])
+	_check("Junkling hits both sides and itself for exactly one", friendly.current_health == friendly_before - 1 and enemy.current_health == enemy_before - 1 and result["minion"].current_health == 1)
+	_check("Junkling does not damage Locations or either hero", location.current_health == 5 and blast.player.hero_health == 30 and blast.opponent.hero_health == 30)
+	_check("Junkling uses the shared damage/death path", dying not in blast.opponent.board and blast.has_pending_choice() and blast.pending_choice["player_id"] == "b")
 
 static func _test_headshot_returns_and_permanence() -> void:
 	print("[returned card identity and permanent health]")
@@ -2630,6 +2671,7 @@ static func run() -> int:
 	_test_card_play_counts()
 	_test_headshot_cards()
 	_test_damage_rummage_cards()
+	_test_black_nerfs()
 	_test_headshot_returns_and_permanence()
 	_test_headshot_support_cards()
 	_test_player_views(card_id)

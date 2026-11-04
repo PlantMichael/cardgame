@@ -1711,7 +1711,7 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 			_remove_dead_minions()
 			_check_win_condition()
 			if card.effect == "destroy_all_rummage_creature" and current_phase != Phase.GAME_OVER:
-				pending_rummages.append({"player_id": acting_player_id, "max_cost": card.cost, "type_filter": "creature", "play_it": true})
+				pending_rummages.append({"player_id": acting_player_id, "max_cost": card.cost, "type_filter": "creature_nonlegendary", "play_it": true})
 		"deal_damage_all_creatures":
 			for p in [player, opponent]:
 				for minion in p.board.duplicate():

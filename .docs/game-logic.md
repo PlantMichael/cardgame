@@ -285,6 +285,7 @@ Rummage methods:
 
 Stratagem effects handled in `_apply_stratagem()`:
 - `"deal_damage"` — damages target minion or hero
+- `"destroy_all_rummage_creature"` — Rust Grenade wipes both boards, then uses the existing `creature_nonlegendary` Rummage filter and puts the selected creature on the battlefield. Legendary creatures remain ineligible even if newly destroyed by the wipe.
 - `"buff_creature"` — increases attack and health
 - `"buff_health"` — increases health only
 - `"buff_attack"` — Supply Drop: increases attack only on a friendly creature; heroes, enemies and Locations are rejected before card or mana consumption.

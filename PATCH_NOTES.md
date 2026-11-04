@@ -1,8 +1,8 @@
-# Patch 0.0.2: Card buffs
+# Patch 0.0.2: Balance update
 
 Draft, not yet released.
 
-Buffs for underperforming cards across Orange, Green and Teal.
+Buffs for underperforming cards across Orange, Green and Teal, plus targeted Junk nerfs.
 
 ## Balance changes
 
@@ -36,10 +36,19 @@ Stats below are **attack/health**.
 | Snow Bank | **3 → 2** | Still gives +2/+2. |
 | Icewhip | 2 | Give a Yeti you control **+2/+2, then make it Challenge**. The buff no longer depends on winning. |
 
+### Black — Junk
+
+| Card | Mana | Change |
+|---|---:|---|
+| StinkPile, Lord of Garbage | **9 → 8** | Attack **7 → 6**, health remains 5. On-play Rummage **3 → 2**; summon passive unchanged. |
+| Rust Grenade | 9 | Its Rummage now selects a **non-legendary creature**. Still puts it on the battlefield after the wipe. |
+| Decaying Junkling | 5 | On play: deal **1 damage to all creatures**, replacing 2 damage to enemies only. Includes itself. Printed stats remain 2/2. |
+
 ### Effect details
 
 - Morph Drones with Rush can attack the player right away to trigger its Headshot (self-destruct and heal all friendly minions 2). It can still be held until it has a clear path to the enemy player.
 - Carbon Mesh still needs at least one friendly mech on the battlefield.
+- Stinkpile normally cannot Rummage the 8-mana Creeper Colossus at its new cost. Clutterpunk still allows equal-cost Rummage while it is on the field.
 
 ---
 

@@ -139,7 +139,7 @@
     "on_piloted_gain_cloaked": null,
     "on_piloted_gain_rush": null,
     "on_piloted_stat_boost": null,
-    "on_play_aoe_enemy_2": null,
+    "on_play_aoe_all_1": null,
     "on_play_buff_all_friendly_health": null,
     "on_play_buff_friendly_health": null,
     "on_play_buff_friendly_yeti_attack": null,

@@ -254,9 +254,9 @@
       "attack": 2,
       "health": 2,
       "tribe": null,
-      "description": "On play: Deal 2 damage to all enemy creatures.",
+      "description": "On play: Deal 1 damage to all creatures.",
       "abilities": [
-        "on_play_aoe_enemy_2"
+        "on_play_aoe_all_1"
       ],
       "collectible": true,
       "isToken": false,
@@ -331,13 +331,12 @@
       "color": "BLACK",
       "type": "CREATURE",
       "rarity": "LEGENDARY",
-      "manaCost": 9,
-      "attack": 7,
+      "manaCost": 8,
+      "attack": 6,
       "health": 5,
       "tribe": null,
-      "description": "When a card is rummaged, put it on the battlefield instead. On play: Rummage 3.",
+      "description": "When a card is rummaged, put it on the battlefield instead. On play: Rummage 2.",
       "abilities": [
-        "rummage",
         "rummage",
         "rummage",
         "stinkpile_passive"
@@ -639,7 +638,7 @@
       "attack": null,
       "health": null,
       "tribe": null,
-      "description": "Destroy all minions, then Rummage a creature and put it on the battlefield.",
+      "description": "Destroy all minions, then Rummage a non-legendary creature and put it on the battlefield.",
       "abilities": [],
       "collectible": true,
       "isToken": false,

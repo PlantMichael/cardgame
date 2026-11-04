@@ -1,7 +1,9 @@
-# Patch 0.0.2 additional card buffs
+# Patch 0.0.2 balance changes
 
 The original eight-card task below is complete. The subsequent user-requested
 five-card follow-up at the end supersedes its earlier draft-only exclusions.
+The latest follow-up below implements the three selected Junk nerfs. The user
+explicitly requested skipping review for that follow-up.
 
 Revision 2. Standard implementation selected by the user's eight-card request.
 Worktree: existing patch/0.0.2 checkout, integrating current master 6c6d937
@@ -169,3 +171,45 @@ Follow-up Web pack: 66,656,016 bytes, SHA256
 `FCBA345059649D31504968CA1BF3FB50872882F1C908AEBA2E4E784DBDDEEF18`.
 Raw verification logs, UI proof, inventory and scene comparison use the private
 orange-buffs-* scratch prefix. No live service or database actions occurred.
+
+## Follow-up: three selected Junk nerfs
+
+User selected these changes on base 160666b: Stinkpile becomes 8 mana, 6/5,
+Rummage 2 with its summon passive retained; Rust Grenade's revival selects a
+non-legendary creature; Decaying Junkling deals 1 damage to all creatures on play,
+including itself. Junkling remains printed 5 mana 2/2, normally entering as a
+damaged 2/1. Debris Hauler remains 6 mana. Clutterpunk is unchanged and still
+permits equal-cost Rummage only while on the field.
+
+Bounded existing-owner implementation: one registered fixed on-play ability
+uses shared damage and group death cleanup, skipping heroes and Locations.
+It follows the existing symmetric-area rule: neither half is amplified. Preserve
+the existing VALUE-archetype role weight and existing display-label color lookup
+order. Rust Grenade reuses the existing creature_nonlegendary filter. Stinkpile
+changes only its requested data. RulesVersion increments to 11. Refreshed grouped
+data, public cards/keyword metadata and Web pack; draft patch notes and owning
+ability/rules documentation now describe the three changes. Removed obsolete
+Rummage-count wording from animation comments without changing its behavior.
+
+Windows Godot 4.7.2 with isolated task user data: source and packed core checks
+pass 971/0, bot checks 163/0; Node22 catalog suite passes 25/0 with no skips.
+Core proof covers Stinkpile's two Rummages and Colossus cutoff/fielded Clutterpunk
+exception; Rust Grenade excludes newly destroyed legendaries, rejects a forged
+legendary choice atomically, and finishes with a legendary-only graveyard;
+Junkling hits both boards and itself, excludes heroes/Locations and retains
+damage-triggered Rummage/death resolution. The initial Courier fixture had no
+eligible graveyard target, so its Rummage correctly auto-resolved; supplying a
+real lower-cost target corrected that proof premise. Disposable card rendering
+checks all three definitions; its initial rich-text assertion was corrected to
+inspect visible parsed text. No fixture remains in the source/export.
+
+Static comparison confirms exactly three Black card edits, preserving Debris
+Hauler, Clutterpunk and unrelated fields. Raw logs, card-render proof, inventory
+and normalized-scene evidence use the private black-nerfs-* scratch prefix.
+The user explicitly waived review before handoff; no review was dispatched for
+this follow-up. No push, deployment, live-data access or reset was performed.
+
+Final follow-up pack: 66,658,112 bytes, SHA256
+`163012823B0C489D83A58B8E1001ACEFD9503D38A295299C156F7F8E5D419395`.
+All 503 inventory entries are retained, with no temporary fixture. The 19 decoded
+scenes retain equivalent data after resource/node identifier normalization.
