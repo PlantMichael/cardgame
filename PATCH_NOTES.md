@@ -2,7 +2,7 @@
 
 Draft, not yet released.
 
-Choose your advantage when going second, alongside buffs across Orange, Green and Teal and targeted Junk nerfs.
+Choose your advantage when going second, alongside buffs across Orange, Green and Teal and targeted nerfs.
 
 ## Going second: choose your opening bonus
 
@@ -55,6 +55,12 @@ Stats below are **attack/health**.
 | StinkPile, Lord of Garbage | **9 → 8** | Attack **7 → 6**, health remains 5. On-play Rummage **3 → 2**; summon passive unchanged. |
 | Rust Grenade | 9 | Its Rummage now selects a **non-legendary creature**. Still puts it on the battlefield after the wipe. |
 | Decaying Junkling | 5 | On play: deal **1 damage to all creatures**, replacing 2 damage to enemies only. Includes itself. Printed stats remain 2/2. |
+
+### Generic
+
+| Card | Mana | Change |
+|---|---:|---|
+| Twin Fang | 3 | Stats changed from **3/2 to 2/2**. Retains Dualstrike. |
 
 ### Effect details
 

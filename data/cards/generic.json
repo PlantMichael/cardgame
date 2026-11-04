@@ -149,7 +149,7 @@
 		"description": "Dualstrike",
 		"flavor_text": "",
 		"artist_name": "",
-		"attack": 3,
+		"attack": 2,
 		"health": 2,
 		"abilities": [
 			"dual_strike"

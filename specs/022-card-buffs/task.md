@@ -4,6 +4,7 @@ The original eight-card task below is complete. The subsequent user-requested
 five-card follow-up at the end supersedes its earlier draft-only exclusions.
 The latest follow-up below implements the three selected Junk nerfs. The user
 explicitly requested skipping review for that follow-up.
+The subsequent Twin Fang follow-up below changes only its printed attack.
 
 Revision 2. Standard implementation selected by the user's eight-card request.
 Worktree: existing patch/0.0.2 checkout, integrating current master 6c6d937
@@ -213,3 +214,21 @@ Final follow-up pack: 66,658,112 bytes, SHA256
 `163012823B0C489D83A58B8E1001ACEFD9503D38A295299C156F7F8E5D419395`.
 All 503 inventory entries are retained, with no temporary fixture. The 19 decoded
 scenes retain equivalent data after resource/node identifier normalization.
+
+## Follow-up: Twin Fang 2/2
+
+User requested Twin Fang 3/2 -> 2/2 and balance advice. Implemented only this
+attack change; cost 3, health 2, Dualstrike and all unrelated data stay unchanged.
+RulesVersion increments to 12, with matching grouped data, public catalog, draft
+notes and Web pack. Continued the user's instruction to skip review for simple
+balance changes. No other recommended card change, publication or reset.
+
+Godot 4.7.2 source core passes 971/0; Node22 catalog suite passes 25/0 with no
+skips. A disposable exact comparison confirms the attack-only source edit and
+grouped/catalog parity. Rebuilt pack's real CardDatabase returns a 3-mana 2/2
+Twin Fang with Dualstrike and rules12. Reused unchanged gameplay/profile proof
+rather than adding a permanent test freezing this balance number. Packed JSON
+matches source, inventory entries are unchanged, and 19 decoded scenes remain
+equivalent after identifier normalization; generated import defaults restored.
+Evidence uses private twin-fang-* scratch files. Pack: 66,658,096 bytes, SHA256
+`12D4EB1A35B664764C363C757DE1C4C302420C821E7ADA41F596069693735CD6`.

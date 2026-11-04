@@ -2108,7 +2108,7 @@
       "type": "CREATURE",
       "rarity": "COMMON",
       "manaCost": 3,
-      "attack": 3,
+      "attack": 2,
       "health": 2,
       "tribe": null,
       "description": "Dualstrike",
