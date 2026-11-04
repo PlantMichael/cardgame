@@ -453,6 +453,7 @@
   .card-statistics th:first-child { width: 32%; }
   .card-statistics thead th:not(:first-child) { text-align: right; }
   .card-row-details > summary { cursor: pointer; padding-block: 6px; min-height: 24px; overflow-wrap: anywhere; }
+  .card-row-details .card-printed-stats { display: block; margin-top: 4px; color: var(--muted); font-size: 13px; font-weight: 400; line-height: 1.5; }
   .card-row-details[open] > summary { color: var(--cyan); margin-bottom: 8px; }
   .card-row-details p { margin: 6px 0; font-weight: 400; }
   .curve { display: inline-flex; align-items: end; gap: 2px; height: 22px; }
