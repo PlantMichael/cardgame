@@ -5,7 +5,7 @@ const { deckOf } = require('./deck_matchups');
 const { normalizeBotMatch, normalizeBotParticipant } = require('./bot_matches');
 const { SETTLING_REASONS } = require('./authoritative/settle');
 const BOT_STATS_PATH = '/data/stats/bot-matchups.json';
-const MAX_BYTES = 4 * 1024 * 1024;
+const MAX_BYTES = 16 * 1024 * 1024;
 
 function botQuery(search) {
   const p = new URLSearchParams(search);

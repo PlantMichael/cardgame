@@ -4,7 +4,7 @@ import { DEFAULT_ORIGIN } from './card-winrates.mjs';
 import { composition } from './deck-matchups.mjs';
 
 export const BOT_STATS_PATH = '/data/stats/bot-matchups.json';
-const MAX_BYTES = 4 * 1024 * 1024;
+const MAX_BYTES = 16 * 1024 * 1024;
 const fail = () => { throw new Error('invalid bot aggregate'); };
 const count = n => Number.isSafeInteger(n) && n >= 0;
 const positive = n => Number.isInteger(n) && n > 0 && n <= 1000000;
