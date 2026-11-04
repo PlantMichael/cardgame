@@ -43,7 +43,7 @@ The codebase has a clean split between **game logic** (pure GDScript classes, no
 | `scripts/game/auth.gd` | Account/session state (login/register/resume, ranked ladder fields, matchmaking Elo) synced from `Net` (**Autoload: `Auth`**) |
 | `scripts/game/economy.gd` | `Economy` — currency/dust/owned-card collection, mirrored from server-authoritative state via `Net`; fetches on login/resume, only ever updates from a `Net` `*_result` signal (**Autoload: `Economy`**) |
 | `scripts/game/pack_opener.gd` | `PackOpener` — pure logic (no Node deps) that rolls a pack's contents by rarity odds and converts over-copy-limit duplicates to dust; mirrors the roll `relay.js`'s `purchase_pack` handler performs server-side |
-| `scripts/ui/shop_screen.gd` | `ShopScreen` — Shop UI: lists purchasable packs from `data/shop_packs.json`, shows the current Gold/Dust balance, and hosts the crafting panel; reached from the main menu's "SHOP" button |
+| `scripts/ui/shop_screen.gd` | `ShopScreen` — Shop UI: lists purchasable packs from `data/shop_packs.json`, shows the current Gold/Dust balance, and hosts the crafting panel; its main-menu "SHOP" entry is visible but disabled in 0.1.0 |
 | `scripts/ui/pack_open_screen.gd` | `PackOpenScreen` — sequential Tween-driven reveal of a purchased pack's cards, with a skip/speed-up input |
 | `scripts/game/mp_game_manager.gd` | `MpGameManager` — drives a live host/guest multiplayer match over `Net`'s relay (casual lobby or ranked matchmade), mirrored `GameState` on both sides |
 
