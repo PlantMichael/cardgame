@@ -34,6 +34,8 @@ enum CardRarity { COMMON, RARE, EPIC, LEGENDARY }
 @export var rarity: CardRarity = CardRarity.COMMON
 @export var tribe: String = ""
 @export var description: String = ""
+@export var flavor_text: String = ""
+@export var artist_name: String = ""
 @export var art: Texture2D
 
 # Creature only

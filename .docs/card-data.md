@@ -69,6 +69,8 @@ enum CardRarity { COMMON, RARE, EPIC, LEGENDARY }
 @export var rarity: CardRarity = CardRarity.COMMON
 @export var tribe: String = ""
 @export var description: String = ""
+@export var flavor_text: String = ""  # display-only lore, separate from rules text
+@export var artist_name: String = ""  # artwork credit
 @export var art: Texture2D
 
 var cost_modifier: int = 0  # runtime only; set by rummage (-1 discount)
@@ -100,6 +102,8 @@ func effective_cost() -> int:
   "card_type": "CREATURE",
   "rarity": "COMMON",
   "description": "Guardian.",
+  "flavor_text": "",
+  "artist_name": "",
   "attack": 1,
   "health": 4,
   "tribe": "",
@@ -111,6 +115,13 @@ func effective_cost() -> int:
 ```
 
 `"art"` is optional and omitted from most existing card entries; it is only present on cards that already have art added.
+
+`flavor_text` and `artist_name` are display-only strings, loaded by CardDatabase
+and preserved by card cloning. They default to empty strings for older entries.
+The Card List's click-to-inspect view displays them in separate boxes below the
+card; empty values show “No flavor text yet.” and “Not credited yet.” Fill in the
+six active faction JSON files, then refresh the grouped root `all.json` snapshot.
+These fields do not change rules or match hashes.
 
 ## Public catalog
 

@@ -13,7 +13,6 @@ test('bot proxy bounds upstream failures, projects privacy and recovers without 
     if (mode === 'timeout') return;
     if (mode === 'status') { res.writeHead(503).end('private database diagnostic'); return; }
     if (mode === 'redirect') { res.writeHead(302, { Location: '/private' }).end(); return; }
-    if (mode === 'large') { res.end(' '.repeat(4 * 1024 * 1024 + 1)); return; }
     if (mode === 'json') { res.end('{'); return; }
     const data = { generatedAt: new Date().toISOString(), days: 30, games: 0, bots: [], decks: [], matchups: [],
       methodology: { source: 'bot_simulation', metric: 'exact_starting_deck_matchup', unit: 'seat_game', draws: 'excluded_from_win_rate', humanStats: 'excluded' },
@@ -22,10 +21,12 @@ test('bot proxy bounds upstream failures, projects privacy and recovers without 
     if (mode === 'counts') data.games = 1;
     if (mode === 'days') data.days = 7;
     if (mode === 'ranked') { data.mode = 'ranked'; data.methodology.source = 'server_verified'; }
-    res.end(JSON.stringify(data));
+    const body = JSON.stringify(data);
+    const bytes = mode === 'large' ? 16 * 1024 * 1024 + 1 : mode === 'expanded' ? 5 * 1024 * 1024 : 0;
+    res.end(body + ' '.repeat(Math.max(0, bytes - Buffer.byteLength(body))));
   });
   await new Promise(r => upstream.listen(0, '127.0.0.1', r));
-  const proxy = createCatalogServer(root, { statsOrigin: `http://127.0.0.1:${upstream.address().port}`, statsTimeoutMs: 150 });
+  const proxy = createCatalogServer(root, { statsOrigin: `http://127.0.0.1:${upstream.address().port}`, statsTimeoutMs: 1000 });
   await new Promise(r => proxy.listen(0, '127.0.0.1', r));
   t.after(async () => {
     for (const server of [proxy, upstream]) { server.closeAllConnections(); await new Promise(r => server.close(r)); }
@@ -34,6 +35,8 @@ test('bot proxy bounds upstream failures, projects privacy and recovers without 
   const first = await fetch(url); assert.equal(first.status, 200);
   const text = await first.text(); assert.ok(!text.includes('private')); assert.equal(JSON.parse(text).games, 0);
   assert.equal(requested, '/data/stats/bot-matchups.json?days=30');
+  mode = 'expanded';
+  assert.equal((await fetch(url)).status, 200, 'valid bot responses above the old 4 MiB ceiling are accepted');
   for (mode of ['timeout', 'status', 'redirect', 'large', 'json', 'source', 'counts', 'days']) {
     const response = await fetch(url);
     assert.equal(response.status, 503, mode);

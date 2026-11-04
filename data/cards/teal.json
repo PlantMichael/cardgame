@@ -8,6 +8,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "When a friendly Yeti challenges and survives, it gains +1/+1.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 1,
 		"abilities": [
@@ -26,6 +28,8 @@
 		"rarity": "COMMON",
 		"tribe": "yeti",
 		"description": "Recon",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 1,
 		"abilities": [
@@ -44,6 +48,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "When a friendly Yeti challenges, attack the same target.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 1,
 		"abilities": [
@@ -62,6 +68,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "On play: If you control a yeti, gain +2/+1",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 3,
 		"abilities": [
@@ -80,6 +88,8 @@
 		"rarity": "COMMON",
 		"tribe": "yeti",
 		"description": "Challenge",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 2,
 		"abilities": [
@@ -98,6 +108,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "Recon. Cloaked",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 2,
 		"abilities": [
@@ -117,6 +129,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "Rush.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 1,
 		"abilities": [
@@ -135,6 +149,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "On Death: Draw a random Yeti from your deck.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 2,
 		"abilities": [
@@ -153,6 +169,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "On play select a yeti you control to challenge.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 1,
 		"abilities": [
@@ -171,6 +189,8 @@
 		"rarity": "EPIC",
 		"tribe": "yeti",
 		"description": "Ambush",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 3,
 		"abilities": [
@@ -189,6 +209,8 @@
 		"rarity": "COMMON",
 		"tribe": "yeti",
 		"description": "Challenge. On play: Give other yetis you control 2 attack",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 3,
 		"abilities": [
@@ -208,6 +230,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "Guardian. When a friendly yeti dies, gain +0/+2",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 2,
 		"abilities": [
@@ -227,6 +251,8 @@
 		"rarity": "EPIC",
 		"tribe": "",
 		"description": "When a friendly yeti challenges, attack the same target right after.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 4,
 		"health": 5,
 		"abilities": [
@@ -245,6 +271,8 @@
 		"rarity": "LEGENDARY",
 		"tribe": "",
 		"description": "At the end of your turn, reduce the cost of Yetis in your hand by 1.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 1,
 		"abilities": [
@@ -263,6 +291,8 @@
 		"rarity": "EPIC",
 		"tribe": "yeti",
 		"description": "Ambush",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 4,
 		"abilities": [
@@ -281,6 +311,8 @@
 		"rarity": "EPIC",
 		"tribe": "yeti",
 		"description": "Trample",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 5,
 		"health": 3,
 		"abilities": [
@@ -299,6 +331,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "When a friendly yeti dies, choose a friendly yeti to challenge",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 3,
 		"abilities": [
@@ -317,6 +351,8 @@
 		"rarity": "RARE",
 		"tribe": "yeti",
 		"description": "Challenge. Dualstrike.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 3,
 		"abilities": [
@@ -336,6 +372,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "Guardian. Cloaked",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 4,
 		"health": 6,
 		"abilities": [
@@ -355,6 +393,8 @@
 		"rarity": "COMMON",
 		"tribe": "yeti",
 		"description": "Guardian. On play: Challenge. If this yeti wins, gain +1/+1.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 4,
 		"health": 4,
 		"abilities": [
@@ -374,6 +414,8 @@
 		"rarity": "COMMON",
 		"tribe": "yeti",
 		"description": "Guardian. Challenge",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 4,
 		"health": 6,
 		"abilities": [
@@ -393,6 +435,8 @@
 		"rarity": "EPIC",
 		"tribe": "yeti",
 		"description": "Guardian.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 6,
 		"health": 8,
 		"abilities": [
@@ -411,6 +455,8 @@
 		"rarity": "EPIC",
 		"tribe": "yeti",
 		"description": "Guardian.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 9,
 		"health": 10,
 		"abilities": [
@@ -429,6 +475,8 @@
 		"rarity": "LEGENDARY",
 		"tribe": "yeti",
 		"description": "On play: Challenge every enemy creature from left to right",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 10,
 		"health": 8,
 		"abilities": [
@@ -447,6 +495,8 @@
 		"rarity": "EPIC",
 		"tribe": "yeti",
 		"description": "Colossal",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 11,
 		"health": 11,
 		"abilities": [
@@ -465,6 +515,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "Deal 3 damage to all creatures.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
@@ -481,6 +533,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "Give a friendly creature +2/+2.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
@@ -497,6 +551,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "Make a yeti you control challenge. If it wins, give it +2/+2",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
@@ -513,6 +569,8 @@
 		"rarity": "COMMON",
 		"tribe": "yeti",
 		"description": "",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 3,
 		"abilities": [],
@@ -530,6 +588,8 @@
 		"rarity": "COMMON",
 		"tribe": "yeti",
 		"description": "",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 4,
 		"abilities": [],
@@ -547,6 +607,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "Deal 2 damage to all enemy creatures. If any die from this damage, draw a random Yeti from your deck.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
@@ -562,9 +624,13 @@
 		"rarity": "COMMON",
 		"tribe": "yeti",
 		"description": "On play: Restore 2 health to each other friendly Yeti.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 6,
-		"abilities": ["on_play_heal_friendly_yetis"],
+		"abilities": [
+			"on_play_heal_friendly_yetis"
+		],
 		"effect": "",
 		"effect_value": 0,
 		"is_token": false,
@@ -579,6 +645,8 @@
 		"rarity": "LEGENDARY",
 		"tribe": "",
 		"description": "Ethereal. Headshot: Challenge.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 1,
 		"abilities": [

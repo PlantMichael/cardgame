@@ -8,6 +8,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 1,
 		"abilities": [],
@@ -24,6 +26,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "Recon.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 2,
 		"abilities": [
@@ -42,6 +46,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "On play: Deal 2 damage to anything.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 1,
 		"abilities": [
@@ -60,6 +66,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "On Death: Draw a card.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 1,
 		"abilities": [
@@ -78,6 +86,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "On play: gain +1/+1 for every time this creature has been rummaged.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 1,
 		"abilities": [
@@ -96,6 +106,8 @@
 		"rarity": "EPIC",
 		"tribe": "",
 		"description": "If this minion was rummaged, gain Void Touch",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 1,
 		"abilities": [
@@ -114,6 +126,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "On play: Rummage. On death: Rummage.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 1,
 		"abilities": [
@@ -133,6 +147,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "Rush.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 2,
 		"abilities": [
@@ -151,6 +167,8 @@
 		"rarity": "EPIC",
 		"tribe": "",
 		"description": "Recon. Whenever you Rummage, draw a card.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 2,
 		"abilities": [
@@ -170,6 +188,8 @@
 		"rarity": "EPIC",
 		"tribe": "",
 		"description": "Guardian. Whenever you Rummage, this creature gains +0/+1",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 3,
 		"abilities": [
@@ -189,6 +209,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "Guardian.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 6,
 		"abilities": [
@@ -207,6 +229,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "On play: Rummage a spell of any cost.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 3,
 		"abilities": [
@@ -225,6 +249,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "On play: Rummage. Guardian.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 4,
 		"abilities": [
@@ -244,6 +270,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "On play: Rummage and play it",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 2,
 		"abilities": [
@@ -262,6 +290,8 @@
 		"rarity": "EPIC",
 		"tribe": "",
 		"description": "Rush. On death, return a non-legendary creature from your graveyard to your hand. Counts as rummaging.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 2,
 		"abilities": [
@@ -281,6 +311,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "On play: Deal 2 damage to all enemy creatures.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 2,
 		"abilities": [
@@ -299,6 +331,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "If you have less cards in your hand than your opponent, Recon.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 0,
 		"health": 7,
 		"abilities": [
@@ -318,6 +352,8 @@
 		"rarity": "LEGENDARY",
 		"tribe": "",
 		"description": "Cloaked. Creatures of an equal cost can be rummaged.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 5,
 		"health": 5,
 		"abilities": [
@@ -337,6 +373,8 @@
 		"rarity": "EPIC",
 		"tribe": "",
 		"description": "On play: Rummage. A creature rummaged this way gets +1/+1 permanently.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 5,
 		"health": 5,
 		"abilities": [
@@ -355,6 +393,8 @@
 		"rarity": "EPIC",
 		"tribe": "",
 		"description": "On play: Rummage, Rummage",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 5,
 		"health": 4,
 		"abilities": [
@@ -374,6 +414,8 @@
 		"rarity": "EPIC",
 		"tribe": "",
 		"description": "When this minion attacks, rummage",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 5,
 		"health": 5,
 		"abilities": [
@@ -392,6 +434,8 @@
 		"rarity": "EPIC",
 		"tribe": "",
 		"description": "Guardian. Rejuvenate 1",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 6,
 		"health": 6,
 		"abilities": [
@@ -411,6 +455,8 @@
 		"rarity": "LEGENDARY",
 		"tribe": "",
 		"description": "When a card is rummaged, put it on the battlefield instead. On play: Rummage 3.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 7,
 		"health": 5,
 		"abilities": [
@@ -432,6 +478,8 @@
 		"rarity": "EPIC",
 		"tribe": "",
 		"description": "On play: This creature's stats become the number of cards in your graveyard.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 1,
 		"abilities": [
@@ -450,6 +498,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "Give a creature you control \"Rummage on death\".",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 0,
 		"health": 0,
 		"abilities": [
@@ -468,6 +518,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "Give a creature rush",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 0,
 		"health": 0,
 		"abilities": [
@@ -486,6 +538,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "Deal {n} damage to enemy creatures. Whenever this is rummaged, deal 1 more.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
@@ -502,6 +556,8 @@
 		"rarity": "EPIC",
 		"tribe": "",
 		"description": "Headshot: Rummage.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 5,
 		"health": 7,
 		"abilities": [
@@ -520,6 +576,8 @@
 		"rarity": "EPIC",
 		"tribe": "",
 		"description": "When this creature takes damage, Rummage.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 6,
 		"health": 6,
 		"abilities": [
@@ -538,6 +596,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "Destroy all minions, then Rummage a creature and put it on the battlefield.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
@@ -554,6 +614,8 @@
 		"rarity": "LEGENDARY",
 		"tribe": "",
 		"description": "Ambush. Headshot: Shuffle this creature into its owner's library.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 7,
 		"health": 1,
 		"abilities": [
@@ -573,6 +635,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "On play: If you have more than 10 cards in your graveyard, gain +0/+1 permanently.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 1,
 		"abilities": [

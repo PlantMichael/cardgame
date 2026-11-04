@@ -36,7 +36,6 @@ test('deck proxy projects the public contract and rejects malformed or unavailab
     if (mode === 'timeout') return;
     if (mode === 'status') { res.writeHead(503).end('private DB diagnostic'); return; }
     if (mode === 'redirect') { res.writeHead(302, { Location: '/private' }).end(); return; }
-    if (mode === 'large') { res.end(' '.repeat(4 * 1024 * 1024 + 1)); return; }
     const data = fixture();
     if (new URL(req.url, 'http://localhost').searchParams.get('mode') === 'all') {
       Object.assign(data.filters, { mode: 'all', aiVersion: null, aiLevel: null });
@@ -66,10 +65,12 @@ test('deck proxy projects the public contract and rejects malformed or unavailab
     if (mode === 'reverse') {
       data.matchups[0].first = split(0, 0); data.matchups[0].second = split(1, 1);
     }
-    res.end(JSON.stringify(data));
+    const body = JSON.stringify(data);
+    const bytes = mode === 'large' ? 16 * 1024 * 1024 + 1 : mode === 'expanded' ? 5 * 1024 * 1024 : 0;
+    res.end(body + ' '.repeat(Math.max(0, bytes - Buffer.byteLength(body))));
   });
   await new Promise(r => upstream.listen(0, '127.0.0.1', r));
-  const proxy = createCatalogServer(root, { statsOrigin: `http://127.0.0.1:${upstream.address().port}`, statsTimeoutMs: 100 });
+  const proxy = createCatalogServer(root, { statsOrigin: `http://127.0.0.1:${upstream.address().port}`, statsTimeoutMs: 1000 });
   await new Promise(r => proxy.listen(0, '127.0.0.1', r));
   t.after(async () => {
     for (const server of [upstream, proxy]) { server.closeAllConnections(); await new Promise(r => server.close(r)); }
@@ -82,6 +83,8 @@ test('deck proxy projects the public contract and rejects malformed or unavailab
   assert.ok(data.decks[0].winRateInterval.lower > 0 && data.decks[0].winRateInterval.lower < 1);
   assert.deepEqual(data.decks[0].factions, ['GREEN'], 'factions derive from published card data');
   for (const privateText of ['secret', 'private_match', 'match_id', 'player_id', 'player_ids', 'private DB']) assert.ok(!text.includes(privateText), privateText);
+  mode = 'expanded';
+  assert.equal((await fetch(url)).status, 200, 'valid responses above the old 4 MiB ceiling are accepted');
   for (mode of ['counts', 'card', 'identity', 'reference', 'roles', 'source', 'filters', 'split', 'duplicate', 'reverse', 'large', 'status', 'redirect', 'timeout']) {
     const failed = await fetch(url);
     assert.equal(failed.status, 503, mode);

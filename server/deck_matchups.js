@@ -8,7 +8,7 @@ const { normalizeCardPlays } = require('./card_plays');
 
 const DECK_STATS_PATH = '/data/stats/deck-matchups.json';
 const MAX_MATCHES = 50000;
-const MAX_BYTES = 4 * 1024 * 1024;
+const MAX_BYTES = 16 * 1024 * 1024;
 const VERSION = value => value === 'unknown' || (Number.isInteger(value) && value > 0 && value <= 1000000);
 
 function parseQuery(search) {

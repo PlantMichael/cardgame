@@ -133,7 +133,7 @@ The website defaults to all mode, with a combined exact-deck list and a short op
 
 The owner authorized public exact deck lists and results beginning at one sample. Counts and compositions can permit inference even though names and individual histories are absent. Do not describe these data as proof of anonymous, independent or unbiased balance testing.
 
-The relay reads at most 50,000 source matches in the selected mode/time window **before** version filtering (the combined total across both sources for all), and returns 503 if that ceiling or the 4 MiB response ceiling is exceeded. Reduce `days` rather than showing an incomplete sample. Successful per-query snapshots are cached 60 seconds with at most 64 keys; identical concurrent requests share a refresh. Failures are not cached. The catalog uses a 5-second, 4 MiB upstream limit, refuses redirects and validates/project public fields. A 503 can mean unavailable service/data or a safety bound; never label it as zero games. Poll no more frequently than the snapshot cadence.
+The relay reads at most 50,000 source matches in the selected mode/time window **before** version filtering (the combined total across both sources for all), and returns 503 if that ceiling or the 16 MiB response ceiling is exceeded. Reduce `days` rather than showing an incomplete sample. Successful per-query snapshots are cached 60 seconds with at most 64 keys; identical concurrent requests share a refresh. Failures are not cached. The catalog uses a 5-second, 16 MiB upstream limit, refuses redirects and validates/project public fields. A 503 can mean unavailable service/data or a safety bound; never label it as zero games. Poll no more frequently than the snapshot cadence.
 
 ## Rollout and local proof
 

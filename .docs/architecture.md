@@ -34,7 +34,7 @@ The codebase has a clean split between **game logic** (pure GDScript classes, no
 | `scripts/game/deck_manager.gd` | Deck save/load, starter decks, faction metadata (**Autoload: `DeckManager`**) |
 | `scripts/ui/deck_builder_screen.gd` | Deck builder UI: hub, faction picker, collection editor |
 | `scripts/ui/faction_pie_chart.gd` | `FactionPieChart` — pie-chart faction picker widget used by `deck_builder_screen.gd`'s faction page |
-| `scripts/ui/card_list_screen.gd` | `CardListScreen` — read-only browsable list of every card, grouped by color, with color/type/cost filters and search; reached from the main menu's "CARD LIST" button |
+| `scripts/ui/card_list_screen.gd` | `CardListScreen` — read-only browsable list of every card, grouped by color, with color/type/cost filters and search; clicking a card opens centered inspection over a blurred backdrop with flavor text and artist credit; reached from the main menu's "CARD LIST" button |
 | `scripts/ui/campaign_map_screen.gd` | `CampaignMapScreen` — landscape trail map shown before the first Campaign node and between every subsequent one; nodes laid out along a path, click-to-preview modifiers, 30s countdown before the next match |
 | `scripts/game/board.gd` | `Board` scene script; pure UI, emits signals upward to game_manager |
 | `scripts/game/card_preview.gd` | **Unused.** An older hand-built preview Panel. No scene attaches it and nothing references it (it was already orphaned before the card-frame rework); the board's hover preview is a plain `Card` at `Card.Size.LARGE` |

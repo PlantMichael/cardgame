@@ -5,7 +5,7 @@ import path from 'node:path';
 import { DEFAULT_ORIGIN } from './card-winrates.mjs';
 
 export const DECK_STATS_PATH = '/data/stats/deck-matchups.json';
-const MAX_BYTES = 4 * 1024 * 1024;
+const MAX_BYTES = 16 * 1024 * 1024;
 const version = v => v === 'unknown' || (Number.isInteger(v) && v > 0 && v <= 1000000);
 const count = v => Number.isSafeInteger(v) && v >= 0;
 const fail = () => { throw new Error('invalid deck aggregate'); };
