@@ -218,4 +218,3 @@ func behavior() -> void:
 	screen.queue_free()
 	await get_tree().create_timer(0.2).timeout
 	check(not is_instance_valid(screen), "closing during preview timer frees the screen")
-
