@@ -56,7 +56,7 @@
 - Crimson faction: Crypt Gangrel deathrattle (AOE 1 damage → Fleshripper); Blood Transfusion (steal 2 health from enemy creature, give to friendly); Sanguine (move 2 health from one friendly to another)
 - Cascade death handling: `_remove_dead_minions` loops until no more deaths, so AOE deathrattles chain correctly
 - Faction selection buttons uniform width via `SIZE_EXPAND_FILL` in a fixed-width HBoxContainer
-- Main menu with Play and Deck Builder buttons
+- Main menu with Play and Deck Builder buttons; Shop remains visible in grey but is disabled
 - Deck select screen (choose player deck, then opponent starter deck)
 - Deck builder UI: hub listing saved decks, faction picker, collection editor with search, filter buttons (All / Faction / Generic); custom decks are tied to the logged-in account (server-side, via `Auth.custom_decks`/`DeckManager`), not the browser — falls back to local disk/localStorage only when playtesting from the editor (no login there)
 - Generic card color (`CardData.CardColor.GENERIC`): cards usable by all factions; appear in a separate section after faction cards in the collection browser
