@@ -87,8 +87,8 @@ move the dummy display's pointer; native Windows execution with viewport mouse
 warping exercised the actual drop path successfully. The disposable fixture was
 removed from source before export and is absent from the pack inventory.
 
-Web pack: 66,653,904 bytes, SHA256
-`5E927BF449705A9DD2EB24C3EFDCA837F9D4FD9EFBF41645494854DF58191020`.
+Web pack: 66,653,744 bytes, SHA256
+`09971A47B9818871C55DD625B056A86E8FBB233D38FD92CB7CAC4A1BB2A6E16B`.
 Inspected/restored import-only generated defaults. All 19 changed packed scenes
 compare identically after normalizing resource/node identifiers; other packed
 deltas are the intended JSON and compiled scripts. Existing texture-UID fallback
@@ -105,3 +105,15 @@ guard fails its buff assertion. Rebuilt the pack, reran source/packed core
 (940/0 each) and bot checks (163/0); catalog and Board proof remain valid because
 their consumers/data did not change. Rechecked all 19 final packed scenes for
 equivalence after identifier normalization. Final raw logs carry the -final suffix.
+
+The final Board proof also starts the drag through `_input()` and checks target
+states before dropping. Supply Drop alone enables the existing highlight
+helper's optional creature filter, excluding Locations; other effects retain
+their prior highlighting. Friendly creatures get the helpful highlight; enemy
+and Location targets do not, and both hero styles remain unchanged. All four
+drop outcomes still pass. An initial proof assertion incorrectly assumed heroes
+had no baseline panel override; comparing their actual pre-drag styles corrected
+the oracle. The disposable source is card-buffs-ui-proof-final.gd. Re-exported
+without the fixture, verified packed core 940/0, inspected the final inventory
+and 19 normalized scenes again; this UI-only delta reuses source core, bot and
+catalog evidence. Latest build/proof logs and manifests use the -outer suffix.

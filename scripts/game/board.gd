@@ -864,7 +864,7 @@ func _input(event: InputEvent) -> void:
 									elif _stratagem_needs_friendly_mech(card.data):
 										_highlight_friendly_mech_targets(true)
 									elif _stratagem_needs_friendly_creature_only(card.data):
-										_highlight_stratagem_minions(player_board_zone, true, card.data.effect in ["sanguine", "heal", "give_ability", "buff_attack", "return_friendly_to_hand"])
+										_highlight_stratagem_minions(player_board_zone, true, card.data.effect in ["sanguine", "heal", "give_ability", "buff_attack", "return_friendly_to_hand"], card.data.effect == "buff_attack")
 									else:
 										_highlight_stratagem_minions(player_board_zone, true)
 										_highlight_stratagem_minions(opponent_board_zone, true)
@@ -1379,12 +1379,14 @@ func _highlight_board_minions(zone: HBoxContainer, value: bool) -> void:
 		if card is Card:
 			card.set_targeted(value)
 
-func _highlight_stratagem_minions(zone: HBoxContainer, value: bool, friendly: bool = false) -> void:
+func _highlight_stratagem_minions(zone: HBoxContainer, value: bool, friendly: bool = false, creatures_only: bool = false) -> void:
 	for wrapper in zone.get_children():
 		if wrapper.get_child_count() == 0:
 			continue
 		var card = wrapper.get_child(0)
 		if card is Card:
+			if value and creatures_only and card.minion.is_location():
+				continue
 			if value and zone == opponent_board_zone and card.minion.has_ability(Abilities.CLOAKED):
 				continue
 			card.set_targeted(value, friendly)
