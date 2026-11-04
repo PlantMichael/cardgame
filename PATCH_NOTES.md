@@ -1,3 +1,30 @@
+# Patch 0.0.2: Orange buffs
+
+Draft, not yet released.
+
+Orange has been one of the lowest-performing factions, with its cheap creatures and its mech support spell trailing the rest of the pool. This patch buffs five of its weakest cards.
+
+## Balance changes
+
+Stats below are **attack/health**.
+
+### Orange — Gundari
+
+| Card | Mana | Change |
+|---|---:|---|
+| Duster | 2 | Stats changed from **1/2 to 2/3**. |
+| Sweeper | 2 | Stats changed from **2/1 to 3/2**. |
+| Scrap Rummager | 1 | Stats changed from **1/2 to 1/3**. Still has Rush. |
+| Morph Drones | 1 | Now has **Rush**, so it can attack the enemy player the turn it is played. Headshot is unchanged. |
+| Carbon Mesh | 2 | Now gives **all friendly mechs Shielded 2** instead of one friendly mech Shielded 3. Still lasts until the end of your opponent's next turn. |
+
+### Effect details
+
+- Morph Drones with Rush can attack the player right away to trigger its Headshot (self-destruct and heal all friendly minions 2). It can still be held until it has a clear path to the enemy player.
+- Carbon Mesh still needs at least one friendly mech on the battlefield.
+
+---
+
 # Patch 0.0.1: Headshot card update
 
 November 3, 2026
