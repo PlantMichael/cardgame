@@ -26,10 +26,10 @@ const CARD_SIZE := Vector2(220, 320)
 ## The standard sizes a card is shown at. Every screen picks one
 ## instead of inventing its own scale, so text/art/frame proportions stay
 ## identical everywhere and only the overall card changes size.
-##   SMALL  - on the battlefield
-##   MEDIUM - in hand, and in the graveyard/mulligan/rummage pickers
+##   SMALL  - compact thumbnails when needed
+##   MEDIUM - deck-builder collection, hand, and graveyard/mulligan/rummage pickers
 ##   LARGE  - the hover preview panels
-##   BOARD  - the battlefield rows (SMALL stays for the deck builder's collection grid)
+##   BOARD  - the battlefield rows
 ##   INSPECT - the Card List's centered click-to-inspect view
 enum Size { SMALL, MEDIUM, LARGE, BOARD, INSPECT }
 

@@ -4,6 +4,14 @@ Draft, not yet released.
 
 Choose your advantage when going second, alongside buffs across Orange, Green and Teal and targeted nerfs.
 
+## Deck builder redesign
+
+- Refreshed the saved-deck hub, faction selection and editor to match the main menu.
+- Browse larger collection cards with search and faction, type and mana filters.
+- Edit your deck in a sidebar with copy counts, readiness and a live mana curve.
+- Inspect cards and keyword descriptions without leaving the editor, including when your deck is full.
+- Added keyboard controls, visible focus and clear feedback for invalid deck names. Renaming a saved deck clearly saves a new copy.
+
 ## Going second: choose your opening bonus
 
 In ranked matches against players or AI opponents, the player going second chooses one option **before the mulligan**:

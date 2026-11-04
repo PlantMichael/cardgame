@@ -40,9 +40,9 @@ Every card on screen is the same `Card.tscn`, shown at one of five presets — n
 
 | Preset | Scale / pixels | Used for |
 |---|---|---|
-| `Card.Size.SMALL` | `0.46` / 101×147 | the deck builder's collection grid |
+| `Card.Size.SMALL` | `0.46` / 101×147 | compact thumbnails when needed |
 | `Card.Size.BOARD` | `0.64` / 141×205 | the battlefield (both board rows) |
-| `Card.Size.MEDIUM` | `0.62` / 136×198 | the hand, and the graveyard / mulligan / rummage / transform pickers |
+| `Card.Size.MEDIUM` | `0.62` / 136×198 | deck-builder collection, hand, and graveyard / mulligan / rummage / transform pickers |
 | `Card.Size.LARGE` | `1.20` / 264×384 | hover previews (board, deck builder, card list) and pack reveals |
 | `Card.Size.INSPECT` | `1.60` / 352×512 | centered Card List inspection; its card-and-details group fits smaller viewports uniformly |
 
@@ -51,7 +51,7 @@ Every card on screen is the same `Card.tscn`, shown at one of five presets — n
 - The description box is the one rect deliberately **inset** from its measured slot (4px all round). Sized to the slot exactly, the longest descriptions fit by arithmetic but drew with no margin, so their 3px glyph outline overlapped the panel bevel and read as text spilling out. Text elements that carry an outline need that margin built in.
 - Stratagems use their own frames (`assets/cardgame/Strategems/stratagem-<color>.png`, same 1042×1510 canvas). They share every slot with the creature frames except the description panel, which runs down through where the attack/health boxes would be. So `card.gd` swaps the frame and the description box by card type: `DESCRIPTION_BOX_DEFAULT` (36,191 148×60, must match `DescriptionLabel` in `Card.tscn`) vs `DESCRIPTION_BOX_STRATAGEM` (36,191 148×107; the panel's bottom bevel sits at 1421px vs 1199px in the art, +47 in design space). Card size is identical for both.
 - Use `card.apply_size(Card.Size.X)`, or `Card.SCALE_X` / `Card.PIXELS_X` when a `const` is needed (a wrapper's `custom_minimum_size`, say) — GDScript won't call a function in a constant expression.
-- The one deliberate exception is the deck builder's deck-list strip (`DECK_W`), which is a column of slivers rather than cards meant to be read.
+- The deck builder sidebar uses native text rows (mana, name, copy count), rather than scaled card slivers. Its collection uses MEDIUM cards and its contextual preview uses LARGE cards.
 - `rendering/textures/canvas_textures/default_texture_filter=2` (Nearest Mipmap) is set project-wide, and `mipmaps/generate=true` is on for everything in `assets/card_assets/` and the per-faction card-art folders. Both halves matter: the art is authored far bigger than the slot it lands in (a 1254px mana orb into a 29-72px slot, a 1042px frame into 132-330px), so without mipmaps any filter is just subsampling a fraction of the texels — nearest turns the orb into noise, linear turns it into mush. Mipmaps pick a correctly pre-averaged level; nearest then keeps it crisp rather than soft.
 - So: **any new card-facing art needs `mipmaps/generate=true` on its import**, or it will look wrong at card sizes. Don't override `texture_filter` per node without a reason.
 
