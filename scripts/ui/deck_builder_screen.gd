@@ -31,7 +31,6 @@ var _hub_deck_flow: HFlowContainer
 var _faction_page: ScrollContainer
 var _editor_page: HBoxContainer
 var _title: Label
-var _caption: Label
 var _sidebar: PanelContainer
 var _faction_label: Label
 var _name_edit: LineEdit
@@ -155,10 +154,6 @@ func _build_ui() -> void:
 	header.add_child(_button("← Back", _go_back, "Back"))
 	_title = _label("YOUR DECKS", 26, TEXT, true)
 	header.add_child(_title)
-	_caption = _label("Build your next contender.", 16, MUTED)
-	_caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	header.add_child(_caption)
 	_hub_page = _scroll(root)
 	_hub_deck_flow = HFlowContainer.new()
 	_hub_deck_flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -326,7 +321,6 @@ func _build_sidebar() -> void:
 
 func _layout_for_size() -> void:
 	_sidebar.custom_minimum_size.x = 320 if size.x < 1300 else 360
-	_caption.visible = size.x >= 1100
 	_hide_preview_now()
 
 func _page(hub: bool, faction: bool) -> void:
@@ -507,12 +501,17 @@ func _refresh_deck() -> void:
 	ids.sort_custom(func(a, b):
 		var ca := CardDatabase.get_card(a)
 		var cb := CardDatabase.get_card(b)
+		if ca == null or cb == null:
+			return ca != null if ca != cb else str(a) < str(b)
 		return ca.cost < cb.cost if ca.cost != cb.cost else ca.card_name < cb.card_name
 	)
+	var unavailable := false
 	for id in ids:
 		var data := CardDatabase.get_card(id)
-		var row := _button("", _remove_card.bind(id), "Remove one " + data.card_name)
-		row.tooltip_text = data.card_name + " · Remove one copy"
+		var card_name: String = data.card_name if data != null else "Unavailable card (%s)" % id
+		unavailable = unavailable or data == null
+		var row := _button("", _remove_card.bind(id), "Remove one " + card_name)
+		row.tooltip_text = card_name + " · Remove one copy"
 		_deck_content.add_child(row)
 		var content := HBoxContainer.new()
 		content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -520,17 +519,19 @@ func _refresh_deck() -> void:
 		content.offset_right = -10
 		content.add_theme_constant_override("separation", 10)
 		row.add_child(content)
-		content.add_child(_label(str(data.cost), 16, CYAN))
-		var title := _label(data.card_name, 14)
+		content.add_child(_label(str(data.cost) if data != null else "?", 16, CYAN))
+		var title := _label(card_name, 14)
 		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		content.add_child(title)
 		content.add_child(_label("×%d  −" % counts[id], 14, MUTED))
-		row.mouse_entered.connect(_show_db_preview.bind(data, row))
-		row.mouse_exited.connect(_schedule_hide_preview)
-		row.focus_entered.connect(_show_db_preview.bind(data, row))
-		row.focus_exited.connect(_schedule_hide_preview)
+		if data != null:
+			row.mouse_entered.connect(_show_db_preview.bind(data, row))
+			row.mouse_exited.connect(_schedule_hide_preview)
+			row.focus_entered.connect(_show_db_preview.bind(data, row))
+			row.focus_exited.connect(_schedule_hide_preview)
 		_ignore_control_input(content)
+	if unavailable: _count_lbl.text = "%d / 40 · Check cards" % _deck_ids.size()
 	if ids.is_empty():
 		var empty := _label("Your deck is empty.\nAdd cards from the collection.", 16, MUTED)
 		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -563,8 +564,9 @@ func _update_save_state() -> void:
 
 func _do_save() -> bool:
 	var deck_name := _name_edit.text.strip_edges()
-	if deck_name.is_empty() or deck_name.length() > 40:
-		_status_lbl.text = "Use a deck name with 1–40 characters."
+	# Relay names use JavaScript's UTF-16 length, including surrogate pairs.
+	if deck_name.is_empty() or deck_name.to_utf16_buffer().size() > 80:
+		_status_lbl.text = "Use 1–40 characters. Some symbols count as two."
 		_name_edit.grab_focus()
 		return false
 	DeckManager.save_deck(deck_name, _faction_idx, _deck_ids)

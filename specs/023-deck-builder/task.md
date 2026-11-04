@@ -129,3 +129,21 @@ pre-existing unused ThickCard MTL and two import-MD5 warnings as the preceding
 Ambusher export; UI runtime logs are clean. No temporary baseline scene or
 scratch resource is in the pack. Documentation/card-size guidance and unreleased
 0.0.2 notes describe the redesign. No push, deployment or data reset performed.
+
+User follow-up removes the top-right tagline. Historical saved decks containing
+retired IDs now show an unavailable-card row, preserve those IDs on save and let
+the player explicitly remove them. Known cards and their curve still render;
+readiness says Check cards while an unavailable ID remains. Name validation uses
+the relay's UTF-16-unit count; native input/save/reload proves 20 supplementary
+characters accepted, 21 refused with typed text and dirty state preserved.
+
+Focused source and native UI fixtures pass after these changes; refreshed native
+captures show the tagline removed and retired-card state at 960x640. Rebuilt Web
+pack exits0 and the updated packed UI fixture passes1/1, no skips/runtime errors.
+The adjacent card-inspect and core evidence remains causally valid. Import-default
+churn was inspected/restored; export retains unused-resource/import-MD5 diagnostics
+(three MD5 messages this run) but no UI script/runtime errors. Final correction
+pack is 66,670,676 bytes, SHA256
+`F8EAEAD14AC3EECDAFCD8F778612C3D98FAAB9056712842741816D12787D9AC2`.
+Private logs use deck-ui-packed-corrections and deck-ui-export-corrections; native
+captures/logs retain the deck-builder/deck-ui prefixes. `git diff --check` passes.
