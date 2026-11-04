@@ -18,19 +18,20 @@ extends Area2D
 const CARD_FONT := preload("res://assets/fonts/Orbitron.ttf")
 
 ## The design space every node rect in Card.tscn is laid out in. Nothing is
-## ever drawn at this size directly - instances pick one of the three Size
+## ever drawn at this size directly - instances pick one of the Size
 ## presets below, which is applied as a uniform `scale` on the whole node.
 ## Matches the 1042x1510 frame art's aspect to within half a percent.
 const CARD_SIZE := Vector2(220, 320)
 
-## The only three sizes a card is ever shown at. Every screen picks one
+## The standard sizes a card is shown at. Every screen picks one
 ## instead of inventing its own scale, so text/art/frame proportions stay
 ## identical everywhere and only the overall card changes size.
 ##   SMALL  - on the battlefield
 ##   MEDIUM - in hand, and in the graveyard/mulligan/rummage pickers
 ##   LARGE  - the hover preview panels
 ##   BOARD  - the battlefield rows (SMALL stays for the deck builder's collection grid)
-enum Size { SMALL, MEDIUM, LARGE, BOARD }
+##   INSPECT - the Card List's centered click-to-inspect view
+enum Size { SMALL, MEDIUM, LARGE, BOARD, INSPECT }
 
 ## Spelled out as plain constants rather than derived from CARD_SIZE through a
 ## helper, so callers can use them in their own `const` declarations (a
@@ -40,24 +41,28 @@ const SCALE_SMALL := Vector2(0.46, 0.46)
 const SCALE_MEDIUM := Vector2(0.62, 0.62)
 const SCALE_LARGE := Vector2(1.20, 1.20)
 const SCALE_BOARD := Vector2(0.64, 0.64)
+const SCALE_INSPECT := Vector2(1.60, 1.60)
 ## On-screen pixel size at each preset - CARD_SIZE times the scale above.
 ## What a container wrapper around a card at that preset should reserve.
 const PIXELS_SMALL := Vector2(101, 147)
 const PIXELS_MEDIUM := Vector2(136, 198)
 const PIXELS_LARGE := Vector2(264, 384)
 const PIXELS_BOARD := Vector2(141, 205)
+const PIXELS_INSPECT := Vector2(352, 512)
 
 const SIZE_SCALES := {
 	Size.SMALL: SCALE_SMALL,
 	Size.MEDIUM: SCALE_MEDIUM,
 	Size.LARGE: SCALE_LARGE,
 	Size.BOARD: SCALE_BOARD,
+	Size.INSPECT: SCALE_INSPECT,
 }
 const SIZE_PIXELS := {
 	Size.SMALL: PIXELS_SMALL,
 	Size.MEDIUM: PIXELS_MEDIUM,
 	Size.LARGE: PIXELS_LARGE,
 	Size.BOARD: PIXELS_BOARD,
+	Size.INSPECT: PIXELS_INSPECT,
 }
 
 ## Kept as the hand's drag/return scale so the many call sites that reference

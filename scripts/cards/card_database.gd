@@ -36,6 +36,8 @@ func _load_file(path: String) -> void:
 		data.card_type = CardData.CardType[card_dict["card_type"]]
 		data.rarity = CardData.CardRarity[card_dict["rarity"]]
 		data.description = card_dict["description"]
+		data.flavor_text = card_dict.get("flavor_text", "")
+		data.artist_name = card_dict.get("artist_name", "")
 		data.tribe = card_dict.get("tribe", "")
 		data.attack = card_dict.get("attack", 0)
 		data.health = card_dict.get("health", 0)

@@ -11,7 +11,7 @@ signal back_pressed
 
 const CardScene := preload("res://scenes/cards/Card.tscn")
 
-## Grid thumbnails and the hover preview both use one of Card's three size
+## Grid thumbnails and the hover preview both use Card's standard size
 ## presets rather than a scale of their own - see Card.Size.
 const CARD_W := int(Card.PIXELS_MEDIUM.x)
 const PREVIEW_SCALE := Card.SCALE_LARGE.x
@@ -20,6 +20,8 @@ const PREVIEW_MARGIN := 14.0
 const TOOLBAR_BG := Color(0.08, 0.06, 0.05)
 const CONTENT_BG := Color(0.07, 0.05, 0.04)
 const MAX_COST_BUCKET := 10  # "10+" bucket, matching PlayerState.MAX_MANA
+const INSPECT_SIZE := Vector2(480, 736)
+const InspectBlur := preload("res://scripts/ui/card_inspect_blur.gdshader")
 
 const COLOR_ORDER: Array[CardData.CardColor] = [
 	CardData.CardColor.GREEN, CardData.CardColor.CRIMSON, CardData.CardColor.BLACK,
@@ -41,12 +43,17 @@ var _content_vbox: VBoxContainer
 var _preview_card_node: Card
 var _preview_keyword_vbox: VBoxContainer
 var _hide_preview_scheduled: bool = false
+var _inspect_layer: CanvasLayer
+var _inspect_content: VBoxContainer
+var _inspect_card_holder: Control
+var _inspect_focus_owner: Control
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_load_keywords()
 	_build_ui()
 	_refresh_list()
+	resized.connect(_layout_inspect)
 
 func _load_keywords() -> void:
 	var file := FileAccess.open("res://data/keywords.json", FileAccess.READ)
@@ -350,7 +357,10 @@ func _big_card(card: CardData) -> Control:
 	var scale_factor := CARD_W / Card.CARD_SIZE.x
 	var card_h := Card.CARD_SIZE.y * scale_factor
 
-	var wrapper := Control.new()
+	var wrapper := Button.new()
+	wrapper.flat = true
+	wrapper.accessibility_name = "Inspect " + card.card_name
+	wrapper.tooltip_text = "Inspect " + card.card_name
 	wrapper.custom_minimum_size = Vector2(CARD_W, card_h)
 	wrapper.mouse_filter = Control.MOUSE_FILTER_STOP
 
@@ -365,8 +375,133 @@ func _big_card(card: CardData) -> Control:
 
 	wrapper.mouse_entered.connect(func(): _show_preview(card))
 	wrapper.mouse_exited.connect(func(): _hide_preview())
+	wrapper.pressed.connect(func(): _show_inspect(card))
 
 	return wrapper
+
+# ── Click-to-inspect modal ───────────────────────────────────────────────
+
+func _show_inspect(data: CardData) -> void:
+	if _inspect_layer != null:
+		return
+	_inspect_focus_owner = get_viewport().gui_get_focus_owner()
+	_inspect_layer = CanvasLayer.new()
+	_inspect_layer.layer = 100
+	add_child(_inspect_layer)
+
+	var overlay := Control.new()
+	_inspect_layer.add_child(overlay)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.focus_mode = Control.FOCUS_ALL
+	overlay.accessibility_name = data.card_name + " details. Press Escape to close."
+	overlay.gui_input.connect(_inspect_backdrop_input)
+	overlay.grab_focus()
+
+	var backdrop := ColorRect.new()
+	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var blur := ShaderMaterial.new()
+	blur.shader = InspectBlur
+	backdrop.material = blur
+	overlay.add_child(backdrop)
+
+	# Draw sharp content after the screen-reading pass, on its own canvas.
+	var foreground := CanvasLayer.new()
+	foreground.layer = _inspect_layer.layer + 1
+	_inspect_layer.add_child(foreground)
+	_inspect_content = VBoxContainer.new()
+	_inspect_content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_inspect_content.add_theme_constant_override("separation", 12)
+	foreground.add_child(_inspect_content)
+
+	var center := CenterContainer.new()
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_inspect_content.add_child(center)
+	_inspect_card_holder = Control.new()
+	_inspect_card_holder.custom_minimum_size = Card.PIXELS_INSPECT
+	center.add_child(_inspect_card_holder)
+	var face: Card = CardScene.instantiate()
+	face.input_pickable = false
+	face.set_process_input(false)
+	_inspect_card_holder.add_child(face)
+	face.apply_size(Card.Size.INSPECT)
+	face.setup(data)
+	_ignore_control_input(face)
+
+	_inspect_content.add_child(_inspect_text_box("FLAVOR TEXT", data.flavor_text if not data.flavor_text.strip_edges().is_empty() else "No flavor text yet.", 128, 64))
+	_inspect_content.add_child(_inspect_text_box("ARTIST", data.artist_name if not data.artist_name.strip_edges().is_empty() else "Not credited yet.", 72, 28))
+	_layout_inspect()
+
+func _inspect_text_box(title_text: String, body_text: String, height: float, body_height: float) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(0, height)
+	panel.gui_input.connect(_inspect_backdrop_input)
+	var style := _flat(Color(0.09, 0.07, 0.06))
+	style.border_color = Color(0.4, 0.32, 0.22)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(8)
+	style.content_margin_left = 16; style.content_margin_right = 16
+	style.content_margin_top = 10; style.content_margin_bottom = 10
+	panel.add_theme_stylebox_override("panel", style)
+	var column := VBoxContainer.new()
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_theme_constant_override("separation", 4)
+	panel.add_child(column)
+	var title := Label.new()
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title.text = title_text
+	title.add_theme_font_size_override("font_size", 14)
+	title.add_theme_color_override("font_color", Color(0.9, 0.79, 0.6))
+	column.add_child(title)
+	var scroll := ScrollContainer.new()
+	scroll.gui_input.connect(_inspect_backdrop_input)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size.y = body_height
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(scroll)
+	var body := Label.new()
+	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	body.text = body_text
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_theme_font_size_override("font_size", 17)
+	scroll.add_child(body)
+	return panel
+
+func _layout_inspect() -> void:
+	if _inspect_layer == null:
+		return
+	var available := size - Vector2(48, 48)
+	var fit := clampf(minf(available.x / INSPECT_SIZE.x, available.y / INSPECT_SIZE.y), 0.1, 1.0)
+	_inspect_content.size = INSPECT_SIZE
+	_inspect_content.scale = Vector2.ONE * fit
+	_inspect_content.position = (size - INSPECT_SIZE * fit) * 0.5
+
+func _close_inspect() -> void:
+	_inspect_layer.queue_free()
+	_inspect_layer = null
+	_inspect_content = null
+	_inspect_card_holder = null
+	if is_instance_valid(_inspect_focus_owner):
+		_inspect_focus_owner.grab_focus()
+	_inspect_focus_owner = null
+
+func _input(event: InputEvent) -> void:
+	if _inspect_layer == null:
+		return
+	if event is InputEventKey:
+		if event.is_action_pressed("ui_cancel"):
+			_close_inspect()
+		# Keep keyboard navigation and typing out of the list behind the modal.
+		get_viewport().set_input_as_handled()
+
+func _inspect_backdrop_input(event: InputEvent) -> void:
+	# GUI dispatch owns coordinate conversion and hit testing. The card holder
+	# stops clicks; every other part of the overlay dismisses the inspection.
+	if _inspect_layer != null and event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_close_inspect()
+		get_viewport().set_input_as_handled()
 
 # ── Preview panel ──────────────────────────────────────────────────────────
 

@@ -8,6 +8,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "Ambush",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 1,
 		"abilities": [
@@ -26,6 +28,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "Rush",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 1,
 		"abilities": [
@@ -44,6 +48,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "Reinforce",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 1,
 		"abilities": [
@@ -62,6 +68,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "Recon.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 2,
 		"abilities": [
@@ -80,6 +88,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "Recon.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 4,
 		"abilities": [],
@@ -96,6 +106,8 @@
 		"rarity": "EPIC",
 		"tribe": "",
 		"description": "Ambush.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 5,
 		"health": 3,
 		"abilities": [
@@ -114,6 +126,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "Reinforce",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 2,
 		"abilities": [
@@ -132,6 +146,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "On Death: Draw a Tank.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 1,
 		"abilities": [
@@ -150,6 +166,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "On play: do 2 damage",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 1,
 		"abilities": [
@@ -168,6 +186,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "Rush",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 1,
 		"abilities": [
@@ -186,6 +206,8 @@
 		"rarity": "RARE",
 		"tribe": "tank",
 		"description": "Whenever an enemy creature takes damage, it takes 1 more.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 2,
 		"abilities": [
@@ -204,6 +226,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "Reinforce",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 2,
 		"abilities": [
@@ -222,6 +246,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "Guardian.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 3,
 		"abilities": [
@@ -240,6 +266,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "On Death: Return a stratagem from your graveyard to your hand.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 2,
 		"abilities": [
@@ -258,6 +286,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "When a friendly Tank dies, give another Tank +1/+2.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 2,
 		"abilities": [
@@ -276,6 +306,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "Guardian. Cloaked.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 5,
 		"abilities": [
@@ -295,6 +327,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "When a friendly creature reinforces, give it +1 attack.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 5,
 		"abilities": [
@@ -313,6 +347,8 @@
 		"rarity": "RARE",
 		"tribe": "tank",
 		"description": "Reinforce. Deal 1 damage when any creatures reinforce.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 5,
 		"abilities": [
@@ -332,6 +368,8 @@
 		"rarity": "EPIC",
 		"tribe": "tank",
 		"description": "Guardian. On play: deal 2 damage.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 4,
 		"health": 7,
 		"abilities": [
@@ -351,6 +389,8 @@
 		"rarity": "EPIC",
 		"tribe": "tank",
 		"description": "On play: Gains +0/+1 for each other friendly creature on the board.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 5,
 		"abilities": [
@@ -369,6 +409,8 @@
 		"rarity": "RARE",
 		"tribe": "tank",
 		"description": "Reinforce. Deal 2 damage to any creature on play and when reinforced",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 3,
 		"abilities": [
@@ -389,6 +431,8 @@
 		"rarity": "LEGENDARY",
 		"tribe": "tank",
 		"description": "On play: Deal 8 damage",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 5,
 		"health": 5,
 		"abilities": [
@@ -407,6 +451,8 @@
 		"rarity": "LEGENDARY",
 		"tribe": "tank",
 		"description": "The first time a friendly creature would die each turn, reinforce it.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 4,
 		"health": 5,
 		"abilities": [
@@ -425,6 +471,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "Give a friendly creature +2/+2.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
@@ -441,6 +489,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "Give a friendly creature +0/+3.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
@@ -457,6 +507,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "Give each friendly creature +1/+0.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
@@ -473,6 +525,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "Give each friendly creature +0/+1.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 0,
 		"health": 0,
 		"abilities": [],
@@ -489,6 +543,8 @@
 		"rarity": "COMMON",
 		"tribe": "",
 		"description": "",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 3,
 		"health": 2,
 		"abilities": [],
@@ -506,6 +562,8 @@
 		"rarity": "COMMON",
 		"tribe": "tank",
 		"description": "",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 5,
 		"health": 6,
 		"abilities": [],
@@ -523,6 +581,8 @@
 		"rarity": "LEGENDARY",
 		"tribe": "",
 		"description": "Reinforce 4.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 2,
 		"abilities": [
@@ -542,6 +602,8 @@
 		"rarity": "LEGENDARY",
 		"tribe": "",
 		"description": "Guardian",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 1,
 		"health": 11,
 		"abilities": [
@@ -560,6 +622,8 @@
 		"rarity": "RARE",
 		"tribe": "",
 		"description": "Headshot: Deal 1 damage to a minion.",
+		"flavor_text": "",
+		"artist_name": "",
 		"attack": 2,
 		"health": 2,
 		"abilities": [
