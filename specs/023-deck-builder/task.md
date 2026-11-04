@@ -147,3 +147,24 @@ pack is 66,670,676 bytes, SHA256
 `F8EAEAD14AC3EECDAFCD8F778612C3D98FAAB9056712842741816D12787D9AC2`.
 Private logs use deck-ui-packed-corrections and deck-ui-export-corrections; native
 captures/logs retain the deck-builder/deck-ui prefixes. `git diff --check` passes.
+
+Name normalization now matches the relay's ECMAScript trim whitespace set, used
+consistently by validation, save-as labels and dirty comparisons. The set was
+checked against the local Node22 String.trim producer, including U+00A0/U+FEFF.
+Real UI tests reject a nonbreaking-space-only name without losing typed text or
+cards, save 40 characters plus trailing NBSP under the canonical 40-character
+name, and keep dirty/save-as comparisons canonical with NBSP on both ends.
+Source focused UI1/1 and native full fixture exit0 with clean stderr. Logs:
+deck-ui-source-whitespace.log and deck-ui-native-whitespace*.log.
+
+The first export attempt inherited the synthetic APPDATA used by the native test
+and failed because its export-template directory was empty; it did not update the
+pack. The subsequent green check on that old pack was not used as evidence for
+this correction. Rebuilt in the normal installed-template environment: export0,
+updated packed UI1/1 with no skips/errors (deck-ui-export-whitespace-final.log,
+deck-ui-packed-whitespace-final.log). Import-default churn inspected/restored;
+existing unused-resource diagnostics remain. Final pack is 66,671,604 bytes,
+SHA256 `07468D80AFC1B33BFBFE5886F6DD7C6B7387A9664B053E5621BC7E7EF667489D`.
+Earlier core/adjacent-consumer proof is reused because their source and behavior
+are unchanged; the baseline core raw log is ambusher-core.log. Current initial-UI
+core output also reported 971/0 in the tool result rather than a retained log.

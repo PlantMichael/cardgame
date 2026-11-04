@@ -14,6 +14,8 @@ const MUTED := Color(0.66, 0.72, 0.82)
 const CYAN := Color(0.45, 0.85, 1)
 const GOLD := Color(1, 0.82, 0.35)
 const KEYWORD_W := 220.0
+# ECMAScript trim() whitespace, matching the save_deck handler in relay.js.
+const NAME_EDGE_WHITESPACE := "\u0009\u000a\u000b\u000c\u000d \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
 
 var _faction_idx := -1
 var _deck_ids: Array[String] = []
@@ -556,14 +558,22 @@ func _remove_card(id: String) -> void:
 		else: _search_bar.grab_focus()
 
 func _update_save_state() -> void:
-	var renamed := not _original_deck_name.is_empty() and _name_edit.text.strip_edges() != _original_deck_name
+	var renamed := not _original_deck_name.is_empty() and _trimmed_name() != _original_deck_name
 	_save_btn.text = "Save as new deck" if renamed else "Save deck"
 	_save_btn.accessibility_name = _save_btn.text
 	_delete_btn.visible = not _original_deck_name.is_empty()
 	_dirty_lbl.text = "Unsaved changes" if _has_unsaved_changes() else "No unsaved edits"
 
+func _trimmed_name() -> String:
+	var value := _name_edit.text
+	var first := 0
+	var end := value.length()
+	while first < end and NAME_EDGE_WHITESPACE.contains(value[first]): first += 1
+	while end > first and NAME_EDGE_WHITESPACE.contains(value[end - 1]): end -= 1
+	return value.substr(first, end - first)
+
 func _do_save() -> bool:
-	var deck_name := _name_edit.text.strip_edges()
+	var deck_name := _trimmed_name()
 	# Relay names use JavaScript's UTF-16 length, including surrogate pairs.
 	if deck_name.is_empty() or deck_name.to_utf16_buffer().size() > 80:
 		_status_lbl.text = "Use 1–40 characters. Some symbols count as two."
@@ -579,7 +589,7 @@ func _do_save() -> bool:
 	return true
 
 func _has_unsaved_changes() -> bool:
-	if _name_edit.text.strip_edges() != _saved_deck_name: return true
+	if _trimmed_name() != _saved_deck_name: return true
 	var current: Dictionary = {}
 	var saved: Dictionary = {}
 	for id in _deck_ids: current[id] = current.get(id, 0) + 1
