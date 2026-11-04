@@ -95,6 +95,8 @@ func spend_mana(amount: int) -> bool:
 	return true
 
 func can_play_card(card: CardData) -> bool:
+	if card.effect == "give_mech_shielded_temp" and not board.any(func(m): return m.has_ability(Abilities.MECH)):
+		return false
 	return current_mana + card.effective_cost() <= max_mana
 
 ## Board space is counted in slots rather than bodies: a Colossal creature

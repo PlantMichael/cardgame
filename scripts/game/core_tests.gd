@@ -1731,6 +1731,39 @@ static func _test_family_challenge(filler: String) -> void:
 	gs11.resolve_to_quiescence()
 	_check("control: with a normal enemy the overwatch pick opens", gs11.has_pending_choice() and gs11.pending_choice["effect"] == GameState.CHOICE_PICK_CHALLENGER)
 
+static func _test_carbon_mesh(filler: String) -> void:
+	print("[board-wide temporary Mech shields]")
+	var gs := _arena(filler)
+	gs.player.hand.clear()
+	var plain := _put_on_board(gs, "a", filler)
+	var enemy := _put_on_board(gs, "b", "o_025")
+	enemy.current_attack = 3
+	enemy.current_health = 100
+	enemy.max_health = 100
+	var mesh := _hand_add(gs, "a", "o_str_005")
+	var action := {"type": "play_stratagem", "actor": "a", "card_uid": mesh.uid}
+	var before := gs.state_hash()
+	_check("Carbon Mesh requires a friendly Mech without spending card or mana", not gs.player.can_play_card(mesh) and not gs.execute(action)["ok"] and gs.state_hash() == before)
+	_check("AI cannot cast Carbon Mesh with only an enemy Mech", HeadlessTurn.stratagem_actions(mesh, gs, "a").is_empty())
+	var first := _put_on_board(gs, "a", "o_025")
+	var second := _put_on_board(gs, "a", "o_025")
+	first.max_health = 10
+	first.current_health = 10
+	var actions := HeadlessTurn.stratagem_actions(mesh, gs, "a")
+	_check("AI enumerates one untargeted Carbon Mesh play", actions.size() == 1 and actions[0].get("target_instance_id", "").is_empty() and actions[0].get("target_player_id", "").is_empty())
+	var greedy := HeadlessTurn.greedy_pick_action(gs, "a")
+	_check("greedy AI casts Carbon Mesh without selecting a Mech", greedy.get("card_uid") == mesh.uid and greedy.get("target_instance_id", "").is_empty())
+	var copy := gs.duplicate_for_sim()
+	_check("simulated Carbon Mesh executes", copy.execute(greedy)["ok"])
+	_check("simulation shields both Mechs without touching live state", copy.find_minion(first.instance_id).has_ability("shielded_2") and copy.find_minion(second.instance_id).has_ability("shielded_2") and not first.has_ability("shielded_2") and gs.temp_shielded.is_empty())
+	_check("Carbon Mesh plays without a target", gs.execute(greedy)["ok"])
+	_check("Carbon Mesh shields every friendly Mech, no other creatures", first.has_ability("shielded_2") and second.has_ability("shielded_2") and not plain.has_ability("shielded_2") and not enemy.has_ability("shielded_2"))
+	_check("shields last through the caster's turn end", gs.execute({"type": "end_turn", "actor": "a"})["ok"] and first.has_ability("shielded_2") and second.has_ability("shielded_2"))
+	_check("enemy can attack a shielded Mech", gs.execute({"type": "attack", "actor": "b", "attacker_instance_id": enemy.instance_id, "target_instance_id": first.instance_id})["ok"])
+	_eq("Shielded 2 prevents two damage during the enemy turn", first.current_health, 9)
+	_check("all shields expire at the opponent's turn end", gs.execute({"type": "end_turn", "actor": "b"})["ok"] and not first.has_ability("shielded_2") and not second.has_ability("shielded_2") and gs.temp_shielded.is_empty())
+	_check("expiring live shields preserves the simulation's shields", copy.find_minion(first.instance_id).has_ability("shielded_2") and copy.temp_shielded.size() == 2)
+
 static func _test_attack_buff(filler: String) -> void:
 	print("[targeted attack-only buff]")
 	var gs := _arena(filler)
@@ -2433,12 +2466,14 @@ static func _test_headshot_returns_and_permanence() -> void:
 
 static func _test_headshot_support_cards() -> void:
 	print("[Headshot heal, Pilot, Challenge and Guardian]")
-	var drones := _fresh_match("g_001")
-	var drone := _put_on_board(drones, "a", "o_027")
+	var drones := _arena("g_001")
+	var drone_play := _play(drones, "o_027")
+	_check("Morph Drones plays from hand", drone_play["ok"])
+	var drone: Minion = drone_play["minion"]
 	var wounded := _put_on_board(drones, "a", "b_026")
 	var full := _put_on_board(drones, "a", "b_009")
 	wounded.current_health = wounded.max_health - 3
-	drones.execute({"type": "attack", "actor": "a", "attacker_instance_id": drone.instance_id, "target_player_id": "b"})
+	_check("newly played Morph Drones can attack immediately with Rush", drones.execute({"type": "attack", "actor": "a", "attacker_instance_id": drone.instance_id, "target_player_id": "b"})["ok"])
 	_check("Drones die after hitting the player, then heal friendly bodies", drone not in drones.player.board and drone.data in drones.player.graveyard and drones.opponent.hero_health == 29 and wounded.current_health == wounded.max_health - 1)
 	_eq("Drones healing stays capped at maximum", full.current_health, full.max_health)
 	var pilot_game := _fresh_match("g_001")
@@ -2581,6 +2616,7 @@ static func run() -> int:
 	_test_family_on_play_damage(card_id)
 	_test_family_challenge(card_id)
 	_test_attack_buff(card_id)
+	_test_carbon_mesh(card_id)
 	_test_ai_pilot_actions(card_id)
 	_test_family_pilot_swap_devour_transform(card_id)
 	_test_family_queues(card_id)

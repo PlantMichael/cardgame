@@ -461,13 +461,7 @@ static func _pick_stratagem_target(card: CardData, gs: GameState, acting_id: Str
 					result["ready"] = true
 					break
 		"give_mech_shielded_temp":
-			var mechs: Array[Minion] = []
-			for m in friendly_targetable:
-				if m.has_ability(Abilities.MECH):
-					mechs.append(m)
-			if not mechs.is_empty():
-				result["minion"] = AIHeuristics.pick_strongest(mechs)
-				result["ready"] = true
+			result["ready"] = acting.board.any(func(m): return m.has_ability(Abilities.MECH))
 	return result
 
 ## Picks an answer for whatever choice is open, using AI scoring over the

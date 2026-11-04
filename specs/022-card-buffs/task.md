@@ -1,5 +1,8 @@
 # Patch 0.0.2 additional card buffs
 
+The original eight-card task below is complete. The subsequent user-requested
+five-card follow-up at the end supersedes its earlier draft-only exclusions.
+
 Revision 2. Standard implementation selected by the user's eight-card request.
 Worktree: existing patch/0.0.2 checkout, integrating current master 6c6d937
 with the existing notes-only draft a2f24b5. No production release or reset.
@@ -117,3 +120,52 @@ the oracle. The disposable source is card-buffs-ui-proof-final.gd. Re-exported
 without the fixture, verified packed core 940/0, inspected the final inventory
 and 19 normalized scenes again; this UI-only delta reuses source core, bot and
 catalog evidence. Latest build/proof logs and manifests use the -outer suffix.
+
+## Follow-up: implement the five earlier Orange notes
+
+The user explicitly requested the remaining five changes after asking whether
+they had been implemented. On base 92c5032, implemented Duster 2/3, Sweeper 3/2,
+Scrap Rummager 1/3 with Rush retained, Morph Drones gaining Rush with its existing
+Headshot, and Carbon Mesh giving all friendly Mechs Shielded 2 until the end of
+the opponent's next turn. Their mana costs and unrelated fields are unchanged.
+The existing draft notes already describe these values. No publication or reset.
+
+Fast follow-up: bounded local card edits using the existing targetless-play,
+shield replacement/expiry and Headshot owners; no new schema, wire fields,
+serialized state or lifecycle. Required fresh inner and broad after-inner outer
+implementation reviews use configured gpt-6.1-sol/xhigh. Codex remains selected.
+No formal spec or new harness. The existing shield replacement semantics remain;
+this task changes their scope to every friendly Mech and their amount to two.
+
+Carbon Mesh keeps its existing effect key, now marked untargeted. The canonical
+PlayerState.can_play_card precondition requires a friendly Mech, so rules, UI and
+AI agree before card or mana consumption. AI greedy selection supplies no target.
+The same temporary-shield entries and expiry owner handle every affected Mech.
+RulesVersion increments to 10 under its card-change rule; app release and public
+patch feed remain unchanged. Refreshed all.json, public catalog and Web pack.
+Owning game-logic documentation records the availability and fan-out behavior.
+
+Godot 4.7.2, isolated task user data: source and packed `--core-tests` each pass
+955 checks. `--bot-tests` passes 163; Node22 `node --test catalog/test/*.test.mjs`
+passes 25 with no skips after the 185-card catalog export. Static comparison to
+92c5032 confirms exactly five requested Orange edits, unchanged unrelated fields
+and matching grouped snapshot. Existing Headshot proof now plays Morph Drones
+from hand and attacks immediately; the same proof retains self-destruction and
+capped healing checks. One focused command-boundary Carbon Mesh scenario covers
+no-friendly-Mech atomic rejection, AI enumeration/greedy use, all-friendly-only
+fan-out, real enemy-turn damage reduction, end-of-opponent-turn expiry and clone
+isolation. These are distinct durable regressions at their existing owners.
+
+Disposable native Board proof starts dragging through _input: a targetless
+empty-space drop with two friendly Mechs reaches real rules and shields both;
+without a friendly Mech, the card returns without a command, cost or card loss.
+The fixture was removed before export; only private orange-buffs-* source/logs
+remain. Export used the existing pinned Web route. Inspected/restored generated
+import defaults. Pack has no added/removed entries or temporary fixture; changed
+content is expected JSON/compiled scripts plus six regenerated model identifiers.
+All 19 decoded scenes remain equivalent after identifier normalization.
+
+Follow-up Web pack: 66,656,016 bytes, SHA256
+`FCBA345059649D31504968CA1BF3FB50872882F1C908AEBA2E4E784DBDDEEF18`.
+Raw verification logs, UI proof, inventory and scene comparison use the private
+orange-buffs-* scratch prefix. No live service or database actions occurred.

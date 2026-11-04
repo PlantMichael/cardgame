@@ -11,7 +11,7 @@
 		"flavor_text": "",
 		"artist_name": "",
 		"attack": 1,
-		"health": 2,
+		"health": 3,
 		"abilities": [
 			"rush"
 		],
@@ -48,8 +48,8 @@
 		"description": "",
 		"flavor_text": "",
 		"artist_name": "",
-		"attack": 2,
-		"health": 1,
+		"attack": 3,
+		"health": 2,
 		"abilities": [],
 		"art": "res://assets/orange/sweeper.png",
 		"effect": "",
@@ -66,8 +66,8 @@
 		"description": "",
 		"flavor_text": "",
 		"artist_name": "",
-		"attack": 1,
-		"health": 2,
+		"attack": 2,
+		"health": 3,
 		"abilities": [],
 		"art": "res://assets/orange/duster.png",
 		"effect": "",
@@ -566,7 +566,7 @@
 		"card_type": "STRATAGEM",
 		"rarity": "RARE",
 		"tribe": "",
-		"description": "Friendly mech gains Shielded 3 until the end of your opponents next turn.",
+		"description": "Give all friendly Mechs Shielded 2 until the end of your opponent's next turn.",
 		"flavor_text": "",
 		"artist_name": "",
 		"attack": 0,
@@ -574,7 +574,7 @@
 		"abilities": [],
 		"art": "res://assets/orange/carbonmesh.png",
 		"effect": "give_mech_shielded_temp",
-		"effect_value": 3
+		"effect_value": 2
 	},
 	{
 		"id": "o_027",
@@ -584,12 +584,13 @@
 		"card_type": "CREATURE",
 		"rarity": "RARE",
 		"tribe": "",
-		"description": "Headshot: Self-destruct and heal all friendly minions 2.",
+		"description": "Rush. Headshot: Self-destruct and heal all friendly minions 2.",
 		"flavor_text": "",
 		"artist_name": "",
 		"attack": 1,
 		"health": 1,
 		"abilities": [
+			"rush",
 			"headshot_self_destruct_heal"
 		],
 		"art": "res://assets/orange/scraprummager.png",

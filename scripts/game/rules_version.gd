@@ -18,4 +18,5 @@ extends RefCounted
 ## 7: Human ranked second-player opening choice; named bot games keep baseline.
 ## 8: Moon bots use the same opening choice in ranked, ranked AI and simulations.
 ## 9: Patch 0.0.2 eight-card buff batch; Icewhip buffs before Challenge.
-const RULES_VERSION := 9
+## 10: Remaining Orange 0.0.2 buffs, Rush Morph Drones and board-wide Carbon Mesh.
+const RULES_VERSION := 10

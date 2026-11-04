@@ -1061,7 +1061,7 @@ func _validate_play(actor: PlayerState, cmd: Dictionary, as_creature: bool) -> D
 	elif card.card_type != CardData.CardType.STRATAGEM:
 		return _reject("card is not a stratagem")
 	if not actor.can_play_card(card):
-		return _reject("cannot afford card")
+		return _reject("cannot play card")
 	if not actor.can_fit_card(card):
 		return _reject("no board room")
 
@@ -1864,14 +1864,16 @@ func _apply_stratagem(card: CardData, target_minion: Minion,
 				if minion.is_piloted:
 					apply_eject_pilot(minion, acting)
 		"give_mech_shielded_temp":
-			if target_minion and target_minion.has_ability(Abilities.MECH):
+			for mech in _get_player_by_id(acting_player_id).board:
+				if not mech.has_ability(Abilities.MECH):
+					continue
 				var ability := Abilities.SHIELDED + "_" + str(card.effect_value)
-				for existing in target_minion.abilities.duplicate():
+				for existing in mech.abilities.duplicate():
 					if Abilities.is_shielded(existing):
-						target_minion.abilities.erase(existing)
-				target_minion.abilities.append(ability)
+						mech.abilities.erase(existing)
+				mech.abilities.append(ability)
 				temp_shielded.append({
-					"instance_id": target_minion.instance_id,
+					"instance_id": mech.instance_id,
 					"ability": ability,
 					"expires_after": _opponent_id(acting_player_id)
 				})

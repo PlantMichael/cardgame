@@ -288,6 +288,7 @@ Stratagem effects handled in `_apply_stratagem()`:
 - `"buff_creature"` — increases attack and health
 - `"buff_health"` — increases health only
 - `"buff_attack"` — Supply Drop: increases attack only on a friendly creature; heroes, enemies and Locations are rejected before card or mana consumption.
+- `"give_mech_shielded_temp"` — Carbon Mesh: untargeted; gives every friendly Mech temporary Shielded 2 through the end of the opponent's next turn. Reuses the existing shield replacement and expiry rules. `PlayerState.can_play_card()` requires at least one friendly Mech, shared by the board, AI and rules validation.
 - `"give_ability"` — grants an ability from `card.abilities[0]` to the target minion
 - `"deal_damage_all_creatures"` — deals damage to every minion on both sides
 - `"buff_all_friendly_attack"` — gives all friendly creatures +N attack (no target needed)
