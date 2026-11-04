@@ -1013,7 +1013,10 @@ func _show_main_menu() -> void:
 	vbox.add_child(campaign_btn)
 
 	var shop_btn := _menu_text_btn("SHOP")
-	shop_btn.pressed.connect(_on_shop_pressed)
+	shop_btn.disabled = true
+	shop_btn.focus_mode = Control.FOCUS_NONE
+	shop_btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shop_btn.add_theme_color_override("font_disabled_color", Color(0.55, 0.55, 0.60))
 	vbox.add_child(shop_btn)
 
 	var build_btn := _menu_text_btn("DECK BUILDER")
