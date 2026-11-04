@@ -1,85 +1,63 @@
-# Patch 0.0.2: Opening choices and balance
+# Patch 0.1.0: Opening Choices & Deck Builder Update
 
-Draft, not yet released.
+November 4, 2026
 
-Choose your advantage when going second, alongside buffs across Orange, Green and Teal and targeted nerfs.
+Choose your advantage when going second, build decks in a redesigned editor, and explore balance changes across four factions.
+
+## Going Second: Choose Your Bonus
+
+- The second player now chooses an opening bonus before mulligan in ranked matches against players or AI.
+- Coin: Start with four cards. After mulligan, receive a 0-mana Coin that grants one extra mana for the turn you play it. You can save it for a later turn.
+- Extra Card: Start with five cards total.
+- Recruit: Start with four cards and a 1/1 Recruit on your battlefield. It cannot attack on your first turn, but can attack on your second.
+- The Coin cannot be exchanged during mulligan. Its mana bonus expires at the end of the turn.
+
+## Deck Builder Redesign
+
+- Updated the saved-deck hub, faction selection, and editor to match the main menu.
+- Larger collection cards with search and faction, card type, and mana filters.
+- A deck sidebar showing copy counts, deck readiness, and a live mana curve.
+- Card and keyword previews remain available when your deck is full.
+- Improved keyboard controls and clearer feedback for invalid deck names.
+- Renaming a saved deck saves a new copy, preserving the original.
 
 ## Shop
 
 - The shop is disabled.
 
-## Deck builder redesign
+## Balance Changes — Gundari
 
-- Refreshed the saved-deck hub, faction selection and editor to match the main menu.
-- Browse larger collection cards with search and faction, type and mana filters.
-- Edit your deck in a sidebar with copy counts, readiness and a live mana curve.
-- Inspect cards and keyword descriptions without leaving the editor, including when your deck is full.
-- Added keyboard controls, visible focus and clear feedback for invalid deck names. Renaming a saved deck clearly saves a new copy.
+- Duster: Stats increased from 1/2 → 2/3.
+- Sweeper: Stats increased from 2/1 → 3/2.
+- Scrap Rummager: Stats increased from 1/2 → 1/3. Retains Rush.
+- Morph Drones: Gains Rush, allowing it to attack the enemy player immediately and activate Headshot.
+- Carbon Mesh: Now gives all friendly Mechs Shielded 2, instead of giving one friendly Mech Shielded 3. Lasts until the end of your opponent’s next turn and requires a friendly Mech.
+- Panic Button: Mana cost reduced from 2 → 1.
+- Junior Pilot: Mana cost reduced from 2 → 1.
+- Nanotech: Mana cost reduced from 3 → 2.
 
-## Going second: choose your opening bonus
+## Balance Changes — Sapiens
 
-In ranked matches against players or AI opponents, the player going second chooses one option **before the mulligan**:
+- Lone Operative: Stats increased from 1/1 → 2/1. Retains Ambush.
+- Kevlar: Now grants +0/+4, increased from +0/+3.
+- Supply Drop: Mana cost reduced from 3 → 2. Now grants +3/+0, replacing +2/+2.
+- Requisitioner: Stats increased from 2/5 → 3/5. Its on-play health bonus is unchanged.
 
-| Option | Starting hand | Bonus |
-|---|---|---|
-| Coin | **4 cards + a Coin** | A **0-mana** card that grants **1 extra mana for the turn you play it**. You can save it for a later turn. |
-| Extra card | **5 cards total** | One additional card from your deck, with no Coin or Recruit. |
-| Recruit | **4 cards** | Start with a **1/1 Recruit** on your battlefield. It cannot attack on your first turn; it can attack on your second turn. |
+## Balance Changes — Mokotai
 
-The Coin is added to your hand after the mulligan, so it cannot be exchanged. Its mana bonus expires at the end of the turn; it does not permanently increase your mana.
+- Snow Bank: Mana cost reduced from 3 → 2.
+- Icewhip: Now gives a friendly Yeti +2/+2 before making it Challenge. The buff no longer depends on winning.
+- Ambusher Yeti: Renamed from the 4-mana Serene Yeti. Stats increased from 2/4 → 3/4. Retains Ambush. The 8-mana Serene Yeti is unchanged.
 
-## Balance changes
+## Balance Changes — Junklings
 
-Stats below are **attack/health**.
+- StinkPile, Lord of Garbage: Mana cost reduced from 9 → 8. Attack reduced from 7 → 6. On-play Rummage reduced from 3 → 2.
+- Rust Grenade: Its Rummage now selects a non-legendary creature.
+- Decaying Junkling: On play, now deals 1 damage to all creatures, including itself, replacing 2 damage to enemy creatures only.
 
-### Orange — Gundari
+## Balance Changes — Generic
 
-| Card | Mana | Change |
-|---|---:|---|
-| Duster | 2 | Stats changed from **1/2 to 2/3**. |
-| Sweeper | 2 | Stats changed from **2/1 to 3/2**. |
-| Scrap Rummager | 1 | Stats changed from **1/2 to 1/3**. Still has Rush. |
-| Morph Drones | 1 | Now has **Rush**, so it can attack the enemy player the turn it is played. Headshot is unchanged. |
-| Carbon Mesh | 2 | Now gives **all friendly mechs Shielded 2** instead of one friendly mech Shielded 3. Still lasts until the end of your opponent's next turn. |
-| Panic Button | **2 → 1** | Effect unchanged. |
-| Junior Pilot | **2 → 1** | Still a 1/1 with Pilot 2/2. |
-| Nanotech | **3 → 2** | Still gives +2/+2. |
-
-### Green — Sapiens
-
-| Card | Mana | Change |
-|---|---:|---|
-| Lone Operative | 1 | Stats changed from **1/1 to 2/1**. Still has Ambush. |
-| Kevlar | 2 | Now gives **+0/+4** instead of +0/+3. |
-| Supply Drop | **3 → 2** | Now gives **+3/+0** instead of +2/+2. |
-| Requisitioner | 5 | Stats changed from **2/5 to 3/5**. On-play health bonus unchanged. |
-
-### Teal — Mokotai
-
-| Card | Mana | Change |
-|---|---:|---|
-| Snow Bank | **3 → 2** | Still gives +2/+2. |
-| Icewhip | 2 | Give a Yeti you control **+2/+2, then make it Challenge**. The buff no longer depends on winning. |
-| Ambusher Yeti | 4 | Renamed from the **4-mana Serene Yeti**. Stats changed from **2/4 to 3/4**. Retains Ambush. The 8-mana Serene Yeti is unchanged. |
-
-### Black — Junk
-
-| Card | Mana | Change |
-|---|---:|---|
-| StinkPile, Lord of Garbage | **9 → 8** | Attack **7 → 6**, health remains 5. On-play Rummage **3 → 2**; summon passive unchanged. |
-| Rust Grenade | 9 | Its Rummage now selects a **non-legendary creature**. Still puts it on the battlefield after the wipe. |
-| Decaying Junkling | 5 | On play: deal **1 damage to all creatures**, replacing 2 damage to enemies only. Includes itself. Printed stats remain 2/2. |
-
-### Generic
-
-| Card | Mana | Change |
-|---|---:|---|
-| Twin Fang | 3 | Stats changed from **3/2 to 2/2**. Retains Dualstrike. |
-
-### Effect details
-
-- Morph Drones with Rush can attack the player right away to trigger its Headshot (self-destruct and heal all friendly minions 2). It can still be held until it has a clear path to the enemy player.
-- Carbon Mesh still needs at least one friendly mech on the battlefield.
+- Twin Fang: Stats reduced from 3/2 → 2/2. Retains Dualstrike.
 
 ---
 

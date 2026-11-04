@@ -1013,6 +1013,8 @@ func _show_main_menu() -> void:
 	vbox.add_child(campaign_btn)
 
 	var shop_btn := _menu_text_btn("SHOP")
+	shop_btn.disabled = true
+	shop_btn.tooltip_text = "The shop is disabled."
 	shop_btn.pressed.connect(_on_shop_pressed)
 	vbox.add_child(shop_btn)
 
