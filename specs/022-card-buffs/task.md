@@ -5,6 +5,7 @@ five-card follow-up at the end supersedes its earlier draft-only exclusions.
 The latest follow-up below implements the three selected Junk nerfs. The user
 explicitly requested skipping review for that follow-up.
 The subsequent Twin Fang follow-up below changes only its printed attack.
+The latest follow-up renames/buffs the 4-mana Yeti and buffs Requisitioner.
 
 Revision 2. Standard implementation selected by the user's eight-card request.
 Worktree: existing patch/0.0.2 checkout, integrating current master 6c6d937
@@ -232,3 +233,21 @@ matches source, inventory entries are unchanged, and 19 decoded scenes remain
 equivalent after identifier normalization; generated import defaults restored.
 Evidence uses private twin-fang-* scratch files. Pack: 66,658,096 bytes, SHA256
 `12D4EB1A35B664764C363C757DE1C4C302420C821E7ADA41F596069693735CD6`.
+
+## Follow-up: Ambusher Yeti and Requisitioner
+
+User explicitly selected the 4-mana Serene Yeti (t_019): rename it Ambusher Yeti
+and change 2/4 to 3/4, retaining Ambush, cost, ID and art. Requisitioner (g_022)
+changes 2/5 to 3/5 with its health-growth ability retained. The 8-mana Serene Yeti
+(t_006, 6/8 Guardian) and all unrelated fields are unchanged; exact source/grouped
+comparisons verify this. Refreshed public catalog, draft notes and Web pack.
+RulesVersion increments to 13. Continued the user's review waiver for simple
+balance changes; no new review, publication, deployment or reset.
+
+Godot 4.7.2 source core 971/0, Node22 catalog suite 25/0 with no skips. Actual
+packed CardDatabase verifies the new names/stats, retained abilities, unchanged
+8-mana Serene Yeti and rules13. No permanent tests freeze the balance values.
+Packed JSON matches source, inventory is unchanged and 19 decoded scenes retain
+equivalent data after identifier normalization. Generated import defaults restored.
+Private proof/logs use ambusher-*; pack is 66,658,112 bytes, SHA256
+`8E52EDD4B778F191AC8DA3393C6DFAC0F227D51BA53E09B0570E1A2B1365417E`.

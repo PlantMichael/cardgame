@@ -284,7 +284,7 @@
 	},
 	{
 		"id": "t_019",
-		"card_name": "Serene Yeti",
+		"card_name": "Ambusher Yeti",
 		"cost": 4,
 		"color": "TEAL",
 		"card_type": "CREATURE",
@@ -293,7 +293,7 @@
 		"description": "Ambush",
 		"flavor_text": "",
 		"artist_name": "",
-		"attack": 2,
+		"attack": 3,
 		"health": 4,
 		"abilities": [
 			"ambush"

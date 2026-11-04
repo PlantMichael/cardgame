@@ -391,7 +391,7 @@
 		"description": "On play: Gains +0/+1 for each other friendly creature on the board.",
 		"flavor_text": "",
 		"artist_name": "",
-		"attack": 2,
+		"attack": 3,
 		"health": 5,
 		"abilities": [
 			"on_play_health_per_friendly"

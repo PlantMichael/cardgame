@@ -40,6 +40,7 @@ Stats below are **attack/health**.
 | Lone Operative | 1 | Stats changed from **1/1 to 2/1**. Still has Ambush. |
 | Kevlar | 2 | Now gives **+0/+4** instead of +0/+3. |
 | Supply Drop | **3 → 2** | Now gives **+3/+0** instead of +2/+2. |
+| Requisitioner | 5 | Stats changed from **2/5 to 3/5**. On-play health bonus unchanged. |
 
 ### Teal — Mokotai
 
@@ -47,6 +48,7 @@ Stats below are **attack/health**.
 |---|---:|---|
 | Snow Bank | **3 → 2** | Still gives +2/+2. |
 | Icewhip | 2 | Give a Yeti you control **+2/+2, then make it Challenge**. The buff no longer depends on winning. |
+| Ambusher Yeti | 4 | Renamed from the **4-mana Serene Yeti**. Stats changed from **2/4 to 3/4**. Retains Ambush. The 8-mana Serene Yeti is unchanged. |
 
 ### Black — Junk
 

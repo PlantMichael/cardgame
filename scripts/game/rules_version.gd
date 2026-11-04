@@ -21,4 +21,5 @@ extends RefCounted
 ## 10: Remaining Orange 0.0.2 buffs, Rush Morph Drones and board-wide Carbon Mesh.
 ## 11: Stinkpile/Rust Grenade nerfs and Decaying Junkling's symmetric on-play damage.
 ## 12: Twin Fang attack reduced from 3 to 2.
-const RULES_VERSION := 12
+## 13: Four-mana Serene Yeti becomes Ambusher Yeti 3/4; Requisitioner becomes 3/5.
+const RULES_VERSION := 13
